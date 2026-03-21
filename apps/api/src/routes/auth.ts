@@ -13,9 +13,6 @@ import { getDb } from '../lib/firebase-admin.js';
 
 export const authRoutes = new Hono<AppEnv>();
 
-// CSRF state をメモリに保持（本番ではRedis等に移行）
-const pendingStates = new Map<string, { userId: string; expiresAt: number }>();
-
 // ユーザー初回ログイン時にFirestoreにユーザードキュメント作成
 authRoutes.post('/init', requireAuth, async (c) => {
   const user = c.get('user');
@@ -41,10 +38,15 @@ authRoutes.get('/connect/google', requireAuth, async (c) => {
   const user = c.get('user');
 
   const state = randomBytes(32).toString('hex');
-  pendingStates.set(state, {
-    userId: user.uid,
-    expiresAt: Date.now() + 10 * 60 * 1000, // 10分
-  });
+  const db = getDb();
+  await db
+    .collection('oauthStates')
+    .doc(state)
+    .set({
+      userId: user.uid,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      createdAt: FieldValue.serverTimestamp(),
+    });
 
   const url = generateAuthUrl(state);
   return c.json({ url });
@@ -64,12 +66,23 @@ authRoutes.get('/callback/google', async (c) => {
     return c.redirect(`${getFrontendUrl()}/settings?error=missing_params`);
   }
 
-  const pending = pendingStates.get(state);
-  if (!pending || pending.expiresAt < Date.now()) {
-    pendingStates.delete(state ?? '');
+  const db = getDb();
+  const stateRef = db.collection('oauthStates').doc(state);
+  const stateDoc = await stateRef.get();
+
+  if (!stateDoc.exists) {
     return c.redirect(`${getFrontendUrl()}/settings?error=invalid_state`);
   }
-  pendingStates.delete(state);
+
+  const pending = stateDoc.data()!;
+  const expiresAt = pending.expiresAt?.toDate?.() ?? new Date(pending.expiresAt);
+  if (expiresAt < new Date()) {
+    await stateRef.delete();
+    return c.redirect(`${getFrontendUrl()}/settings?error=expired_state`);
+  }
+
+  // 1回限り使用: 即座に削除
+  await stateRef.delete();
 
   try {
     const tokens = await exchangeCode(code);

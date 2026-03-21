@@ -31,3 +31,110 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
+
+/* react-big-calendar dark theme overrides */
+.rbc-calendar {
+  color: var(--color-text);
+}
+
+.rbc-toolbar button {
+  color: var(--color-text);
+  border-color: var(--color-border);
+  background: transparent;
+}
+
+.rbc-toolbar button:hover,
+.rbc-toolbar button:focus {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.rbc-toolbar button.rbc-active {
+  background: var(--color-accent);
+  color: #fff;
+  border-color: var(--color-accent);
+}
+
+.rbc-header {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  padding: 8px 4px;
+  font-weight: 500;
+}
+
+.rbc-header + .rbc-header {
+  border-left-color: var(--color-border);
+}
+
+.rbc-today {
+  background: rgba(224, 120, 80, 0.08);
+}
+
+.rbc-off-range-bg {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.rbc-time-view,
+.rbc-month-view {
+  border-color: var(--color-border);
+}
+
+.rbc-time-header-content,
+.rbc-time-content {
+  border-color: var(--color-border);
+}
+
+.rbc-time-header-gutter {
+  color: var(--color-text-muted);
+}
+
+.rbc-timeslot-group {
+  border-color: var(--color-border);
+}
+
+.rbc-time-slot {
+  border-color: var(--color-border);
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.rbc-time-gutter .rbc-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.rbc-current-time-indicator {
+  background-color: var(--color-accent);
+}
+
+.rbc-date-cell {
+  color: var(--color-text);
+}
+
+.rbc-off-range {
+  color: var(--color-text-muted);
+}
+
+.rbc-month-row + .rbc-month-row {
+  border-color: var(--color-border);
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  border-color: var(--color-border);
+}
+
+.rbc-allday-cell {
+  border-color: var(--color-border);
+}
+
+.rbc-time-header-cell {
+  border-color: var(--color-border);
+}
+
+.rbc-show-more {
+  color: var(--color-accent);
+}

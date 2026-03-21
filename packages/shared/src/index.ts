@@ -1,6 +1,7 @@
 // Calendar Hub - Shared types and utilities
 
 export { encrypt, decrypt, type EncryptedData } from './crypto.js';
+export { calculateFreeSlots, type FreeSlot, type FreeTimeOptions } from './free-time.js';
 
 export type CalendarProvider = 'google' | 'timetree';
 

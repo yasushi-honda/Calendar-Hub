@@ -24,7 +24,15 @@ export async function createAdapter(userId: string, accountId: string): Promise<
     const stored = await getRefreshToken(userId, accountId);
     if (!stored) throw new Error(`No session for account: ${accountId}`);
 
-    const session = JSON.parse(stored) as { sessionId: string; csrfToken: string };
+    let session: { sessionId: string; csrfToken: string };
+    try {
+      session = JSON.parse(stored);
+    } catch {
+      throw new Error(`Invalid TimeTree session data for account: ${accountId}`);
+    }
+    if (!session.sessionId || !session.csrfToken) {
+      throw new Error(`Incomplete TimeTree session for account: ${accountId}`);
+    }
     return new TimeTreeAdapter(session);
   }
 

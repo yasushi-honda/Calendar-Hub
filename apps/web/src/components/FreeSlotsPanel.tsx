@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { CalendarEvent } from '@calendar-hub/shared';
-import { calculateFreeSlots, type FreeSlot } from '@calendar-hub/shared/dist/free-time.js';
+import { calculateFreeSlots, type FreeSlot } from '@calendar-hub/shared/free-time';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 

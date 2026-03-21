@@ -6,7 +6,7 @@ import { getDb } from '../lib/firebase-admin.js';
 import { createAdapter } from '../lib/adapter-factory.js';
 import { listConnectedAccounts } from '../lib/token-store.js';
 import type { CalendarEvent, UserProfile, AiSuggestionStatus } from '@calendar-hub/shared';
-import { calculateFreeSlots } from '@calendar-hub/shared/dist/free-time.js';
+import { calculateFreeSlots } from '@calendar-hub/shared/free-time';
 import { generateSuggestions } from '@calendar-hub/ai-sdk';
 
 export const aiRoutes = new Hono<AppEnv>();

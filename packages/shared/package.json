@@ -5,10 +5,16 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./free-time": "./dist/free-time.js",
+    "./crypto": "./dist/crypto.js"
+  },
   "scripts": {
     "build": "tsc",
     "lint": "eslint src/",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

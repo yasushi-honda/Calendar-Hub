@@ -8,6 +8,7 @@
     "lint": "turbo lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "vitest run",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -18,7 +19,8 @@
     "lint-staged": "^15.0.0",
     "prettier": "^3.0.0",
     "turbo": "^2.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

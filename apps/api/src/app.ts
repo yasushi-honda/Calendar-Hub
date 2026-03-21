@@ -5,6 +5,7 @@ import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendars.js';
 import { profileRoutes } from './routes/profile.js';
 import { aiRoutes } from './routes/ai.js';
+import { notificationRoutes } from './routes/notifications.js';
 import type { AppEnv } from './types.js';
 
 export const app = new Hono<AppEnv>();
@@ -24,3 +25,4 @@ app.route('/api/auth', authRoutes);
 app.route('/api/calendars', calendarRoutes);
 app.route('/api/profile', profileRoutes);
 app.route('/api/ai', aiRoutes);
+app.route('/api/notifications', notificationRoutes);

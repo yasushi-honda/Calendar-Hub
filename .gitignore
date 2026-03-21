@@ -11,6 +11,7 @@ out/
 .env
 .env.local
 .env.*.local
+.envrc
 
 # IDE
 .vscode/
@@ -38,3 +39,4 @@ coverage/
 
 # Misc
 *.log
+.playwright-mcp/

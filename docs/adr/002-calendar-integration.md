@@ -47,14 +47,18 @@ interface CalendarAdapter {
 - **認証**: email/password → session cookie (`_session_id`)
 - **内部API**: `https://timetreeapp.com/api/v1/` (非公式、Webアプリが使用するREST API)
 - **主要エンドポイント**:
-  - `PUT /auth/email/signin` - ログイン
-  - `GET /calendars?since=0` - カレンダー一覧
-  - `GET /calendar/{id}/events/sync` - イベント取得（ページネーション対応）
-  - `POST /calendar/{id}/events` - イベント作成
-  - `PUT /calendar/{id}/events/{eventId}` - イベント更新
-  - `DELETE /calendar/{id}/events/{eventId}` - イベント削除
+  - `GET /signin` - CSRFトークン取得（`meta[name="csrf-token"]`から抽出）
+  - `PUT /api/v1/auth/email/signin` - ログイン（body: `{uid, password, uuid}`）
+  - `GET /api/v2/calendars` - カレンダー一覧（v1は廃止済み）
+  - `GET /api/v1/calendar/{numericId}/events/sync` - イベント取得（ページネーション対応）
+  - `POST /api/v1/calendar/{numericId}/events` - イベント作成
+  - `PUT /api/v1/calendar/{numericId}/events/{eventId}` - イベント更新
+  - `DELETE /api/v1/calendar/{numericId}/events/{eventId}` - イベント削除
+- **必須ヘッダー**: `X-TimeTreeA: web/2.1.0/ja` + `X-CSRF-Token` + `Cookie: _session_id=...`
+- **データ形式**: タイムスタンプはミリ秒Unix timestamp（ISO 8601ではない）
+- **認証フロー**: /signin → CSRFトークン+session cookie取得 → ログインAPI → 新session cookie取得
 - **リスク**: 非公式APIのためTimeTreeのWebアプリ更新で動作しなくなる可能性
-- **参考**: [TimeTree-Exporter](https://github.com/eoleedi/TimeTree-Exporter) の解析結果に基づく
+- **参考**: [TimeTree-Exporter](https://github.com/eoleedi/TimeTree-Exporter) の解析結果 + 2026-03実動作検証に基づく
 
 ### キャッシュ戦略
 

@@ -134,7 +134,7 @@ authRoutes.post('/connect/timetree', requireAuth, async (c) => {
       user.uid,
       'timetree',
       email,
-      session.sessionId, // session_idをrefresh tokenとして保存
+      JSON.stringify({ sessionId: session.sessionId, csrfToken: session.csrfToken }),
       ['calendar.read', 'calendar.write'],
     );
 

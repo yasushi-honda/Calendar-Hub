@@ -20,11 +20,12 @@ export async function createAdapter(userId: string, accountId: string): Promise<
   }
 
   if (provider === 'timetree') {
-    // TimeTreeはsession_idで認証（refresh tokenにsession_idを保存している）
-    const sessionId = await getRefreshToken(userId, accountId);
-    if (!sessionId) throw new Error(`No session for account: ${accountId}`);
+    // TimeTreeはsession_id + csrfTokenで認証（JSON形式で暗号化保存している）
+    const stored = await getRefreshToken(userId, accountId);
+    if (!stored) throw new Error(`No session for account: ${accountId}`);
 
-    return new TimeTreeAdapter(sessionId);
+    const session = JSON.parse(stored) as { sessionId: string; csrfToken: string };
+    return new TimeTreeAdapter(session);
   }
 
   throw new Error(`Unknown provider: ${provider}`);

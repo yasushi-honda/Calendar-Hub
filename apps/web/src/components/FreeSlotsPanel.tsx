@@ -18,7 +18,6 @@ export function FreeSlotsPanel({ events, rangeStart, rangeEnd }: FreeSlotsPanelP
     [events, rangeStart, rangeEnd],
   );
 
-  // 日付ごとにグループ化
   const groupedSlots = useMemo(() => {
     const groups = new Map<string, FreeSlot[]>();
     for (const slot of freeSlots) {
@@ -36,41 +35,25 @@ export function FreeSlotsPanel({ events, rangeStart, rangeEnd }: FreeSlotsPanelP
   );
 
   return (
-    <div style={panelStyle}>
-      <h3 style={{ marginBottom: '8px', fontSize: '14px' }}>
+    <div style={s.panel}>
+      <h3 style={s.title}>
         空き時間
-        <span style={{ fontWeight: 'normal', color: '#666', marginLeft: '8px' }}>
+        <span style={s.total}>
           合計 {Math.floor(totalFreeMinutes / 60)}h {totalFreeMinutes % 60}m
         </span>
       </h3>
 
       {freeSlots.length === 0 ? (
-        <p style={{ color: '#999', fontSize: '13px' }}>空き時間がありません</p>
+        <p style={s.empty}>空き時間がありません</p>
       ) : (
-        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+        <div style={s.scrollArea}>
           {Array.from(groupedSlots.entries()).map(([dateKey, slots]) => (
-            <div key={dateKey} style={{ marginBottom: '12px' }}>
-              <div
-                style={{ fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px' }}
-              >
-                {format(new Date(dateKey), 'M/d (E)', { locale: ja })}
-              </div>
+            <div key={dateKey} style={s.dateGroup}>
+              <div style={s.dateLabel}>{format(new Date(dateKey), 'M/d (E)', { locale: ja })}</div>
               {slots.map((slot, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: '6px 8px',
-                    marginBottom: '4px',
-                    background: '#f0f7ff',
-                    borderRadius: '4px',
-                    fontSize: '13px',
-                    borderLeft: '3px solid #4285f4',
-                  }}
-                >
+                <div key={i} style={s.slotItem}>
                   {format(slot.start, 'HH:mm')} - {format(slot.end, 'HH:mm')}
-                  <span style={{ color: '#666', marginLeft: '8px' }}>
-                    ({slot.durationMinutes}分)
-                  </span>
+                  <span style={s.duration}>({slot.durationMinutes}分)</span>
                 </div>
               ))}
             </div>
@@ -81,9 +64,32 @@ export function FreeSlotsPanel({ events, rangeStart, rangeEnd }: FreeSlotsPanelP
   );
 }
 
-const panelStyle: React.CSSProperties = {
-  padding: '12px',
-  border: '1px solid #e0e0e0',
-  borderRadius: '8px',
-  background: '#fafafa',
+const s: Record<string, React.CSSProperties> = {
+  panel: {
+    padding: '16px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius)',
+  },
+  title: { marginBottom: '12px', fontSize: '14px', fontWeight: 600, color: 'var(--color-text)' },
+  total: { fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '8px', fontSize: '12px' },
+  empty: { color: 'var(--color-text-muted)', fontSize: '13px' },
+  scrollArea: { maxHeight: '400px', overflowY: 'auto' },
+  dateGroup: { marginBottom: '14px' },
+  dateLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
+    marginBottom: '6px',
+  },
+  slotItem: {
+    padding: '6px 10px',
+    marginBottom: '4px',
+    background: 'rgba(224,120,80,0.06)',
+    borderRadius: '6px',
+    fontSize: '13px',
+    borderLeft: '3px solid var(--color-accent)',
+    color: 'var(--color-text)',
+  },
+  duration: { color: 'var(--color-text-muted)', marginLeft: '8px', fontSize: '12px' },
 };

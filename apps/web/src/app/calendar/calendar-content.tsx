@@ -8,6 +8,7 @@ import { useAuth } from '../../components/AuthProvider';
 import { useCalendarEvents } from '../../hooks/useCalendarEvents';
 import { CalendarView } from '../../components/CalendarView';
 import { FreeSlotsPanel } from '../../components/FreeSlotsPanel';
+import { AppNav } from '../../components/AppNav';
 import type { CalendarEvent } from '@calendar-hub/shared';
 
 export function CalendarContent() {
@@ -18,20 +19,17 @@ export function CalendarContent() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
+    if (!loading && !user) router.push('/login');
   }, [user, loading, router]);
 
-  // ビューに応じた表示範囲を計算
   const { rangeStart, rangeEnd } = useMemo(() => {
     switch (view) {
       case 'month': {
-        const monthStart = startOfMonth(currentDate);
-        const monthEnd = endOfMonth(currentDate);
+        const ms = startOfMonth(currentDate);
+        const me = endOfMonth(currentDate);
         return {
-          rangeStart: startOfWeek(monthStart, { weekStartsOn: 1 }),
-          rangeEnd: endOfWeek(monthEnd, { weekStartsOn: 1 }),
+          rangeStart: startOfWeek(ms, { weekStartsOn: 1 }),
+          rangeEnd: endOfWeek(me, { weekStartsOn: 1 }),
         };
       }
       case 'week':
@@ -59,149 +57,145 @@ export function CalendarContent() {
 
   const { events, loading: eventsLoading, error } = useCalendarEvents(rangeStart, rangeEnd);
 
-  const handleNavigate = useCallback((date: Date) => {
-    setCurrentDate(date);
-  }, []);
+  const handleNavigate = useCallback((date: Date) => setCurrentDate(date), []);
+  const handleViewChange = useCallback((newView: View) => setView(newView), []);
+  const handleSelectEvent = useCallback((event: CalendarEvent) => setSelectedEvent(event), []);
 
-  const handleViewChange = useCallback((newView: View) => {
-    setView(newView);
-  }, []);
-
-  const handleSelectEvent = useCallback((event: CalendarEvent) => {
-    setSelectedEvent(event);
-  }, []);
-
-  if (loading) return <main style={{ padding: '2rem' }}>Loading...</main>;
+  if (loading) return <div style={s.loading}>Loading...</div>;
   if (!user) return null;
 
   return (
-    <main style={{ padding: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1rem',
-        }}
-      >
-        <h1 style={{ fontSize: '20px', margin: 0 }}>Calendar Hub</h1>
-        <nav style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <a href="/ai" style={{ color: '#4285f4', fontSize: '14px', fontWeight: 'bold' }}>
-            AI提案
-          </a>
-          <a href="/settings" style={{ color: '#666', fontSize: '14px' }}>
-            設定
-          </a>
-          <span style={{ color: '#999', fontSize: '13px' }}>{user.email}</span>
-        </nav>
-      </header>
+    <div style={s.page}>
+      <AppNav />
+      <main style={s.main}>
+        {error && <div style={s.error}>{error}</div>}
 
-      {error && (
-        <div
-          style={{
-            padding: '8px 12px',
-            background: '#fee',
-            borderRadius: '4px',
-            marginBottom: '1rem',
-            fontSize: '13px',
-          }}
-        >
-          {error}
-        </div>
-      )}
+        <div style={s.grid}>
+          <div style={s.calendarWrap}>
+            {eventsLoading && <div style={s.loadingBar}>予定を読み込み中...</div>}
+            <CalendarView
+              events={events}
+              currentDate={currentDate}
+              view={view}
+              onNavigate={handleNavigate}
+              onViewChange={handleViewChange}
+              onSelectEvent={handleSelectEvent}
+            />
+          </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '1rem' }}>
-        <div>
-          {eventsLoading && (
-            <div style={{ textAlign: 'center', padding: '8px', color: '#666', fontSize: '13px' }}>
-              予定を読み込み中...
-            </div>
-          )}
-          <CalendarView
-            events={events}
-            currentDate={currentDate}
-            view={view}
-            onNavigate={handleNavigate}
-            onViewChange={handleViewChange}
-            onSelectEvent={handleSelectEvent}
-          />
+          <aside style={s.sidebar}>
+            <FreeSlotsPanel events={events} rangeStart={rangeStart} rangeEnd={rangeEnd} />
+
+            {selectedEvent && (
+              <div style={s.eventDetail}>
+                <div style={s.eventHeader}>
+                  <span
+                    style={{
+                      ...s.sourceBadge,
+                      background:
+                        selectedEvent.source === 'google'
+                          ? 'rgba(66,133,244,0.15)'
+                          : 'rgba(76,175,80,0.15)',
+                      color: selectedEvent.source === 'google' ? '#6ea8fe' : '#81c784',
+                    }}
+                  >
+                    {selectedEvent.source === 'google' ? 'Google' : 'TimeTree'}
+                  </span>
+                  <button onClick={() => setSelectedEvent(null)} style={s.closeBtn}>
+                    ✕
+                  </button>
+                </div>
+                <h3 style={s.eventTitle}>{selectedEvent.title}</h3>
+                {selectedEvent.description && (
+                  <p style={s.eventDesc}>{selectedEvent.description}</p>
+                )}
+                {selectedEvent.location && <p style={s.eventLoc}>{selectedEvent.location}</p>}
+              </div>
+            )}
+          </aside>
         </div>
 
-        <aside>
-          <FreeSlotsPanel events={events} rangeStart={rangeStart} rangeEnd={rangeEnd} />
-
-          {selectedEvent && (
-            <div
-              style={{
-                marginTop: '1rem',
-                padding: '12px',
-                border: '1px solid #e0e0e0',
-                borderRadius: '8px',
-              }}
-            >
-              <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>{selectedEvent.title}</h3>
-              <p style={{ fontSize: '12px', color: '#666' }}>
-                {selectedEvent.source === 'google' ? 'Google Calendar' : 'TimeTree'}
-              </p>
-              {selectedEvent.description && (
-                <p style={{ fontSize: '12px', color: '#333', marginTop: '4px' }}>
-                  {selectedEvent.description}
-                </p>
-              )}
-              {selectedEvent.location && (
-                <p style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                  {selectedEvent.location}
-                </p>
-              )}
-              <button
-                onClick={() => setSelectedEvent(null)}
-                style={{
-                  marginTop: '8px',
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  background: '#fff',
-                }}
-              >
-                閉じる
-              </button>
-            </div>
-          )}
-        </aside>
-      </div>
-
-      <div
-        style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '12px', color: '#666' }}
-      >
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              borderRadius: '2px',
-              background: '#4285f4',
-              marginRight: '4px',
-            }}
-          />
-          Google
-        </span>
-        <span>
-          <span
-            style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              borderRadius: '2px',
-              background: '#4caf50',
-              marginRight: '4px',
-            }}
-          />
-          TimeTree
-        </span>
-      </div>
-    </main>
+        <div style={s.legend}>
+          <span style={s.legendItem}>
+            <span style={{ ...s.legendDot, background: '#4285f4' }} /> Google
+          </span>
+          <span style={s.legendItem}>
+            <span style={{ ...s.legendDot, background: '#4caf50' }} /> TimeTree
+          </span>
+        </div>
+      </main>
+    </div>
   );
 }
+
+const s: Record<string, React.CSSProperties> = {
+  page: { minHeight: '100vh', background: 'var(--color-bg)' },
+  main: { padding: '20px 24px', maxWidth: '1400px', margin: '0 auto' },
+  loading: { padding: '2rem', color: 'var(--color-text-muted)' },
+  error: {
+    padding: '10px 14px',
+    background: 'rgba(229,57,53,0.1)',
+    border: '1px solid rgba(229,57,53,0.2)',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontSize: '13px',
+    color: '#ef9a9a',
+  },
+  grid: { display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px' },
+  calendarWrap: {
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius)',
+    padding: '16px',
+    minHeight: '600px',
+  },
+  loadingBar: {
+    textAlign: 'center',
+    padding: '8px',
+    color: 'var(--color-text-muted)',
+    fontSize: '12px',
+  },
+  sidebar: { display: 'flex', flexDirection: 'column', gap: '16px' },
+  eventDetail: {
+    padding: '16px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius)',
+  },
+  eventHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '10px',
+  },
+  sourceBadge: { fontSize: '11px', padding: '3px 8px', borderRadius: '6px', fontWeight: 500 },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'var(--color-text-muted)',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  eventTitle: {
+    fontSize: '15px',
+    fontWeight: 600,
+    marginBottom: '6px',
+    color: 'var(--color-text)',
+  },
+  eventDesc: {
+    fontSize: '13px',
+    color: 'var(--color-text-muted)',
+    margin: '4px 0',
+    lineHeight: 1.5,
+  },
+  eventLoc: { fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' },
+  legend: {
+    display: 'flex',
+    gap: '16px',
+    marginTop: '12px',
+    fontSize: '12px',
+    color: 'var(--color-text-muted)',
+  },
+  legendItem: { display: 'flex', alignItems: 'center', gap: '6px' },
+  legendDot: { display: 'inline-block', width: '8px', height: '8px', borderRadius: '2px' },
+};

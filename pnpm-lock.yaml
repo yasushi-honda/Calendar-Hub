@@ -110,7 +110,13 @@ importers:
       '@calendar-hub/shared':
         specifier: workspace:*
         version: link:../shared
+      googleapis:
+        specifier: ^171.4.0
+        version: 171.4.0
     devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

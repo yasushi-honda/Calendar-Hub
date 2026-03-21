@@ -40,12 +40,21 @@ interface CalendarAdapter {
 - **複数アカウント**: 各アカウントのrefresh tokenをFirestoreに暗号化保存。リクエスト時にaccess tokenを取得
 - **同期**: `syncToken` を使った差分同期（Push NotificationはPhase 2で検討）
 
-### TimeTree API
+### TimeTree API（2024年3月更新）
 
-- **認証**: OAuth App（OAuth 2.0）
-- **SDK**: `@timetreeapp/web-api` npm package
-- **制限**: 600リクエスト/10分（IPベース + トークンベース）
-- **データ形式**: JSON API準拠
+> **注意**: TimeTree公式APIは2023年12月22日に廃止。以下は代替の内部API方式。
+
+- **認証**: email/password → session cookie (`_session_id`)
+- **内部API**: `https://timetreeapp.com/api/v1/` (非公式、Webアプリが使用するREST API)
+- **主要エンドポイント**:
+  - `PUT /auth/email/signin` - ログイン
+  - `GET /calendars?since=0` - カレンダー一覧
+  - `GET /calendar/{id}/events/sync` - イベント取得（ページネーション対応）
+  - `POST /calendar/{id}/events` - イベント作成
+  - `PUT /calendar/{id}/events/{eventId}` - イベント更新
+  - `DELETE /calendar/{id}/events/{eventId}` - イベント削除
+- **リスク**: 非公式APIのためTimeTreeのWebアプリ更新で動作しなくなる可能性
+- **参考**: [TimeTree-Exporter](https://github.com/eoleedi/TimeTree-Exporter) の解析結果に基づく
 
 ### キャッシュ戦略
 

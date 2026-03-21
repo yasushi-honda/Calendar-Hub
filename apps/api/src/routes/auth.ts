@@ -117,6 +117,34 @@ authRoutes.get('/accounts', requireAuth, async (c) => {
   return c.json({ accounts });
 });
 
+// TimeTreeアカウント連携: email/passwordでログイン
+authRoutes.post('/connect/timetree', requireAuth, async (c) => {
+  const user = c.get('user');
+  const { email, password } = await c.req.json();
+
+  if (!email || !password) {
+    return c.json({ error: 'email and password are required' }, 400);
+  }
+
+  try {
+    const { TimeTreeAdapter } = await import('@calendar-hub/calendar-sdk');
+    const session = await TimeTreeAdapter.login(email, password);
+
+    await saveConnectedAccount(
+      user.uid,
+      'timetree',
+      email,
+      session.sessionId, // session_idをrefresh tokenとして保存
+      ['calendar.read', 'calendar.write'],
+    );
+
+    return c.json({ success: true, email });
+  } catch (err) {
+    console.error('TimeTree login error:', err);
+    return c.json({ error: 'TimeTree login failed' }, 401);
+  }
+});
+
 // アカウント連携解除
 authRoutes.delete('/accounts/:accountId', requireAuth, async (c) => {
   const user = c.get('user');

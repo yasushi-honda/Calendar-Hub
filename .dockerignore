@@ -1,0 +1,15 @@
+node_modules
+.next
+dist
+.turbo
+.git
+.env
+.env.local
+.env.*.local
+.envrc
+.firebase
+*.log
+.DS_Store
+.playwright-mcp
+coverage
+docs

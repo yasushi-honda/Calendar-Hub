@@ -12,16 +12,16 @@ API_URL="${API_URL:-$(gcloud run services describe calendar-hub-api --project="$
 echo "=== Deploying Calendar Hub Web to Cloud Run ==="
 echo "Project: $PROJECT_ID | Region: $REGION | API: $API_URL"
 
-# Docker イメージビルド＆プッシュ
+# Docker ビルド＆プッシュ
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:$(git rev-parse --short HEAD)"
 echo "Building: $IMAGE"
 
-gcloud builds submit \
-  --project="$PROJECT_ID" \
-  --region="$REGION" \
-  --tag="$IMAGE" \
-  --dockerfile=apps/web/Dockerfile \
+gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet 2>/dev/null
+
+docker build -t "$IMAGE" -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL="$API_URL" \
   .
+docker push "$IMAGE"
 
 # Cloud Run デプロイ
 echo "Deploying to Cloud Run..."

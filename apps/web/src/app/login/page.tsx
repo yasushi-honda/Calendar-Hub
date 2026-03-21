@@ -49,10 +49,11 @@ export default function LoginPage() {
         ))}
       </div>
 
-      {/* Time indicator */}
-      <div style={{ ...styles.timeIndicator, opacity: mounted ? 1 : 0 }}>
-        <TimeDisplay />
-      </div>
+      {mounted && (
+        <div style={styles.timeIndicator}>
+          <TimeDisplay />
+        </div>
+      )}
 
       {/* Main content */}
       <main
@@ -137,7 +138,7 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <button onClick={handleLogin} style={styles.loginButton}>
+        <button onClick={handleLogin} className="login-btn" style={styles.loginButton}>
           <svg width="18" height="18" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
             <path
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -182,13 +183,13 @@ export default function LoginPage() {
           0%, 100% { opacity: 0.5; }
           50% { opacity: 1; }
         }
-        button:hover {
-          background: var(--color-surface-hover) !important;
-          border-color: var(--color-accent) !important;
-          box-shadow: 0 0 30px var(--color-accent-glow), inset 0 0 30px var(--color-accent-glow) !important;
+        .login-btn:hover {
+          background: var(--color-surface-hover);
+          border-color: var(--color-accent);
+          box-shadow: 0 0 30px var(--color-accent-glow), inset 0 0 30px var(--color-accent-glow);
         }
-        button:active {
-          transform: scale(0.98) !important;
+        .login-btn:active {
+          transform: scale(0.98);
         }
       `}</style>
     </div>

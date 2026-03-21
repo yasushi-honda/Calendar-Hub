@@ -25,11 +25,11 @@ export function CalendarContent() {
   const { rangeStart, rangeEnd } = useMemo(() => {
     switch (view) {
       case 'month': {
-        const ms = startOfMonth(currentDate);
-        const me = endOfMonth(currentDate);
+        const monthStart = startOfMonth(currentDate);
+        const monthEnd = endOfMonth(currentDate);
         return {
-          rangeStart: startOfWeek(ms, { weekStartsOn: 1 }),
-          rangeEnd: endOfWeek(me, { weekStartsOn: 1 }),
+          rangeStart: startOfWeek(monthStart, { weekStartsOn: 1 }),
+          rangeEnd: endOfWeek(monthEnd, { weekStartsOn: 1 }),
         };
       }
       case 'week':

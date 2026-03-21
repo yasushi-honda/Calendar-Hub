@@ -2,12 +2,36 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { encrypt, decrypt } from '@calendar-hub/shared';
 import type { ConnectedAccountPublic } from '@calendar-hub/shared';
 import { getDb } from './firebase-admin.js';
+import { getSecret } from './secrets.js';
 
-function getEncryptionKey(): Buffer {
-  const key = process.env.TOKEN_ENCRYPTION_KEY;
-  if (!key) throw new Error('TOKEN_ENCRYPTION_KEY is not set');
-  // 32 bytes = 256 bits for AES-256
-  return Buffer.from(key.padEnd(32, '0').slice(0, 32), 'utf8');
+let cachedKey: Buffer | null = null;
+
+/**
+ * AES-256暗号化キーを取得（32バイト）
+ * 本番: Secret Manager "token-encryption-key" から取得
+ * ローカル: TOKEN_ENCRYPTION_KEY 環境変数にフォールバック
+ */
+async function getEncryptionKey(): Promise<Buffer> {
+  if (cachedKey) return cachedKey;
+
+  const keyStr = await getSecret('token-encryption-key', 'TOKEN_ENCRYPTION_KEY');
+
+  // Base64エンコードされたキーを想定（32バイト = 44文字base64）
+  // 平文の場合はSHA-256でハッシュして正規32バイトに変換
+  let keyBuf: Buffer;
+  if (keyStr.length === 44 && /^[A-Za-z0-9+/]+=*$/.test(keyStr)) {
+    keyBuf = Buffer.from(keyStr, 'base64');
+  } else {
+    const { createHash } = await import('node:crypto');
+    keyBuf = createHash('sha256').update(keyStr, 'utf8').digest();
+  }
+
+  if (keyBuf.length !== 32) {
+    throw new Error(`Encryption key must be 32 bytes, got ${keyBuf.length}`);
+  }
+
+  cachedKey = keyBuf;
+  return cachedKey;
 }
 
 const KEY_VERSION = 'v1';
@@ -20,7 +44,7 @@ export async function saveConnectedAccount(
   scopes: string[],
 ) {
   const db = getDb();
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   const encrypted = encrypt(refreshToken, key);
 
   const accountRef = db
@@ -64,7 +88,7 @@ export async function getRefreshToken(userId: string, accountId: string): Promis
   const data = doc.data()!;
   if (!data.isActive) return null;
 
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   return decrypt(
     {
       encrypted: data.encryptedRefreshToken,

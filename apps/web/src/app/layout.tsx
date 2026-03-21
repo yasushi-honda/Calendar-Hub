@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Providers } from '../components/Providers';
 
 export const metadata: Metadata = {
   title: 'Calendar Hub',
@@ -8,7 +9,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

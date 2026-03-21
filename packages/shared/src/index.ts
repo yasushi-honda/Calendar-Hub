@@ -1,5 +1,7 @@
 // Calendar Hub - Shared types and utilities
 
+export { encrypt, decrypt, type EncryptedData } from './crypto.js';
+
 export type CalendarProvider = 'google' | 'timetree';
 
 export type EventStatus = 'confirmed' | 'tentative' | 'cancelled';
@@ -26,9 +28,33 @@ export interface CalendarEvent {
 
 export interface ConnectedAccount {
   id: string;
+  userId: string;
+  provider: CalendarProvider;
+  email: string;
+  encryptedRefreshToken: string;
+  iv: string;
+  authTag: string;
+  encryptionKeyVersion: string;
+  scopes: string[];
+  calendarIds: string[];
+  isActive: boolean;
+  lastTokenRefreshAt: Date;
+  connectedAt: Date;
+}
+
+export interface ConnectedAccountPublic {
+  id: string;
   provider: CalendarProvider;
   email: string;
   calendarIds: string[];
+  isActive: boolean;
+  connectedAt: Date;
+}
+
+export interface UserDocument {
+  email: string;
+  displayName: string;
+  primaryGoogleAccountId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

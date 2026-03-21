@@ -13,7 +13,11 @@
   "dependencies": {
     "@calendar-hub/ai-sdk": "workspace:*",
     "@calendar-hub/calendar-sdk": "workspace:*",
-    "@calendar-hub/shared": "workspace:*"
+    "@calendar-hub/shared": "workspace:*",
+    "@hono/node-server": "^1.19.11",
+    "firebase-admin": "^13.7.0",
+    "googleapis": "^171.4.0",
+    "hono": "^4.12.8"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

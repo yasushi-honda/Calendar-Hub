@@ -5,9 +5,17 @@ import { requireAuth } from '../middleware/auth.js';
 import { getDb } from '../lib/firebase-admin.js';
 import { createAdapter } from '../lib/adapter-factory.js';
 import { listConnectedAccounts } from '../lib/token-store.js';
-import type { CalendarEvent, UserProfile, AiSuggestionStatus } from '@calendar-hub/shared';
+import type {
+  CalendarEvent,
+  UserProfile,
+  AiSuggestionStatus,
+  NotificationSettings,
+} from '@calendar-hub/shared';
 import { calculateFreeSlots } from '@calendar-hub/shared/free-time';
 import { generateSuggestions } from '@calendar-hub/ai-sdk';
+import { getRefreshToken } from '../lib/token-store.js';
+import { refreshAccessToken, getGoogleUserInfo } from '../lib/google-oauth.js';
+import { sendEmail, buildSuggestionEmailHtml } from '../lib/email.js';
 
 export const aiRoutes = new Hono<AppEnv>();
 
@@ -79,6 +87,15 @@ aiRoutes.post('/suggest', requireAuth, async (c) => {
 
   await batch.commit();
 
+  // メール通知（非同期、レスポンスをブロックしない）
+  sendSuggestionNotification(
+    user.uid,
+    db,
+    result.suggestions,
+    result.insights,
+    activeAccounts,
+  ).catch((err) => console.error('Notification send failed:', err));
+
   return c.json({
     suggestions: result.suggestions.map((s, i) => ({
       id: suggestionIds[i],
@@ -131,3 +148,48 @@ aiRoutes.patch('/suggestions/:suggestionId', requireAuth, async (c) => {
 
   return c.json({ success: true, status });
 });
+
+/**
+ * AI提案のメール通知を送信（通知設定が有効な場合のみ）
+ */
+async function sendSuggestionNotification(
+  userId: string,
+  db: FirebaseFirestore.Firestore,
+  suggestions: Array<{
+    title: string;
+    start: string;
+    end: string;
+    reasoning: string;
+  }>,
+  insights: string,
+  activeAccounts: Array<{ id: string; provider: string; isActive: boolean }>,
+): Promise<void> {
+  // 通知設定チェック
+  const userDoc = await db.collection('users').doc(userId).get();
+  const notifSettings = userDoc.data()?.notificationSettings as NotificationSettings | undefined;
+
+  if (!notifSettings?.enabled || !notifSettings.aiSuggestionNotify) return;
+  if (!notifSettings.channels.includes('email')) return;
+
+  // Googleアカウントでメール送信
+  const googleAccount = activeAccounts.find((a) => a.provider === 'google');
+  if (!googleAccount) return;
+
+  const refreshToken = await getRefreshToken(userId, googleAccount.id);
+  if (!refreshToken) return;
+
+  const tokens = await refreshAccessToken(refreshToken);
+  if (!tokens.access_token) return;
+
+  const userInfo = await getGoogleUserInfo(tokens.access_token);
+  const html = buildSuggestionEmailHtml(suggestions, insights);
+
+  await sendEmail(
+    { email: userInfo.email, accessToken: tokens.access_token },
+    {
+      to: userInfo.email,
+      subject: `Calendar Hub - ${suggestions.length}件の新しいスケジュール提案`,
+      html,
+    },
+  );
+}

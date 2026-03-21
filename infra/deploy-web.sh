@@ -20,7 +20,7 @@ gcloud builds submit \
   --project="$PROJECT_ID" \
   --region="$REGION" \
   --config=infra/cloudbuild-web.yaml \
-  --substitutions="_IMAGE=$IMAGE" \
+  --substitutions="_IMAGE=$IMAGE,_API_URL=$API_URL" \
   .
 
 # Cloud Run デプロイ

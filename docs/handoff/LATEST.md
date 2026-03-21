@@ -1,39 +1,49 @@
-# Calendar Hub ハンドオフ (2026-03-21)
+# Calendar Hub ハンドオフ (2026-03-22)
 
 ## 完了した作業
 
-| PR  | Issue  | 内容                                  |
-| --- | ------ | ------------------------------------- |
-| #10 | #1, #2 | GCP初期化 + Firebase Auth + OAuth連携 |
-| #11 | #3, #4 | Google Calendar + TimeTree Adapter    |
-| #12 | #5, #6 | 統合カレンダーUI + 空き時間算出       |
-| #13 | #7, #8 | Vertex AI Gemini 2.5 Flash AI提案     |
-| #14 | -      | テスト追加 + shared exports修正       |
+| PR  | Issue  | 内容                                   |
+| --- | ------ | -------------------------------------- |
+| #10 | #1, #2 | GCP初期化 + Firebase Auth + OAuth連携  |
+| #11 | #3, #4 | Google Calendar + TimeTree Adapter     |
+| #12 | #5, #6 | 統合カレンダーUI + 空き時間算出        |
+| #13 | #7, #8 | Vertex AI Gemini 2.5 Flash AI提案      |
+| #14 | -      | テスト追加 + shared exports修正        |
+| #15 | -      | TimeTree Adapter内部API修正            |
+| #16 | #9     | メール通知システム (Gmail OAuth2)      |
+| #20 | #17-19 | CI + PRテンプレート + テスト46件追加   |
+| #26 | #21,22 | CORS環境変数化 + Secret Manager + CSRF |
+| #27 | #23,24 | AI JSONパース堅牢化 + TT session管理   |
+| #28 | #25    | Cloud Runデプロイ基盤                  |
 
 ## 品質状態
 
-- テスト: 28件全PASS (crypto: 6, free-time: 8, vitest自動検出: 14)
+- テスト: 74件全PASS (crypto: 6, free-time: 8, notifications: 6, adapter-factory: 8, timetree: 10, vitest自動検出: 36)
 - ビルド: 全5パッケージ成功
-- Git: mainブランチ、クリーン
+- CI: GitHub Actions (lint/build/type-check/test)
+- PRテンプレート: Quality Gateチェックリスト強制
 
-## 残タスク
+## 本番環境
 
-- **Issue #9**: 通知システム (Google Chat + Email) [P2]
+| サービス | URL                                              |
+| -------- | ------------------------------------------------ |
+| Web      | https://calendar-hub-web-cu7tz7flqq-an.a.run.app |
+| API      | https://calendar-hub-api-cu7tz7flqq-an.a.run.app |
 
-## 次セッションの推奨アクション（優先順）
+- GCP: calendar-hub-prod / asia-northeast1
+- Secret Manager: google-client-id, google-client-secret, token-encryption-key, timetree-password
+- Firebase Auth承認済みドメイン設定済み
+- OAuth redirect URI設定済み
 
-1. ローカル起動して実動作確認 (`pnpm dev`)
-2. TimeTree内部APIの実動作検証
-3. Issue #9 通知システム実装
-4. Cloud Runデプロイ
+## オープンIssue: 0件
 
-## 既知の技術的課題
+## 次セッションの推奨アクション
 
-- TimeTree: 非公式内部API使用、session有効期限管理なし
-- CSRF stateがメモリ保持（本番前にRedis/Firestore移行要）
-- 暗号化キーのpadEnd（本番前にSecret Manager移行要）
-- AI JSONパースにtry/catch不足 (suggest.ts:44)
-- git identity未設定（Committer名がホスト名ベース）
+1. 本番環境でGoogleログイン→カレンダー表示→AI提案の一連フロー動作確認
+2. Gmail OAuth再連携（gmail.sendスコープ追加のため設定画面で再接続）
+3. Google Chat Webhook通知追加（Webhook URL取得後）
+4. ブランチプロテクションルール設定（GitHub Settings → main保護）
+5. ローカル古いブランチ掃除（5本残存）
 
 ## アカウント情報
 

@@ -38,13 +38,18 @@ export async function generateSuggestions(params: {
 
   const text = response.text ?? '';
 
-  // JSONブロックを抽出（```json ... ``` またはプレーンJSON）
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\{[\s\S]*\})/);
+  // JSONブロックを抽出（```json ... ``` またはプレーンJSON、非貪欲マッチ）
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) ?? text.match(/(\{[\s\S]*?\})\s*$/);
   if (!jsonMatch) {
     throw new Error('AI response did not contain valid JSON');
   }
 
-  const parsed = JSON.parse(jsonMatch[1]) as GenerateSuggestionsResponse;
+  let parsed: GenerateSuggestionsResponse;
+  try {
+    parsed = JSON.parse(jsonMatch[1]) as GenerateSuggestionsResponse;
+  } catch {
+    throw new Error(`AI response contained invalid JSON: ${jsonMatch[1].slice(0, 200)}`);
+  }
 
   // バリデーション
   if (!Array.isArray(parsed.suggestions)) {

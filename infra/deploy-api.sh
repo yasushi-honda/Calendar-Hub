@@ -16,14 +16,16 @@ gcloud artifacts repositories create "$REPO_NAME" \
   --project="$PROJECT_ID" --location="$REGION" \
   --repository-format=docker --description="Calendar Hub containers"
 
-# Docker ビルド＆プッシュ（Artifact Registry認証）
+# Cloud Build でリモートビルド＆プッシュ（ローカルDocker不要）
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}:$(git rev-parse --short HEAD)"
 echo "Building: $IMAGE"
 
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet 2>/dev/null
-
-docker build -t "$IMAGE" -f apps/api/Dockerfile .
-docker push "$IMAGE"
+gcloud builds submit \
+  --project="$PROJECT_ID" \
+  --region="$REGION" \
+  --config=infra/cloudbuild-api.yaml \
+  --substitutions="_IMAGE=$IMAGE" \
+  .
 
 # Cloud Run デプロイ
 echo "Deploying to Cloud Run..."

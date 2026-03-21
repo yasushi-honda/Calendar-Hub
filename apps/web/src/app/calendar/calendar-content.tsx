@@ -86,6 +86,9 @@ export function CalendarContent() {
       >
         <h1 style={{ fontSize: '20px', margin: 0 }}>Calendar Hub</h1>
         <nav style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <a href="/ai" style={{ color: '#4285f4', fontSize: '14px', fontWeight: 'bold' }}>
+            AI提案
+          </a>
           <a href="/settings" style={{ color: '#666', fontSize: '14px' }}>
             設定
           </a>

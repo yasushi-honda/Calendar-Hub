@@ -11,7 +11,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@calendar-hub/shared": "workspace:*"
+    "@calendar-hub/shared": "workspace:*",
+    "@google/genai": "^1.46.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

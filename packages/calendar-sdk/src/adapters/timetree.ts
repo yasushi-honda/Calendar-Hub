@@ -6,10 +6,14 @@ const APP_HEADER = 'web/2.1.0/ja';
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36';
 
-interface TimeTreeSession {
+export interface TimeTreeSession {
   sessionId: string;
   csrfToken: string;
+  expiresAt?: number; // Unix timestamp ms
 }
+
+/** Session期限切れ時に再ログインするためのコールバック */
+export type TimeTreeReLoginFn = () => Promise<TimeTreeSession>;
 
 interface TimeTreeRawEvent {
   id: string;
@@ -52,12 +56,20 @@ export class TimeTreeAdapter implements CalendarAdapter {
   readonly provider = 'timetree' as const;
   private sessionId: string;
   private csrfToken: string;
+  private expiresAt: number;
   private headers: Record<string, string>;
+  private reLoginFn?: TimeTreeReLoginFn;
 
-  constructor(session: TimeTreeSession) {
+  constructor(session: TimeTreeSession, reLoginFn?: TimeTreeReLoginFn) {
     this.sessionId = session.sessionId;
     this.csrfToken = session.csrfToken;
-    this.headers = {
+    this.expiresAt = session.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000; // default 14 days
+    this.reLoginFn = reLoginFn;
+    this.headers = this.buildHeaders(session);
+  }
+
+  private buildHeaders(session: TimeTreeSession): Record<string, string> {
+    return {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       Cookie: `_session_id=${session.sessionId}`,
@@ -65,6 +77,36 @@ export class TimeTreeAdapter implements CalendarAdapter {
       'X-TimeTreeA': APP_HEADER,
       'X-CSRF-Token': session.csrfToken,
     };
+  }
+
+  /**
+   * 認証エラー時に1回だけ再ログインを試みるfetchラッパー
+   */
+  private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+    // session期限切れチェック
+    if (this.reLoginFn && Date.now() > this.expiresAt) {
+      await this.refreshSession();
+    }
+
+    const res = await fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
+
+    // 401/403で再ログイン試行（1回のみ）
+    if ((res.status === 400 || res.status === 401 || res.status === 403) && this.reLoginFn) {
+      await this.refreshSession();
+      return fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
+    }
+
+    return res;
+  }
+
+  private async refreshSession(): Promise<void> {
+    if (!this.reLoginFn)
+      throw new Error('TimeTree session expired and no re-login function provided');
+    const newSession = await this.reLoginFn();
+    this.sessionId = newSession.sessionId;
+    this.csrfToken = newSession.csrfToken;
+    this.expiresAt = newSession.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000;
+    this.headers = this.buildHeaders(newSession);
   }
 
   /**
@@ -123,13 +165,16 @@ export class TimeTreeAdapter implements CalendarAdapter {
     }
 
     const sessionId = sessionCookie.split('=')[1].split(';')[0];
-    return { sessionId, csrfToken };
+
+    // expires= からsession有効期限を取得
+    const expiresMatch = sessionCookie.match(/expires=([^;]+)/i);
+    const expiresAt = expiresMatch ? new Date(expiresMatch[1]).getTime() : undefined;
+
+    return { sessionId, csrfToken, expiresAt };
   }
 
   async listCalendars(): Promise<Calendar[]> {
-    const res = await fetch(`${BASE_URL}/api/v2/calendars`, {
-      headers: this.headers,
-    });
+    const res = await this.fetchWithRetry(`${BASE_URL}/api/v2/calendars`);
 
     if (!res.ok) throw new Error(`TimeTree listCalendars failed: ${res.status}`);
 
@@ -151,7 +196,7 @@ export class TimeTreeAdapter implements CalendarAdapter {
     let hasMore = true;
 
     while (hasMore) {
-      const res = await fetch(url, { headers: this.headers });
+      const res = await this.fetchWithRetry(url);
       if (!res.ok) throw new Error(`TimeTree listEvents failed: ${res.status}`);
 
       const data = (await res.json()) as {
@@ -179,9 +224,8 @@ export class TimeTreeAdapter implements CalendarAdapter {
   }
 
   async createEvent(calendarId: string, event: CreateEventInput): Promise<CalendarEvent> {
-    const res = await fetch(`${BASE_URL}/api/v1/calendar/${calendarId}/events`, {
+    const res = await this.fetchWithRetry(`${BASE_URL}/api/v1/calendar/${calendarId}/events`, {
       method: 'POST',
-      headers: this.headers,
       body: JSON.stringify({
         event: {
           title: event.title,
@@ -219,11 +263,10 @@ export class TimeTreeAdapter implements CalendarAdapter {
     if (event.isAllDay !== undefined) body.all_day = event.isAllDay;
     if (event.location !== undefined) body.location = event.location;
 
-    const res = await fetch(`${BASE_URL}/api/v1/calendar/${calendarId}/events/${eventId}`, {
-      method: 'PUT',
-      headers: this.headers,
-      body: JSON.stringify({ event: body }),
-    });
+    const res = await this.fetchWithRetry(
+      `${BASE_URL}/api/v1/calendar/${calendarId}/events/${eventId}`,
+      { method: 'PUT', body: JSON.stringify({ event: body }) },
+    );
 
     if (!res.ok) {
       const text = await res.text();
@@ -235,10 +278,10 @@ export class TimeTreeAdapter implements CalendarAdapter {
   }
 
   async deleteEvent(calendarId: string, eventId: string): Promise<void> {
-    const res = await fetch(`${BASE_URL}/api/v1/calendar/${calendarId}/events/${eventId}`, {
-      method: 'DELETE',
-      headers: this.headers,
-    });
+    const res = await this.fetchWithRetry(
+      `${BASE_URL}/api/v1/calendar/${calendarId}/events/${eventId}`,
+      { method: 'DELETE' },
+    );
 
     if (!res.ok) {
       throw new Error(`TimeTree deleteEvent failed: ${res.status}`);

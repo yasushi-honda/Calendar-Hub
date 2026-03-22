@@ -1,4 +1,4 @@
-# Calendar Hub ハンドオフ (2026-03-22)
+# Calendar Hub ハンドオフ (2026-03-23)
 
 ## 完了した作業
 
@@ -24,12 +24,18 @@
 | #37 | -        | 設定画面にTimeTree接続フォーム追加                   |
 | #38 | -        | 認証完了後にカレンダーイベント取得（タイミング修正） |
 | #39 | -        | カレンダー取得リジェクト結果のデバッグログ追加       |
+| #40 | -        | CLAUDE.md + ハンドオフ + .gitignore                  |
+| #41 | -        | 公開予約リンク機能（Calendlyライク）                 |
+| #45 | #42      | 予約リンクのユニットテスト21件追加                   |
+| #46 | #43      | /simplify リファクタ（DRY・型安全性・効率化）        |
+| #47 | -        | Cloud Runタイムゾーン修正（UTC→JST）                 |
+| #48 | #44      | 公開予約APIのレート制限（429保護）                   |
 
 ## 品質状態
 
-- テスト: 74件全PASS（最終確認: #20時点、以降変更なし）
+- テスト: 116件全PASS
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン (最新: #39)
+- CI: GitHub Actions グリーン (最新: #48)
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -44,18 +50,18 @@
 - Firebase Auth承認済みドメイン: 設定済み
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
+- Firestoreインデックス: bookingLinks, bookings 各種 READY
 
 ## オープンIssue
 
-GitHub上のオープンIssueはなし（2026-03-22時点）。上記「次セッションの推奨アクション」を参照。
+GitHub上のオープンIssueはなし（2026-03-23時点）。
 
 ## 次セッションの推奨アクション
 
-1. TimeTree接続フォームの動作確認（設定画面 → OAuth認証フロー）
-2. カレンダーイベント取得のデバッグログを確認し、リジェクト原因を特定・修正
-3. 本番環境へのデプロイ（Cloud Run: ダークテーマ + TimeTree設定画面 未反映）
-4. 本番E2Eフロー確認: Googleログイン → カレンダー表示 → AI提案
-5. Gmail OAuth再連携（gmail.sendスコープ追加のため設定画面で再接続）
+1. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+2. 予約リンクのタイムゾーン設定をユーザー選択可能にする（現在JST固定）
+3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+4. Gmail OAuth再連携（gmail.sendスコープ追加のため設定画面で再接続）
 
 ## アカウント情報
 

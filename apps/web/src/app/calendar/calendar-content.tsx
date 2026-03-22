@@ -49,7 +49,11 @@ export function CalendarContent() {
     }
   }, [currentDate, view]);
 
-  const { events, loading: eventsLoading, error } = useCalendarEvents(rangeStart, rangeEnd);
+  const {
+    events,
+    loading: eventsLoading,
+    error,
+  } = useCalendarEvents(user ? rangeStart : null, user ? rangeEnd : null);
 
   const handleNavigate = useCallback((date: Date) => setCurrentDate(date), []);
   const handleViewChange = useCallback((newView: View) => setView(newView), []);

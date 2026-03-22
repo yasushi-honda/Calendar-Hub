@@ -35,6 +35,12 @@ body {
 /* react-big-calendar dark theme overrides */
 .rbc-calendar {
   color: var(--color-text);
+  background: transparent;
+}
+
+/* Toolbar */
+.rbc-toolbar {
+  color: var(--color-text);
 }
 
 .rbc-toolbar button {
@@ -56,10 +62,17 @@ body {
   border-color: var(--color-accent);
 }
 
+.rbc-toolbar button.rbc-active:hover,
+.rbc-toolbar button.rbc-active:focus {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* Header */
 .rbc-header {
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text);
-  border-color: var(--color-border);
+  border-color: var(--color-border) !important;
   padding: 8px 4px;
   font-weight: 500;
 }
@@ -68,34 +81,80 @@ body {
   border-left-color: var(--color-border);
 }
 
+.rbc-header a {
+  color: var(--color-text);
+}
+
+/* Background cells — the core fix for white backgrounds */
+.rbc-day-bg {
+  background: transparent;
+}
+
 .rbc-today {
-  background: rgba(224, 120, 80, 0.08);
+  background: rgba(224, 120, 80, 0.08) !important;
 }
 
 .rbc-off-range-bg {
   background: rgba(0, 0, 0, 0.2);
 }
 
-.rbc-time-view,
-.rbc-month-view {
+/* Time view backgrounds */
+.rbc-time-view {
+  background: transparent;
   border-color: var(--color-border);
 }
 
-.rbc-time-header-content,
+.rbc-time-header {
+  background: transparent;
+}
+
+.rbc-time-header-content {
+  background: transparent;
+  border-color: var(--color-border);
+}
+
 .rbc-time-content {
+  background: transparent;
   border-color: var(--color-border);
 }
 
-.rbc-time-header-gutter {
+.rbc-time-column {
+  background: transparent;
+}
+
+.rbc-day-slot {
+  background: transparent;
+}
+
+.rbc-time-gutter {
+  background: transparent;
   color: var(--color-text-muted);
 }
 
+.rbc-time-header-gutter {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+/* Allday row */
+.rbc-allday-cell {
+  background: transparent;
+  border-color: var(--color-border);
+}
+
+.rbc-row-bg {
+  background: transparent;
+}
+
+/* Time slots */
 .rbc-timeslot-group {
+  background: transparent;
   border-color: var(--color-border);
 }
 
 .rbc-time-slot {
-  border-color: var(--color-border);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.04);
 }
 
 .rbc-day-slot .rbc-time-slot {
@@ -111,12 +170,14 @@ body {
   background-color: var(--color-accent);
 }
 
-.rbc-date-cell {
-  color: var(--color-text);
+/* Month view */
+.rbc-month-view {
+  background: transparent;
+  border-color: var(--color-border);
 }
 
-.rbc-off-range {
-  color: var(--color-text-muted);
+.rbc-month-row {
+  background: transparent;
 }
 
 .rbc-month-row + .rbc-month-row {
@@ -127,14 +188,68 @@ body {
   border-color: var(--color-border);
 }
 
-.rbc-allday-cell {
-  border-color: var(--color-border);
+.rbc-date-cell {
+  color: var(--color-text);
 }
 
+.rbc-date-cell a {
+  color: var(--color-text);
+}
+
+.rbc-off-range {
+  color: var(--color-text-muted);
+}
+
+.rbc-off-range a {
+  color: var(--color-text-muted);
+}
+
+/* Time header cell */
 .rbc-time-header-cell {
+  background: transparent;
   border-color: var(--color-border);
 }
 
+.rbc-time-header-cell .rbc-header {
+  border-bottom-color: var(--color-border);
+}
+
+/* Events */
+.rbc-event {
+  border: none;
+}
+
+.rbc-event.rbc-selected {
+  background-color: var(--color-accent);
+}
+
+.rbc-event-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Show more link */
 .rbc-show-more {
   color: var(--color-accent);
+  background: transparent;
+}
+
+/* Selection overlay */
+.rbc-slot-selection {
+  background: rgba(224, 120, 80, 0.2);
+  border-color: var(--color-accent);
+}
+
+/* Agenda view */
+.rbc-agenda-view table {
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.rbc-agenda-view table thead th {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.rbc-agenda-view table tbody tr {
+  border-color: var(--color-border);
 }

@@ -174,6 +174,9 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
 
+  // サーバーはUTCで動作するため、JST (UTC+9) オフセットを指定
+  const JST_OFFSET = 540;
+
   const freeSlots = calculateFreeSlots(
     [...calendarEvents, ...bookingEvents],
     rangeStart,
@@ -182,12 +185,15 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
       dayStartHour: link.freeTimeOptions.dayStartHour,
       dayEndHour: link.freeTimeOptions.dayEndHour,
       minSlotMinutes: link.durationMinutes,
+      timezoneOffsetMinutes: JST_OFFSET,
     },
   );
 
-  const filteredSlots = freeSlots.filter((slot) =>
-    link.availableDays.includes(slot.start.getDay()),
-  );
+  // availableDaysはJSTの曜日で判定する必要がある
+  const filteredSlots = freeSlots.filter((slot) => {
+    const jstDay = new Date(slot.start.getTime() + JST_OFFSET * 60000).getUTCDay();
+    return link.availableDays.includes(jstDay);
+  });
 
   const slots = splitFreeIntoBookingSlots(filteredSlots, link.durationMinutes, link.bufferMinutes);
 
@@ -239,11 +245,15 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
     return c.json({ error: 'Cannot book a slot in the past' }, 400);
   }
 
-  const slotHour = slotStart.getHours();
+  // JST基準で営業時間・曜日チェック
+  const JST_OFFSET_BOOK = 540;
+  const slotInJst = new Date(slotStart.getTime() + JST_OFFSET_BOOK * 60000);
+  const slotHour = slotInJst.getUTCHours();
+  const slotDay = slotInJst.getUTCDay();
   if (
     slotHour < link.freeTimeOptions.dayStartHour ||
     slotHour >= link.freeTimeOptions.dayEndHour ||
-    !link.availableDays.includes(slotStart.getDay())
+    !link.availableDays.includes(slotDay)
   ) {
     return c.json({ error: 'Slot is outside available hours/days' }, 400);
   }

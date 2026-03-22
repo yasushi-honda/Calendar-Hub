@@ -44,43 +44,29 @@ export function BookContent() {
     setMounted(true);
   }, []);
 
-  // リンク情報取得
+  // リンク情報 + スロットを並列取得
   useEffect(() => {
     if (!linkId) return;
     (async () => {
+      setSlotsLoading(true);
       try {
-        const res = await publicGet<{ link: PublicBookingLinkInfo }>(
-          `/api/public/booking/${linkId}`,
-        );
-        setLinkInfo(res.link);
+        const [linkRes, slotsRes] = await Promise.all([
+          publicGet<{ link: PublicBookingLinkInfo }>(`/api/public/booking/${linkId}`),
+          publicGet<SlotsResponse>(`/api/public/booking/${linkId}/slots`),
+        ]);
+        setLinkInfo(linkRes.link);
+        setSlots(slotsRes.slots);
+        if (slotsRes.slots.length > 0) {
+          setSelectedDate(slotsRes.slots[0].start.split('T')[0]);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
         setLoading(false);
-      }
-    })();
-  }, [linkId]);
-
-  // スロット取得
-  useEffect(() => {
-    if (!linkId || !linkInfo) return;
-    (async () => {
-      setSlotsLoading(true);
-      try {
-        const res = await publicGet<SlotsResponse>(`/api/public/booking/${linkId}/slots`);
-        setSlots(res.slots);
-        // 最初の日付を自動選択
-        if (res.slots.length > 0) {
-          const firstDate = res.slots[0].start.split('T')[0];
-          setSelectedDate(firstDate);
-        }
-      } catch (err) {
-        console.error('Failed to load slots:', err);
-      } finally {
         setSlotsLoading(false);
       }
     })();
-  }, [linkId, linkInfo]);
+  }, [linkId]);
 
   // 日付別グルーピング
   const dateGroups = useMemo(() => {
@@ -132,34 +118,6 @@ export function BookContent() {
       setSubmitting(false);
     }
   }, [selectedSlot, guestName, guestEmail, guestMessage, linkId]);
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('ja-JP', {
-      month: 'short',
-      day: 'numeric',
-      weekday: 'short',
-    });
-  };
-
-  const formatTime = (isoStr: string) => {
-    const d = new Date(isoStr);
-    return d.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Tokyo',
-    });
-  };
-
-  const formatDateNum = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.getDate().toString();
-  };
-
-  const formatWeekday = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('ja-JP', { weekday: 'short' });
-  };
 
   if (loading) {
     return (
@@ -433,6 +391,36 @@ export function BookContent() {
       <style>{keyframes}</style>
     </div>
   );
+}
+
+// --- ユーティリティ（モジュールスコープ） ---
+
+function toLocalDate(dateStr: string): Date {
+  return new Date(dateStr + 'T00:00:00');
+}
+
+function formatDate(dateStr: string): string {
+  return toLocalDate(dateStr).toLocaleDateString('ja-JP', {
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+  });
+}
+
+function formatTime(isoStr: string): string {
+  return new Date(isoStr).toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Asia/Tokyo',
+  });
+}
+
+function formatDateNum(dateStr: string): string {
+  return toLocalDate(dateStr).getDate().toString();
+}
+
+function formatWeekday(dateStr: string): string {
+  return toLocalDate(dateStr).toLocaleDateString('ja-JP', { weekday: 'short' });
 }
 
 const keyframes = `

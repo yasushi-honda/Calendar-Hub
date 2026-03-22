@@ -10,6 +10,7 @@ export {
 } from './free-time.js';
 export {
   DURATION_OPTIONS,
+  BOOKING_LINK_STATUSES,
   type BookingLinkStatus,
   type BookingStatus,
   type DurationOption,

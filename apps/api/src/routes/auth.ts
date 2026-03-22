@@ -130,13 +130,32 @@ authRoutes.get('/accounts', requireAuth, async (c) => {
   return c.json({ accounts });
 });
 
-// TimeTreeアカウント連携: email/passwordでログイン
+// TimeTreeアカウント連携: email/passwordでログイン、またはセッション直接登録
 authRoutes.post('/connect/timetree', requireAuth, async (c) => {
   const user = c.get('user');
-  const { email, password } = await c.req.json();
+  const body = await c.req.json();
 
+  // セッション直接登録モード（ブラウザから取得したsession）
+  if (body.sessionId && body.csrfToken && body.email) {
+    try {
+      await saveConnectedAccount(
+        user.uid,
+        'timetree',
+        body.email,
+        JSON.stringify({ sessionId: body.sessionId, csrfToken: body.csrfToken }),
+        ['calendar.read', 'calendar.write'],
+      );
+      return c.json({ success: true, email: body.email });
+    } catch (err) {
+      console.error('TimeTree session save error:', err);
+      return c.json({ error: 'Failed to save TimeTree session' }, 500);
+    }
+  }
+
+  // email/passwordログインモード
+  const { email, password } = body;
   if (!email || !password) {
-    return c.json({ error: 'email and password are required' }, 400);
+    return c.json({ error: 'email and password (or sessionId+csrfToken) are required' }, 400);
   }
 
   try {

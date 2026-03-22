@@ -13,20 +13,21 @@ import type { AppEnv } from './types.js';
 export const app = new Hono<AppEnv>();
 
 app.use('*', logger());
-app.use(
-  '*',
-  cors({
-    origin: (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(','),
-    credentials: true,
-  }),
-);
 
-// 公開APIには緩いCORS（認証不要のため）
+// 公開APIには緩いCORS（認証不要のため。先に登録して優先させる）
 app.use(
   '/api/public/*',
   cors({
     origin: '*',
     credentials: false,
+  }),
+);
+
+app.use(
+  '*',
+  cors({
+    origin: (process.env.FRONTEND_URL ?? 'http://localhost:3000').split(','),
+    credentials: true,
   }),
 );
 

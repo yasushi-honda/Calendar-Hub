@@ -79,9 +79,8 @@ async function fetchOwnerEvents(
   return results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value);
 }
 
-// ヘルパー: 確定済み予約をダミーイベントとしてマージ
-async function getConfirmedBookingEvents(
-  linkId: string,
+// ヘルパー: オーナーの確定済み予約をダミーイベントとしてマージ
+async function getConfirmedBookingEventsForOwner(
   ownerUid: string,
   timeMin: Date,
   timeMax: Date,
@@ -211,7 +210,7 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
   // オーナーのカレンダーイベント取得
   const [calendarEvents, bookingEvents] = await Promise.all([
     fetchOwnerEvents(link.ownerUid, link.accountIds, rangeStart, rangeEnd),
-    getConfirmedBookingEvents(linkId, link.ownerUid, rangeStart, rangeEnd),
+    getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
 
   const allEvents = [...calendarEvents, ...bookingEvents];
@@ -249,13 +248,40 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
   }
 
   const link = res.link;
-  const body = (await c.req.json()) as CreateBookingInput;
 
-  if (!body.slotStart || !body.guestName) {
-    return c.json({ error: 'slotStart and guestName are required' }, 400);
+  let body: CreateBookingInput;
+  try {
+    body = (await c.req.json()) as CreateBookingInput;
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  // 入力バリデーション
+  if (
+    typeof body.guestName !== 'string' ||
+    body.guestName.trim().length === 0 ||
+    body.guestName.length > 100
+  ) {
+    return c.json({ error: 'guestName is required (max 100 chars)' }, 400);
+  }
+
+  if (!body.slotStart || typeof body.slotStart !== 'string') {
+    return c.json({ error: 'slotStart is required' }, 400);
   }
 
   const slotStart = new Date(body.slotStart);
+  if (isNaN(slotStart.getTime())) {
+    return c.json({ error: 'Invalid slotStart date' }, 400);
+  }
+
+  if (body.guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.guestEmail)) {
+    return c.json({ error: 'Invalid email format' }, 400);
+  }
+
+  if (body.guestMessage && body.guestMessage.length > 1000) {
+    return c.json({ error: 'Message too long (max 1000 chars)' }, 400);
+  }
+
   const slotEnd = new Date(slotStart.getTime() + link.durationMinutes * 60000);
 
   // 過去のスロットを拒否
@@ -263,21 +289,38 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
     return c.json({ error: 'Cannot book a slot in the past' }, 400);
   }
 
-  // 二重予約チェック（Firestoreトランザクション）
+  // 営業時間・曜日チェック
+  const slotHour = slotStart.getHours();
+  const slotDay = slotStart.getDay();
+  if (
+    slotHour < link.freeTimeOptions.dayStartHour ||
+    slotHour >= link.freeTimeOptions.dayEndHour ||
+    !link.availableDays.includes(slotDay)
+  ) {
+    return c.json({ error: 'Slot is outside available hours/days' }, 400);
+  }
+
+  // 二重予約チェック（Firestoreトランザクション — 範囲重複で検証）
   const db = getDb();
   const bookingId = nanoid(12);
 
   try {
     await db.runTransaction(async (tx) => {
-      // 同時間帯の確定済み予約を確認
-      const overlapping = await db
+      // 範囲重複: slotStart < 既存slotEnd && slotEnd > 既存slotStart
+      const existingBookings = await db
         .collection('bookings')
         .where('ownerUid', '==', link.ownerUid)
         .where('status', '==', 'confirmed')
-        .where('slotStart', '==', slotStart)
+        .where('slotStart', '<', slotEnd)
         .get();
 
-      if (!overlapping.empty) {
+      const hasOverlap = existingBookings.docs.some((doc) => {
+        const existing = doc.data();
+        const existingEnd = existing.slotEnd.toDate();
+        return existingEnd > slotStart;
+      });
+
+      if (hasOverlap) {
         throw new Error('SLOT_TAKEN');
       }
 

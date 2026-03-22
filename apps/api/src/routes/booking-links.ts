@@ -105,6 +105,28 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
+  // バリデーション
+  if (body.status !== undefined && !['active', 'paused'].includes(body.status)) {
+    return c.json({ error: 'status must be "active" or "paused"' }, 400);
+  }
+  if (body.availableDays !== undefined) {
+    if (
+      !Array.isArray(body.availableDays) ||
+      body.availableDays.some((d: unknown) => typeof d !== 'number' || d < 0 || d > 6)
+    ) {
+      return c.json({ error: 'availableDays must be array of 0-6' }, 400);
+    }
+  }
+  if (body.rangeDays !== undefined && (body.rangeDays < 1 || body.rangeDays > 90)) {
+    return c.json({ error: 'rangeDays must be 1-90' }, 400);
+  }
+  if (body.freeTimeOptions !== undefined) {
+    const { dayStartHour, dayEndHour } = body.freeTimeOptions;
+    if (dayStartHour >= dayEndHour) {
+      return c.json({ error: 'dayStartHour must be less than dayEndHour' }, 400);
+    }
+  }
+
   const update: Record<string, unknown> = {
     updatedAt: FieldValue.serverTimestamp(),
   };

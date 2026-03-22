@@ -19,5 +19,8 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.7"
   }
 }

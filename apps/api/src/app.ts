@@ -6,11 +6,23 @@ import { calendarRoutes } from './routes/calendars.js';
 import { profileRoutes } from './routes/profile.js';
 import { aiRoutes } from './routes/ai.js';
 import { notificationRoutes } from './routes/notifications.js';
+import { bookingLinkRoutes } from './routes/booking-links.js';
+import { publicBookingRoutes } from './routes/public-booking.js';
 import type { AppEnv } from './types.js';
 
 export const app = new Hono<AppEnv>();
 
 app.use('*', logger());
+
+// 公開APIには緩いCORS（認証不要のため。先に登録して優先させる）
+app.use(
+  '/api/public/*',
+  cors({
+    origin: '*',
+    credentials: false,
+  }),
+);
+
 app.use(
   '*',
   cors({
@@ -26,3 +38,5 @@ app.route('/api/calendars', calendarRoutes);
 app.route('/api/profile', profileRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/notifications', notificationRoutes);
+app.route('/api/booking-links', bookingLinkRoutes);
+app.route('/api/public/booking', publicBookingRoutes);

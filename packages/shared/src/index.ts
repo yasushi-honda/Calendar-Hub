@@ -2,6 +2,20 @@
 
 export { encrypt, decrypt, type EncryptedData } from './crypto.js';
 export { calculateFreeSlots, type FreeSlot, type FreeTimeOptions } from './free-time.js';
+export {
+  DURATION_OPTIONS,
+  type BookingLinkStatus,
+  type BookingStatus,
+  type DurationOption,
+  type BookingLinkFreeTimeOptions,
+  type BookingLink,
+  type PublicBookingLinkInfo,
+  type Booking,
+  type PublicBookingConfirmation,
+  type BookingSlot,
+  type CreateBookingLinkInput,
+  type CreateBookingInput,
+} from './booking-types.js';
 
 export type CalendarProvider = 'google' | 'timetree';
 

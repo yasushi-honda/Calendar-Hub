@@ -8,6 +8,7 @@ import { aiRoutes } from './routes/ai.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { bookingLinkRoutes } from './routes/booking-links.js';
 import { publicBookingRoutes } from './routes/public-booking.js';
+import { rateLimit } from './middleware/rate-limit.js';
 import type { AppEnv } from './types.js';
 
 export const app = new Hono<AppEnv>();
@@ -30,6 +31,10 @@ app.use(
     credentials: true,
   }),
 );
+
+// 公開APIのレート制限
+app.use('/api/public/booking/*/slots', rateLimit({ windowMs: 60_000, max: 30 }));
+app.use('/api/public/booking/*/book', rateLimit({ windowMs: 60_000, max: 5 }));
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 

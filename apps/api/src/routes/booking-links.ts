@@ -1,16 +1,27 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, type Query } from 'firebase-admin/firestore';
 import type { AppEnv } from '../types.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getDb } from '../lib/firebase-admin.js';
-import type { BookingLink, CreateBookingLinkInput } from '@calendar-hub/shared';
+import {
+  DURATION_OPTIONS,
+  BOOKING_LINK_STATUSES,
+  type BookingLink,
+  type CreateBookingLinkInput,
+} from '@calendar-hub/shared';
 
-const VALID_DURATIONS = [15, 30, 45, 60, 90, 120];
+function toBookingLink(data: FirebaseFirestore.DocumentData): BookingLink {
+  return {
+    ...data,
+    createdAt: data.createdAt?.toDate?.() ?? new Date(),
+    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+    expiresAt: data.expiresAt?.toDate?.() ?? null,
+  } as BookingLink;
+}
 
 export const bookingLinkRoutes = new Hono<AppEnv>();
 
-// リンク作成
 bookingLinkRoutes.post('/', requireAuth, async (c) => {
   const user = c.get('user');
   const body = (await c.req.json()) as CreateBookingLinkInput;
@@ -19,8 +30,8 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
     return c.json({ error: 'title, durationMinutes, accountIds are required' }, 400);
   }
 
-  if (!VALID_DURATIONS.includes(body.durationMinutes)) {
-    return c.json({ error: `durationMinutes must be one of: ${VALID_DURATIONS.join(', ')}` }, 400);
+  if (!(DURATION_OPTIONS as readonly number[]).includes(body.durationMinutes)) {
+    return c.json({ error: `durationMinutes must be one of: ${DURATION_OPTIONS.join(', ')}` }, 400);
   }
 
   if (!body.calendarIdForEvent || !body.accountIdForEvent) {
@@ -43,7 +54,7 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
       dayStartHour: body.freeTimeOptions?.dayStartHour ?? 9,
       dayEndHour: body.freeTimeOptions?.dayEndHour ?? 18,
     },
-    availableDays: body.availableDays ?? [1, 2, 3, 4, 5], // 月-金
+    availableDays: body.availableDays ?? [1, 2, 3, 4, 5],
     rangeDays: body.rangeDays ?? 14,
     bufferMinutes: body.bufferMinutes ?? 0,
     status: 'active',
@@ -67,7 +78,6 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
   return c.json({ link }, 201);
 });
 
-// 自分のリンク一覧
 bookingLinkRoutes.get('/', requireAuth, async (c) => {
   const user = c.get('user');
   const db = getDb();
@@ -78,20 +88,10 @@ bookingLinkRoutes.get('/', requireAuth, async (c) => {
     .orderBy('createdAt', 'desc')
     .get();
 
-  const links = snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      createdAt: data.createdAt?.toDate?.() ?? new Date(),
-      updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-      expiresAt: data.expiresAt?.toDate?.() ?? null,
-    } as BookingLink;
-  });
-
+  const links = snap.docs.map((doc) => toBookingLink(doc.data()));
   return c.json({ links });
 });
 
-// リンク更新
 bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
   const user = c.get('user');
   const linkId = c.req.param('linkId');
@@ -105,8 +105,10 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  // バリデーション
-  if (body.status !== undefined && !['active', 'paused'].includes(body.status)) {
+  if (
+    body.status !== undefined &&
+    !(BOOKING_LINK_STATUSES as readonly string[]).includes(body.status)
+  ) {
     return c.json({ error: 'status must be "active" or "paused"' }, 400);
   }
   if (body.availableDays !== undefined) {
@@ -144,18 +146,9 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
   await ref.update(update);
 
   const updated = await ref.get();
-  const data = updated.data()!;
-  return c.json({
-    link: {
-      ...data,
-      createdAt: data.createdAt?.toDate?.() ?? new Date(),
-      updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-      expiresAt: data.expiresAt?.toDate?.() ?? null,
-    } as BookingLink,
-  });
+  return c.json({ link: toBookingLink(updated.data()!) });
 });
 
-// リンク削除
 bookingLinkRoutes.delete('/:linkId', requireAuth, async (c) => {
   const user = c.get('user');
   const linkId = c.req.param('linkId');
@@ -171,28 +164,15 @@ bookingLinkRoutes.delete('/:linkId', requireAuth, async (c) => {
   return c.json({ success: true });
 });
 
-// 予約一覧
 bookingLinkRoutes.get('/bookings', requireAuth, async (c) => {
   const user = c.get('user');
   const status = c.req.query('status');
   const db = getDb();
 
-  let query = db
-    .collection('bookings')
-    .where('ownerUid', '==', user.uid)
-    .orderBy('slotStart', 'desc')
-    .limit(50);
+  let query: Query = db.collection('bookings').where('ownerUid', '==', user.uid);
+  if (status) query = query.where('status', '==', status);
+  const snap = await query.orderBy('slotStart', 'desc').limit(50).get();
 
-  if (status) {
-    query = db
-      .collection('bookings')
-      .where('ownerUid', '==', user.uid)
-      .where('status', '==', status)
-      .orderBy('slotStart', 'desc')
-      .limit(50);
-  }
-
-  const snap = await query.get();
   const bookings = snap.docs.map((doc) => {
     const data = doc.data();
     return {
@@ -206,7 +186,6 @@ bookingLinkRoutes.get('/bookings', requireAuth, async (c) => {
   return c.json({ bookings });
 });
 
-// 予約キャンセル（オーナー）
 bookingLinkRoutes.patch('/bookings/:bookingId/cancel', requireAuth, async (c) => {
   const user = c.get('user');
   const bookingId = c.req.param('bookingId');

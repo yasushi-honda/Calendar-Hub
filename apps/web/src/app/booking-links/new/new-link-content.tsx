@@ -16,6 +16,7 @@ interface Calendar {
 }
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 export function NewLinkContent() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -50,11 +51,11 @@ export function NewLinkContent() {
           apiGet<{ accounts: ConnectedAccountPublic[] }>('/api/auth/accounts'),
           apiGet<{ calendars: Calendar[] }>('/api/calendars'),
         ]);
-        setAccounts(accRes.accounts.filter((a) => a.isActive));
+        const activeAccounts = accRes.accounts.filter((a) => a.isActive);
+        setAccounts(activeAccounts);
         setCalendars(calRes.calendars);
 
-        // デフォルト: 全アカウント選択、最初のカレンダーをイベント作成先に
-        const activeIds = accRes.accounts.filter((a) => a.isActive).map((a) => a.id);
+        const activeIds = activeAccounts.map((a) => a.id);
         setSelectedAccountIds(activeIds);
 
         if (calRes.calendars.length > 0) {
@@ -246,7 +247,7 @@ export function NewLinkContent() {
                   onChange={(e) => setDayStartHour(Number(e.target.value))}
                   style={s.select}
                 >
-                  {Array.from({ length: 24 }, (_, i) => (
+                  {HOURS.map((i) => (
                     <option key={i} value={i}>
                       {String(i).padStart(2, '0')}:00
                     </option>
@@ -260,7 +261,7 @@ export function NewLinkContent() {
                   onChange={(e) => setDayEndHour(Number(e.target.value))}
                   style={s.select}
                 >
-                  {Array.from({ length: 24 }, (_, i) => (
+                  {HOURS.map((i) => (
                     <option key={i} value={i}>
                       {String(i).padStart(2, '0')}:00
                     </option>

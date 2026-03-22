@@ -32,9 +32,11 @@ export function BookingLinksContent() {
   const handleToggleStatus = async (link: BookingLink) => {
     const newStatus = link.status === 'active' ? 'paused' : 'active';
     try {
-      await apiPatch(`/api/booking-links/${link.id}`, { status: newStatus });
+      const res = await apiPatch<{ link: BookingLink }>(`/api/booking-links/${link.id}`, {
+        status: newStatus,
+      });
+      setLinks((prev) => prev.map((l) => (l.id === link.id ? res.link : l)));
       setMessage(newStatus === 'active' ? 'リンクを有効にしました' : 'リンクを一時停止しました');
-      loadLinks();
     } catch {
       setMessage('更新に失敗しました');
     }
@@ -44,8 +46,8 @@ export function BookingLinksContent() {
     if (!confirm('このリンクを削除しますか？')) return;
     try {
       await apiDelete(`/api/booking-links/${linkId}`);
+      setLinks((prev) => prev.filter((l) => l.id !== linkId));
       setMessage('リンクを削除しました');
-      loadLinks();
     } catch {
       setMessage('削除に失敗しました');
     }

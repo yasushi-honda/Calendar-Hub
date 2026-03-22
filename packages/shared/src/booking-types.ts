@@ -7,6 +7,8 @@ export type BookingStatus = 'confirmed' | 'cancelled_by_owner' | 'cancelled_by_g
 export const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120] as const;
 export type DurationOption = (typeof DURATION_OPTIONS)[number];
 
+export const BOOKING_LINK_STATUSES: readonly BookingLinkStatus[] = ['active', 'paused'];
+
 export interface BookingLinkFreeTimeOptions {
   dayStartHour: number;
   dayEndHour: number;

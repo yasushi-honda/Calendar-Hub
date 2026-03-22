@@ -1,26 +1,20 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useMemo, useCallback } from 'react';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
 import type { View } from 'react-big-calendar';
-import { useAuth } from '../../components/AuthProvider';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { useCalendarEvents } from '../../hooks/useCalendarEvents';
 import { CalendarView } from '../../components/CalendarView';
 import { FreeSlotsPanel } from '../../components/FreeSlotsPanel';
-import { AppNav } from '../../components/AppNav';
+import { PageShell, PageLoading } from '../../components/PageShell';
 import type { CalendarEvent } from '@calendar-hub/shared';
 
 export function CalendarContent() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<View>('week');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   const { rangeStart, rangeEnd } = useMemo(() => {
     switch (view) {
@@ -61,77 +55,69 @@ export function CalendarContent() {
   const handleViewChange = useCallback((newView: View) => setView(newView), []);
   const handleSelectEvent = useCallback((event: CalendarEvent) => setSelectedEvent(event), []);
 
-  if (loading) return <div style={s.loading}>Loading...</div>;
+  if (loading) return <PageLoading />;
   if (!user) return null;
 
   return (
-    <div style={s.page}>
-      <AppNav />
-      <main style={s.main}>
-        {error && <div style={s.error}>{error}</div>}
+    <PageShell maxWidth="wide">
+      {error && <div style={s.error}>{error}</div>}
 
-        <div style={s.grid}>
-          <div style={s.calendarWrap}>
-            {eventsLoading && <div style={s.loadingBar}>予定を読み込み中...</div>}
-            <CalendarView
-              events={events}
-              currentDate={currentDate}
-              view={view}
-              onNavigate={handleNavigate}
-              onViewChange={handleViewChange}
-              onSelectEvent={handleSelectEvent}
-            />
-          </div>
+      <div style={s.grid}>
+        <div style={s.calendarWrap}>
+          {eventsLoading && <div style={s.loadingBar}>予定を読み込み中...</div>}
+          <CalendarView
+            events={events}
+            currentDate={currentDate}
+            view={view}
+            onNavigate={handleNavigate}
+            onViewChange={handleViewChange}
+            onSelectEvent={handleSelectEvent}
+          />
+        </div>
 
-          <aside style={s.sidebar}>
-            <FreeSlotsPanel events={events} rangeStart={rangeStart} rangeEnd={rangeEnd} />
+        <aside style={s.sidebar}>
+          <FreeSlotsPanel events={events} rangeStart={rangeStart} rangeEnd={rangeEnd} />
 
-            {selectedEvent && (
-              <div style={s.eventDetail}>
-                <div style={s.eventHeader}>
-                  <span
-                    style={{
-                      ...s.sourceBadge,
-                      background:
-                        selectedEvent.source === 'google'
-                          ? 'rgba(66,133,244,0.15)'
-                          : 'rgba(76,175,80,0.15)',
-                      color: selectedEvent.source === 'google' ? '#6ea8fe' : '#81c784',
-                    }}
-                  >
-                    {selectedEvent.source === 'google' ? 'Google' : 'TimeTree'}
-                  </span>
-                  <button onClick={() => setSelectedEvent(null)} style={s.closeBtn}>
-                    ✕
-                  </button>
-                </div>
-                <h3 style={s.eventTitle}>{selectedEvent.title}</h3>
-                {selectedEvent.description && (
-                  <p style={s.eventDesc}>{selectedEvent.description}</p>
-                )}
-                {selectedEvent.location && <p style={s.eventLoc}>{selectedEvent.location}</p>}
+          {selectedEvent && (
+            <div style={s.eventDetail}>
+              <div style={s.eventHeader}>
+                <span
+                  style={{
+                    ...s.sourceBadge,
+                    background:
+                      selectedEvent.source === 'google'
+                        ? 'rgba(66,133,244,0.15)'
+                        : 'rgba(76,175,80,0.15)',
+                    color: selectedEvent.source === 'google' ? '#6ea8fe' : '#81c784',
+                  }}
+                >
+                  {selectedEvent.source === 'google' ? 'Google' : 'TimeTree'}
+                </span>
+                <button onClick={() => setSelectedEvent(null)} style={s.closeBtn}>
+                  ✕
+                </button>
               </div>
-            )}
-          </aside>
-        </div>
+              <h3 style={s.eventTitle}>{selectedEvent.title}</h3>
+              {selectedEvent.description && <p style={s.eventDesc}>{selectedEvent.description}</p>}
+              {selectedEvent.location && <p style={s.eventLoc}>{selectedEvent.location}</p>}
+            </div>
+          )}
+        </aside>
+      </div>
 
-        <div style={s.legend}>
-          <span style={s.legendItem}>
-            <span style={{ ...s.legendDot, background: '#4285f4' }} /> Google
-          </span>
-          <span style={s.legendItem}>
-            <span style={{ ...s.legendDot, background: '#4caf50' }} /> TimeTree
-          </span>
-        </div>
-      </main>
-    </div>
+      <div style={s.legend}>
+        <span style={s.legendItem}>
+          <span style={{ ...s.legendDot, background: '#4285f4' }} /> Google
+        </span>
+        <span style={s.legendItem}>
+          <span style={{ ...s.legendDot, background: '#4caf50' }} /> TimeTree
+        </span>
+      </div>
+    </PageShell>
   );
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--color-bg)' },
-  main: { padding: '20px 24px', maxWidth: '1400px', margin: '0 auto' },
-  loading: { padding: '2rem', color: 'var(--color-text-muted)' },
   error: {
     padding: '10px 14px',
     background: 'rgba(229,57,53,0.1)',

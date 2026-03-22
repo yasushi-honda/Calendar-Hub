@@ -17,6 +17,10 @@ export function SettingsContent() {
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null);
   const [testSending, setTestSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [showTimeTreeForm, setShowTimeTreeForm] = useState(false);
+  const [ttEmail, setTtEmail] = useState('');
+  const [ttPassword, setTtPassword] = useState('');
+  const [ttConnecting, setTtConnecting] = useState(false);
 
   useEffect(() => {
     const success = searchParams.get('success');
@@ -89,6 +93,26 @@ export function SettingsContent() {
     }
   };
 
+  const handleConnectTimeTree = async () => {
+    if (!ttEmail || !ttPassword) return;
+    setTtConnecting(true);
+    try {
+      const data = await apiPost<{ success: boolean; email: string }>(
+        '/api/auth/connect/timetree',
+        { email: ttEmail, password: ttPassword },
+      );
+      setMessage(`${data.email} を連携しました`);
+      setShowTimeTreeForm(false);
+      setTtEmail('');
+      setTtPassword('');
+      await loadAccounts();
+    } catch {
+      setMessage('エラー: TimeTreeログインに失敗しました');
+    } finally {
+      setTtConnecting(false);
+    }
+  };
+
   const handleDisconnect = async (accountId: string) => {
     try {
       await apiDelete(`/api/auth/accounts/${accountId}`);
@@ -143,10 +167,56 @@ export function SettingsContent() {
       <section style={s.section}>
         <div style={s.sectionHeader}>
           <h2 style={s.sectionTitle}>連携アカウント</h2>
-          <button onClick={handleConnectGoogle} style={s.addBtn}>
-            + Google追加
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={handleConnectGoogle} style={s.addBtn}>
+              + Google追加
+            </button>
+            <button onClick={() => setShowTimeTreeForm(!showTimeTreeForm)} style={s.addBtn}>
+              + TimeTree追加
+            </button>
+          </div>
         </div>
+
+        {showTimeTreeForm && (
+          <div style={s.ttForm}>
+            <h3 style={s.ttFormTitle}>TimeTree連携</h3>
+            <p style={s.ttFormHint}>TimeTreeのログイン情報を入力してください</p>
+            <input
+              type="email"
+              placeholder="メールアドレス"
+              value={ttEmail}
+              onChange={(e) => setTtEmail(e.target.value)}
+              style={s.ttInput}
+            />
+            <input
+              type="password"
+              placeholder="パスワード"
+              value={ttPassword}
+              onChange={(e) => setTtPassword(e.target.value)}
+              style={s.ttInput}
+              onKeyDown={(e) => e.key === 'Enter' && handleConnectTimeTree()}
+            />
+            <div style={s.ttActions}>
+              <button
+                onClick={handleConnectTimeTree}
+                disabled={ttConnecting || !ttEmail || !ttPassword}
+                style={s.ttSubmitBtn}
+              >
+                {ttConnecting ? '連携中...' : '連携する'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowTimeTreeForm(false);
+                  setTtEmail('');
+                  setTtPassword('');
+                }}
+                style={s.disconnectBtn}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
 
         {accounts.length === 0 ? (
           <p style={s.empty}>連携中のアカウントはありません</p>
@@ -267,6 +337,46 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: '6px',
     background: 'var(--color-surface)',
     color: 'var(--color-text)',
+    transition: 'all 0.2s',
+  },
+  ttForm: {
+    padding: '16px 18px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius)',
+    marginBottom: '12px',
+  },
+  ttFormTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: 'var(--color-text)',
+    marginBottom: '4px',
+  },
+  ttFormHint: { fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px' },
+  ttInput: {
+    display: 'block',
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '13px',
+    fontFamily: 'var(--font-body)',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '8px',
+    color: 'var(--color-text)',
+    marginBottom: '8px',
+    outline: 'none',
+  },
+  ttActions: { display: 'flex', gap: '8px', marginTop: '4px' },
+  ttSubmitBtn: {
+    padding: '6px 16px',
+    fontSize: '12px',
+    fontWeight: 500,
+    fontFamily: 'var(--font-body)',
+    cursor: 'pointer',
+    border: '1px solid var(--color-accent)',
+    borderRadius: '6px',
+    background: 'var(--color-accent-glow)',
+    color: 'var(--color-accent)',
     transition: 'all 0.2s',
   },
   empty: { fontSize: '13px', color: 'var(--color-text-muted)', padding: '20px 0' },

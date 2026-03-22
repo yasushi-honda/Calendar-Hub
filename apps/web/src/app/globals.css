@@ -13,6 +13,8 @@
   --color-accent: #e07850;
   --color-accent-glow: rgba(224, 120, 80, 0.15);
 
+  --rbc-border: rgba(255, 255, 255, 0.1);
+
   --radius: 16px;
   --radius-sm: 8px;
 }
@@ -32,224 +34,143 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* react-big-calendar dark theme overrides */
-.rbc-calendar {
-  color: var(--color-text);
-  background: transparent;
+/*
+ * react-big-calendar dark theme overrides
+ * All border/background/color rules use !important to win over
+ * the library's default stylesheet specificity.
+ */
+
+.rbc-calendar,
+.rbc-calendar * {
+  border-color: var(--rbc-border) !important;
 }
 
-/* Toolbar */
+.rbc-calendar {
+  color: var(--color-text) !important;
+  background: transparent !important;
+}
+
+/* ── Toolbar ── */
 .rbc-toolbar {
-  color: var(--color-text);
+  color: var(--color-text) !important;
 }
 
 .rbc-toolbar button {
-  color: var(--color-text);
-  border-color: var(--color-border);
-  background: transparent;
+  color: var(--color-text-muted) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: transparent !important;
 }
 
 .rbc-toolbar button:hover,
 .rbc-toolbar button:focus {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--color-surface-hover) !important;
+  color: var(--color-text) !important;
 }
 
-.rbc-toolbar button.rbc-active {
-  background: var(--color-accent);
-  color: #fff;
-  border-color: var(--color-accent);
-}
-
+.rbc-toolbar button.rbc-active,
 .rbc-toolbar button.rbc-active:hover,
 .rbc-toolbar button.rbc-active:focus {
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--color-accent) !important;
+  color: #fff !important;
+  border-color: var(--color-accent) !important;
 }
 
-/* Header */
+/* ── Header (day names) ── */
 .rbc-header {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text);
-  border-color: var(--color-border) !important;
-  padding: 8px 4px;
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--color-text) !important;
+  padding: 8px 4px !important;
+  font-weight: 500 !important;
 }
 
-.rbc-header + .rbc-header {
-  border-left-color: var(--color-border);
+.rbc-header a,
+.rbc-header span {
+  color: inherit !important;
 }
 
-.rbc-header a {
-  color: var(--color-text);
+/* ── Backgrounds ── */
+.rbc-day-bg,
+.rbc-row-bg,
+.rbc-time-view,
+.rbc-time-header,
+.rbc-time-header-content,
+.rbc-time-content,
+.rbc-time-column,
+.rbc-day-slot,
+.rbc-time-gutter,
+.rbc-time-header-gutter,
+.rbc-allday-cell,
+.rbc-time-header-cell,
+.rbc-month-view,
+.rbc-month-row,
+.rbc-timeslot-group,
+.rbc-time-slot,
+.rbc-row-content {
+  background: transparent !important;
 }
 
-/* Background cells — the core fix for white backgrounds */
-.rbc-day-bg {
-  background: transparent;
-}
-
+/* ── Today highlight ── */
 .rbc-today {
-  background: rgba(224, 120, 80, 0.08) !important;
+  background: rgba(224, 120, 80, 0.06) !important;
 }
 
 .rbc-off-range-bg {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Time view backgrounds */
-.rbc-time-view {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-time-header {
-  background: transparent;
-}
-
-.rbc-time-header-content {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-time-content {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-time-column {
-  background: transparent;
-}
-
-.rbc-day-slot {
-  background: transparent;
-}
-
-.rbc-time-gutter {
-  background: transparent;
-  color: var(--color-text-muted);
-}
-
-.rbc-time-header-gutter {
-  background: transparent;
-  color: var(--color-text-muted);
-}
-
-/* Allday row */
-.rbc-allday-cell {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-row-bg {
-  background: transparent;
-}
-
-/* Time slots */
-.rbc-timeslot-group {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-time-slot {
-  background: transparent;
-  border-color: rgba(255, 255, 255, 0.04);
-}
-
-.rbc-day-slot .rbc-time-slot {
-  border-color: rgba(255, 255, 255, 0.04);
-}
-
+/* ── Text colors ── */
+.rbc-time-gutter,
+.rbc-time-header-gutter,
 .rbc-time-gutter .rbc-label {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted) !important;
   font-size: 11px;
 }
 
-.rbc-current-time-indicator {
-  background-color: var(--color-accent);
-}
-
-/* Month view */
-.rbc-month-view {
-  background: transparent;
-  border-color: var(--color-border);
-}
-
-.rbc-month-row {
-  background: transparent;
-}
-
-.rbc-month-row + .rbc-month-row {
-  border-color: var(--color-border);
-}
-
-.rbc-day-bg + .rbc-day-bg {
-  border-color: var(--color-border);
-}
-
-.rbc-date-cell {
-  color: var(--color-text);
-}
-
+.rbc-date-cell,
 .rbc-date-cell a {
-  color: var(--color-text);
+  color: var(--color-text) !important;
 }
 
-.rbc-off-range {
-  color: var(--color-text-muted);
-}
-
+.rbc-off-range,
 .rbc-off-range a {
-  color: var(--color-text-muted);
+  color: var(--color-text-muted) !important;
 }
 
-/* Time header cell */
-.rbc-time-header-cell {
-  background: transparent;
-  border-color: var(--color-border);
+/* ── Current time indicator ── */
+.rbc-current-time-indicator {
+  background-color: var(--color-accent) !important;
+  height: 2px !important;
 }
 
-.rbc-time-header-cell .rbc-header {
-  border-bottom-color: var(--color-border);
-}
-
-/* Events */
+/* ── Events ── */
 .rbc-event {
-  border: none;
+  border: none !important;
 }
 
 .rbc-event.rbc-selected {
-  background-color: var(--color-accent);
+  background-color: var(--color-accent) !important;
 }
 
 .rbc-event-label {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
-/* Show more link */
+/* ── Show more / selection ── */
 .rbc-show-more {
-  color: var(--color-accent);
-  background: transparent;
+  color: var(--color-accent) !important;
+  background: transparent !important;
 }
 
-/* Selection overlay */
 .rbc-slot-selection {
-  background: rgba(224, 120, 80, 0.2);
-  border-color: var(--color-accent);
+  background: rgba(224, 120, 80, 0.2) !important;
+  border-color: var(--color-accent) !important;
 }
 
-/* Agenda view */
+/* ── Agenda view ── */
 .rbc-agenda-view table {
-  color: var(--color-text);
-  border-color: var(--color-border);
+  color: var(--color-text) !important;
 }
 
 .rbc-agenda-view table thead th {
-  border-color: var(--color-border);
-  color: var(--color-text);
-}
-
-.rbc-agenda-view table tbody tr {
-  border-color: var(--color-border);
+  color: var(--color-text) !important;
 }

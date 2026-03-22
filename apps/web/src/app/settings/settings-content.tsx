@@ -4,23 +4,19 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
-import { useAuth } from '../../components/AuthProvider';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { apiGet, apiPost, apiPut, apiDelete } from '../../lib/api';
-import { AppNav } from '../../components/AppNav';
+import { PageShell, PageLoading } from '../../components/PageShell';
 import type { ConnectedAccountPublic, NotificationSettings } from '@calendar-hub/shared';
 
 export function SettingsContent() {
-  const { user, loading } = useAuth();
+  const { user, loading } = useRequireAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<ConnectedAccountPublic[]>([]);
   const [notifSettings, setNotifSettings] = useState<NotificationSettings | null>(null);
   const [testSending, setTestSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     const success = searchParams.get('success');
@@ -107,118 +103,112 @@ export function SettingsContent() {
     router.push('/login');
   };
 
-  if (loading)
-    return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>;
+  if (loading) return <PageLoading />;
   if (!user) return null;
 
   return (
-    <div style={s.page}>
-      <AppNav />
-      <main style={s.main}>
-        <h1 style={s.title}>設定</h1>
+    <PageShell maxWidth="compact">
+      <h1 style={s.title}>設定</h1>
 
-        {message && (
-          <div
-            style={{
-              ...s.toast,
-              borderColor: message.startsWith('エラー')
-                ? 'rgba(224,120,80,0.3)'
-                : 'rgba(90,154,106,0.3)',
-              background: message.startsWith('エラー')
-                ? 'rgba(224,120,80,0.06)'
-                : 'rgba(90,154,106,0.06)',
-            }}
-          >
-            {message}
+      {message && (
+        <div
+          style={{
+            ...s.toast,
+            borderColor: message.startsWith('エラー')
+              ? 'rgba(224,120,80,0.3)'
+              : 'rgba(90,154,106,0.3)',
+            background: message.startsWith('エラー')
+              ? 'rgba(224,120,80,0.06)'
+              : 'rgba(90,154,106,0.06)',
+          }}
+        >
+          {message}
+        </div>
+      )}
+
+      {/* アカウント */}
+      <section style={s.section}>
+        <div style={s.sectionHeader}>
+          <h2 style={s.sectionTitle}>アカウント</h2>
+        </div>
+        <div style={s.card}>
+          <p style={s.email}>{user.email}</p>
+          <button onClick={handleLogout} style={s.dangerBtn}>
+            ログアウト
+          </button>
+        </div>
+      </section>
+
+      {/* 連携アカウント */}
+      <section style={s.section}>
+        <div style={s.sectionHeader}>
+          <h2 style={s.sectionTitle}>連携アカウント</h2>
+          <button onClick={handleConnectGoogle} style={s.addBtn}>
+            + Google追加
+          </button>
+        </div>
+
+        {accounts.length === 0 ? (
+          <p style={s.empty}>連携中のアカウントはありません</p>
+        ) : (
+          <div style={s.accountList}>
+            {accounts.map((account) => (
+              <div key={account.id} style={s.accountItem}>
+                <div>
+                  <span style={s.accountEmail}>{account.email}</span>
+                  <span
+                    style={{
+                      ...s.providerBadge,
+                      background:
+                        account.provider === 'google'
+                          ? 'rgba(66,133,244,0.12)'
+                          : 'rgba(76,175,80,0.12)',
+                      color: account.provider === 'google' ? '#6ea8fe' : '#81c784',
+                    }}
+                  >
+                    {account.provider === 'google' ? 'Google' : 'TimeTree'}
+                  </span>
+                  {!account.isActive && <span style={s.inactiveBadge}>無効</span>}
+                </div>
+                <button onClick={() => handleDisconnect(account.id)} style={s.disconnectBtn}>
+                  解除
+                </button>
+              </div>
+            ))}
           </div>
         )}
+      </section>
 
-        {/* アカウント */}
-        <section style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>アカウント</h2>
-          </div>
+      {/* 通知設定 */}
+      <section style={s.section}>
+        <div style={s.sectionHeader}>
+          <h2 style={s.sectionTitle}>通知設定</h2>
+        </div>
+        {notifSettings && (
           <div style={s.card}>
-            <p style={s.email}>{user.email}</p>
-            <button onClick={handleLogout} style={s.dangerBtn}>
-              ログアウト
-            </button>
+            <label style={s.toggle}>
+              <input
+                type="checkbox"
+                checked={notifSettings.enabled}
+                onChange={(e) => handleToggleNotifications(e.target.checked)}
+                style={s.checkbox}
+              />
+              <span>メール通知を有効にする</span>
+            </label>
+            <p style={s.toggleHint}>AI提案の結果をメールで受け取ります</p>
+            {notifSettings.enabled && (
+              <button onClick={handleTestNotification} disabled={testSending} style={s.testBtn}>
+                {testSending ? '送信中...' : 'テスト通知を送信'}
+              </button>
+            )}
           </div>
-        </section>
-
-        {/* 連携アカウント */}
-        <section style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>連携アカウント</h2>
-            <button onClick={handleConnectGoogle} style={s.addBtn}>
-              + Google追加
-            </button>
-          </div>
-
-          {accounts.length === 0 ? (
-            <p style={s.empty}>連携中のアカウントはありません</p>
-          ) : (
-            <div style={s.accountList}>
-              {accounts.map((account) => (
-                <div key={account.id} style={s.accountItem}>
-                  <div>
-                    <span style={s.accountEmail}>{account.email}</span>
-                    <span
-                      style={{
-                        ...s.providerBadge,
-                        background:
-                          account.provider === 'google'
-                            ? 'rgba(66,133,244,0.12)'
-                            : 'rgba(76,175,80,0.12)',
-                        color: account.provider === 'google' ? '#6ea8fe' : '#81c784',
-                      }}
-                    >
-                      {account.provider === 'google' ? 'Google' : 'TimeTree'}
-                    </span>
-                    {!account.isActive && <span style={s.inactiveBadge}>無効</span>}
-                  </div>
-                  <button onClick={() => handleDisconnect(account.id)} style={s.disconnectBtn}>
-                    解除
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 通知設定 */}
-        <section style={s.section}>
-          <div style={s.sectionHeader}>
-            <h2 style={s.sectionTitle}>通知設定</h2>
-          </div>
-          {notifSettings && (
-            <div style={s.card}>
-              <label style={s.toggle}>
-                <input
-                  type="checkbox"
-                  checked={notifSettings.enabled}
-                  onChange={(e) => handleToggleNotifications(e.target.checked)}
-                  style={s.checkbox}
-                />
-                <span>メール通知を有効にする</span>
-              </label>
-              <p style={s.toggleHint}>AI提案の結果をメールで受け取ります</p>
-              {notifSettings.enabled && (
-                <button onClick={handleTestNotification} disabled={testSending} style={s.testBtn}>
-                  {testSending ? '送信中...' : 'テスト通知を送信'}
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
+        )}
+      </section>
+    </PageShell>
   );
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--color-bg)' },
-  main: { padding: '24px', maxWidth: '640px', margin: '0 auto' },
   title: {
     fontFamily: 'var(--font-display)',
     fontSize: '24px',

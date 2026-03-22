@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { startOfWeek, endOfWeek, format } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { useAuth } from '../../components/AuthProvider';
+import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { apiGet, apiPost, apiPatch } from '../../lib/api';
-import { AppNav } from '../../components/AppNav';
+import { PageShell, PageLoading } from '../../components/PageShell';
 
 interface Suggestion {
   id: string;
@@ -33,16 +32,11 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export function AiContent() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+  const { user, loading } = useRequireAuth();
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [insights, setInsights] = useState('');
   const [generating, setGenerating] = useState(false);
   const [loadingList, setLoadingList] = useState(false);
-
-  useEffect(() => {
-    if (!loading && !user) router.push('/login');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (user) loadSuggestions();
@@ -91,112 +85,99 @@ export function AiContent() {
     }
   };
 
-  if (loading)
-    return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>;
+  if (loading) return <PageLoading />;
   if (!user) return null;
 
   return (
-    <div style={s.page}>
-      <AppNav />
-      <main style={s.main}>
-        <div style={s.header}>
-          <div>
-            <h1 style={s.title}>AI提案</h1>
-            <p style={s.desc}>あなたのスケジュールをAIが分析し、最適な予定を提案します</p>
-          </div>
-          <button onClick={handleGenerate} disabled={generating} style={s.generateBtn}>
-            {generating ? <span style={s.spinner}>◎ 分析中...</span> : '今週のスケジュールを分析'}
-          </button>
+    <PageShell maxWidth="medium">
+      <div style={s.header}>
+        <div>
+          <h1 style={s.title}>AI提案</h1>
+          <p style={s.desc}>あなたのスケジュールをAIが分析し、最適な予定を提案します</p>
         </div>
+        <button onClick={handleGenerate} disabled={generating} style={s.generateBtn}>
+          {generating ? <span style={s.spinner}>◎ 分析中...</span> : '今週のスケジュールを分析'}
+        </button>
+      </div>
 
-        {insights && (
-          <div style={s.insightsCard}>
-            <span style={s.insightsIcon}>◇</span>
-            <p style={s.insightsText}>{insights}</p>
-          </div>
-        )}
+      {insights && (
+        <div style={s.insightsCard}>
+          <span style={s.insightsIcon}>◇</span>
+          <p style={s.insightsText}>{insights}</p>
+        </div>
+      )}
 
-        {loadingList ? (
-          <p style={s.emptyText}>提案を読み込み中...</p>
-        ) : suggestions.length === 0 ? (
-          <div style={s.emptyState}>
-            <span style={s.emptyIcon}>◇</span>
-            <p style={s.emptyText}>まだ提案はありません</p>
-            <p style={s.emptyHint}>上のボタンでAI分析を開始してください</p>
-          </div>
-        ) : (
-          <div style={s.list}>
-            {suggestions.map((sg) => {
-              const cfg = TYPE_CONFIG[sg.type] ?? TYPE_CONFIG.schedule;
-              const isPending = sg.status === 'pending';
-              return (
-                <div key={sg.id} style={{ ...s.card, opacity: isPending ? 1 : 0.5 }}>
-                  <div
-                    style={{ ...s.cardBorder, background: PRIORITY_COLORS[sg.priority] ?? '#666' }}
-                  />
-                  <div style={s.cardBody}>
-                    <div style={s.cardTop}>
-                      <div style={s.badges}>
-                        <span style={s.typeBadge}>
-                          {cfg.icon} {cfg.label}
-                        </span>
-                        <span style={{ ...s.priBadge, color: PRIORITY_COLORS[sg.priority] }}>
-                          {sg.priority}
-                        </span>
-                      </div>
-                      {isPending ? (
-                        <div style={s.actions}>
-                          <button
-                            onClick={() => handleAction(sg.id, 'accepted')}
-                            style={s.acceptBtn}
-                          >
-                            承認
-                          </button>
-                          <button
-                            onClick={() => handleAction(sg.id, 'rejected')}
-                            style={s.rejectBtn}
-                          >
-                            却下
-                          </button>
-                        </div>
-                      ) : (
-                        <span
-                          style={{
-                            ...s.statusLabel,
-                            color: sg.status === 'accepted' ? '#5a9a6a' : '#e07850',
-                          }}
-                        >
-                          {sg.status === 'accepted' ? '承認済み' : '却下済み'}
-                        </span>
-                      )}
+      {loadingList ? (
+        <p style={s.emptyText}>提案を読み込み中...</p>
+      ) : suggestions.length === 0 ? (
+        <div style={s.emptyState}>
+          <span style={s.emptyIcon}>◇</span>
+          <p style={s.emptyText}>まだ提案はありません</p>
+          <p style={s.emptyHint}>上のボタンでAI分析を開始してください</p>
+        </div>
+      ) : (
+        <div style={s.list}>
+          {suggestions.map((sg) => {
+            const cfg = TYPE_CONFIG[sg.type] ?? TYPE_CONFIG.schedule;
+            const isPending = sg.status === 'pending';
+            return (
+              <div key={sg.id} style={{ ...s.card, opacity: isPending ? 1 : 0.5 }}>
+                <div
+                  style={{ ...s.cardBorder, background: PRIORITY_COLORS[sg.priority] ?? '#666' }}
+                />
+                <div style={s.cardBody}>
+                  <div style={s.cardTop}>
+                    <div style={s.badges}>
+                      <span style={s.typeBadge}>
+                        {cfg.icon} {cfg.label}
+                      </span>
+                      <span style={{ ...s.priBadge, color: PRIORITY_COLORS[sg.priority] }}>
+                        {sg.priority}
+                      </span>
                     </div>
-                    <h3 style={s.cardTitle}>{sg.title}</h3>
-                    <p style={s.cardDesc}>{sg.description}</p>
-                    {sg.start && sg.end && (
-                      <p style={s.cardTime}>
-                        {format(new Date(sg.start), 'M/d (E) HH:mm', { locale: ja })} -{' '}
-                        {format(new Date(sg.end), 'HH:mm')}
-                      </p>
+                    {isPending ? (
+                      <div style={s.actions}>
+                        <button onClick={() => handleAction(sg.id, 'accepted')} style={s.acceptBtn}>
+                          承認
+                        </button>
+                        <button onClick={() => handleAction(sg.id, 'rejected')} style={s.rejectBtn}>
+                          却下
+                        </button>
+                      </div>
+                    ) : (
+                      <span
+                        style={{
+                          ...s.statusLabel,
+                          color: sg.status === 'accepted' ? '#5a9a6a' : '#e07850',
+                        }}
+                      >
+                        {sg.status === 'accepted' ? '承認済み' : '却下済み'}
+                      </span>
                     )}
-                    <p style={s.cardReason}>{sg.reasoning}</p>
                   </div>
+                  <h3 style={s.cardTitle}>{sg.title}</h3>
+                  <p style={s.cardDesc}>{sg.description}</p>
+                  {sg.start && sg.end && (
+                    <p style={s.cardTime}>
+                      {format(new Date(sg.start), 'M/d (E) HH:mm', { locale: ja })} -{' '}
+                      {format(new Date(sg.end), 'HH:mm')}
+                    </p>
+                  )}
+                  <p style={s.cardReason}>{sg.reasoning}</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
+              </div>
+            );
+          })}
+        </div>
+      )}
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
-    </div>
+    </PageShell>
   );
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: 'var(--color-bg)' },
-  main: { padding: '24px', maxWidth: '800px', margin: '0 auto' },
   header: {
     display: 'flex',
     justifyContent: 'space-between',

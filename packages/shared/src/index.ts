@@ -1,7 +1,13 @@
 // Calendar Hub - Shared types and utilities
 
 export { encrypt, decrypt, type EncryptedData } from './crypto.js';
-export { calculateFreeSlots, type FreeSlot, type FreeTimeOptions } from './free-time.js';
+export {
+  calculateFreeSlots,
+  splitFreeIntoBookingSlots,
+  type FreeSlot,
+  type FreeTimeOptions,
+  type BookingSlotResult,
+} from './free-time.js';
 export {
   DURATION_OPTIONS,
   type BookingLinkStatus,

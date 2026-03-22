@@ -11,13 +11,12 @@ import {
   buildBookingNotificationHtml,
   buildBookingConfirmationHtml,
 } from '../lib/email.js';
-import { calculateFreeSlots } from '@calendar-hub/shared/free-time';
+import { calculateFreeSlots, splitFreeIntoBookingSlots } from '@calendar-hub/shared/free-time';
 import type {
   CalendarEvent,
   BookingLink,
   PublicBookingLinkInfo,
   CreateBookingInput,
-  BookingSlot,
 } from '@calendar-hub/shared';
 
 export const publicBookingRoutes = new Hono();
@@ -110,35 +109,6 @@ async function getConfirmedBookingEventsForOwner(
   });
 }
 
-// ヘルパー: 空きスロットを指定duration単位で分割
-function splitIntoSlots(
-  freeSlots: Array<{ start: Date; end: Date; durationMinutes: number }>,
-  durationMinutes: number,
-  bufferMinutes: number,
-): BookingSlot[] {
-  const result: BookingSlot[] = [];
-  const slotWithBuffer = durationMinutes + bufferMinutes;
-
-  for (const slot of freeSlots) {
-    let cursor = new Date(slot.start);
-    while (true) {
-      const slotEnd = new Date(cursor.getTime() + durationMinutes * 60000);
-      const nextCursor = new Date(cursor.getTime() + slotWithBuffer * 60000);
-
-      if (slotEnd > slot.end) break;
-
-      result.push({
-        start: cursor.toISOString(),
-        end: slotEnd.toISOString(),
-      });
-
-      cursor = nextCursor;
-    }
-  }
-
-  return result;
-}
-
 // リンク情報取得（公開安全型）
 publicBookingRoutes.get('/:linkId', async (c) => {
   const linkId = c.req.param('linkId');
@@ -228,7 +198,7 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
   );
 
   // duration 単位で分割
-  const slots = splitIntoSlots(filteredSlots, link.durationMinutes, link.bufferMinutes);
+  const slots = splitFreeIntoBookingSlots(filteredSlots, link.durationMinutes, link.bufferMinutes);
 
   return c.json({
     slots,

@@ -83,3 +83,40 @@ export function calculateFreeSlots(
 
   return slots;
 }
+
+export interface BookingSlotResult {
+  start: string; // ISO 8601
+  end: string;
+}
+
+/**
+ * 空きスロットを指定duration + buffer単位で分割する。
+ * 予約リンクの公開スロット生成に使用。
+ */
+export function splitFreeIntoBookingSlots(
+  freeSlots: FreeSlot[],
+  durationMinutes: number,
+  bufferMinutes: number = 0,
+): BookingSlotResult[] {
+  const result: BookingSlotResult[] = [];
+  const slotWithBuffer = durationMinutes + bufferMinutes;
+
+  for (const slot of freeSlots) {
+    let cursor = new Date(slot.start);
+    while (true) {
+      const slotEnd = new Date(cursor.getTime() + durationMinutes * 60000);
+      const nextCursor = new Date(cursor.getTime() + slotWithBuffer * 60000);
+
+      if (slotEnd > slot.end) break;
+
+      result.push({
+        start: cursor.toISOString(),
+        end: slotEnd.toISOString(),
+      });
+
+      cursor = nextCursor;
+    }
+  }
+
+  return result;
+}

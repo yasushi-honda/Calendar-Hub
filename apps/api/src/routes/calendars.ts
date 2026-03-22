@@ -74,6 +74,13 @@ calendarRoutes.get('/events/merged', requireAuth, async (c) => {
     }),
   );
 
+  // Log rejected results for debugging
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`Calendar fetch failed for account ${activeAccounts[i]?.id}:`, r.reason);
+    }
+  });
+
   const events = results
     .filter((r) => r.status === 'fulfilled')
     .flatMap((r) => r.value)

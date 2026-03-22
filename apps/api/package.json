@@ -19,6 +19,7 @@
     "firebase-admin": "^13.7.0",
     "googleapis": "^171.4.0",
     "hono": "^4.12.8",
+    "nanoid": "^5.1.7",
     "nodemailer": "^8.0.3"
   },
   "devDependencies": {

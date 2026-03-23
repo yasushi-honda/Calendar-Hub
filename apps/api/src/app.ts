@@ -8,6 +8,7 @@ import { aiRoutes } from './routes/ai.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { bookingLinkRoutes } from './routes/booking-links.js';
 import { publicBookingRoutes } from './routes/public-booking.js';
+import { syncRoutes } from './routes/sync.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import type { AppEnv } from './types.js';
 
@@ -45,3 +46,4 @@ app.route('/api/ai', aiRoutes);
 app.route('/api/notifications', notificationRoutes);
 app.route('/api/booking-links', bookingLinkRoutes);
 app.route('/api/public/booking', publicBookingRoutes);
+app.route('/api/sync', syncRoutes);

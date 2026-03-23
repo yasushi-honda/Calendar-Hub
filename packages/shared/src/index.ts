@@ -23,6 +23,7 @@ export {
   type CreateBookingLinkInput,
   type CreateBookingInput,
 } from './booking-types.js';
+export { type SyncConfig, type SyncLog, type SyncStatus, type SyncAction } from './sync-types.js';
 
 export type CalendarProvider = 'google' | 'timetree';
 

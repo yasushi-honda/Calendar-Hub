@@ -7,7 +7,6 @@ set -euo pipefail
 PROJECT_ID="calendar-hub-prod"
 REGION="asia-northeast1"
 JOB_NAME="timetree-google-sync"
-API_URL="https://calendar-hub-api-$(gcloud run services describe calendar-hub-api --region=${REGION} --format='value(status.url)' 2>/dev/null | sed 's|https://||')"
 
 # Cloud Run サービスURL取得
 SERVICE_URL=$(gcloud run services describe calendar-hub-api \

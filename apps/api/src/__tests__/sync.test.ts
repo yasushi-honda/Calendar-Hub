@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildSyncActions, executeSyncActions } from '../lib/timetree-google-sync.js';
 import type { CalendarEvent } from '@calendar-hub/shared';
-import type { CalendarAdapter } from '@calendar-hub/calendar-sdk'; // For test mocking
+import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
 
 describe('Sync Logic', () => {
   // ダミーイベント生成ヘルパー
@@ -47,9 +47,9 @@ describe('Sync Logic', () => {
         taggedGoogleIds,
       );
 
-      expect(toCreate).toHaveLength(1); // No match → treated as new
+      expect(toCreate).toHaveLength(1);
       expect(toUpdate).toHaveLength(0);
-      expect(toDelete).toHaveLength(1); // ggEvent not in ttEvents
+      expect(toDelete).toHaveLength(1);
     });
 
     it('should detect matching events (same title and time)', () => {
@@ -69,7 +69,7 @@ describe('Sync Logic', () => {
 
       const { toCreate, toDelete } = buildSyncActions([ttEvent], [ggEvent], taggedGoogleIds);
 
-      expect(toCreate).toHaveLength(0); // Matched
+      expect(toCreate).toHaveLength(0);
       expect(toDelete).toHaveLength(0);
     });
 
@@ -93,11 +93,11 @@ describe('Sync Logic', () => {
     it('should ignore untagged Google events', () => {
       const ttEvents: CalendarEvent[] = [];
       const ggEvent = createEvent({ title: 'Untagged Event', id: 'gg-1' });
-      const taggedGoogleIds = new Set<string>(); // Empty
+      const taggedGoogleIds = new Set<string>();
 
       const { toDelete } = buildSyncActions(ttEvents, [ggEvent], taggedGoogleIds);
 
-      expect(toDelete).toHaveLength(0); // Not deleted
+      expect(toDelete).toHaveLength(0);
     });
 
     it('should handle multiple events correctly', () => {
@@ -113,27 +113,18 @@ describe('Sync Logic', () => {
       ];
 
       const ggEvents = [
-        createEvent({ title: 'Meeting 1', id: 'gg-1' }), // Matched
-        createEvent({
-          // Matched but description differs
-          title: 'Meeting 2',
-          id: 'gg-2',
-          description: 'Old description',
-        }),
-        createEvent({ title: 'Old Meeting', id: 'gg-3' }), // To delete
+        createEvent({ title: 'Meeting 1', id: 'gg-1' }),
+        createEvent({ title: 'Meeting 2', id: 'gg-2', description: 'Old description' }),
+        createEvent({ title: 'Old Meeting', id: 'gg-3' }),
       ];
 
       const taggedGoogleIds = new Set(['gg-1', 'gg-2', 'gg-3']);
 
       const { toCreate, toDelete } = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds);
 
-      expect(toCreate).toHaveLength(1); // Meeting 3 is new
+      expect(toCreate).toHaveLength(1);
       expect(toCreate[0]?.title).toBe('Meeting 3');
-
-      // Note: buildSyncActions uses simple matching, so Meeting 2 update won't be detected
-      // unless description is checked explicitly
-
-      expect(toDelete).toHaveLength(1); // Old Meeting
+      expect(toDelete).toHaveLength(1);
       expect(toDelete[0]?.title).toBe('Old Meeting');
     });
   });

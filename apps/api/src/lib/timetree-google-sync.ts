@@ -41,11 +41,15 @@ export async function fetchGoogleEvents(
   const events = await ggAdapter.listEvents(calendarId, timeMin, timeMax);
   const tagged = new Set<string>();
 
-  // このアダプター実装ではextendedPropertiesは取得されないので、
-  // 実際の同期では別途Google API直接呼び出しが必要。
-  // ここは簡略版実装。
+  // TODO: アダプター実装ではextendedPropertiesを取得できないため、
+  // Google API直接呼び出しによるタグ取得は別PRで実装予定。
 
   return { events, tagged };
+}
+
+/** イベントのマッチングキー（title + start + end） */
+function eventKey(e: CalendarEvent): string {
+  return `${e.title}|${e.start.getTime()}|${e.end.getTime()}`;
 }
 
 /**
@@ -65,36 +69,35 @@ export function buildSyncActions(
   const toUpdate: SyncAction[] = [];
   const toDelete: SyncAction[] = [];
 
-  // TimeTree → Google のマッピング
-  // 簡略版: タイトル + 時間で近似マッチ
+  // Google側をキーで索引（O(n)）
+  const ggByKey = new Map<string, CalendarEvent>();
+  for (const e of ggEvents) {
+    ggByKey.set(eventKey(e), e);
+  }
+
+  // TimeTree → Google のマッチング（O(n)）
+  const matchedKeys = new Set<string>();
+
   for (const ttEvent of ttEvents) {
-    let matched = false;
+    const key = eventKey(ttEvent);
+    const ggEvent = ggByKey.get(key);
 
-    for (const ggEvent of ggEvents) {
-      if (
-        ggEvent.title === ttEvent.title &&
-        ggEvent.start.getTime() === ttEvent.start.getTime() &&
-        ggEvent.end.getTime() === ttEvent.end.getTime()
-      ) {
-        matched = true;
+    if (ggEvent) {
+      matchedKeys.add(key);
 
-        // 内容が異なるなら更新
-        if (needsUpdate(ttEvent, ggEvent)) {
-          toUpdate.push({
-            type: 'update',
-            eventId: ggEvent.id,
-            title: ttEvent.title,
-            timetreeId: ttEvent.originalId,
-            startTime: ttEvent.start,
-            endTime: ttEvent.end,
-            description: ttEvent.description,
-          });
-        }
-        break;
+      // title/start/endは一致済み。descriptionのみ差分チェック
+      if (ttEvent.description !== ggEvent.description) {
+        toUpdate.push({
+          type: 'update',
+          eventId: ggEvent.id,
+          title: ttEvent.title,
+          timetreeId: ttEvent.originalId,
+          startTime: ttEvent.start,
+          endTime: ttEvent.end,
+          description: ttEvent.description,
+        });
       }
-    }
-
-    if (!matched) {
+    } else {
       toCreate.push({
         type: 'create',
         title: ttEvent.title,
@@ -106,42 +109,21 @@ export function buildSyncActions(
     }
   }
 
-  // Google に存在するがTimeTreeに存在しないイベント → 削除
+  // Google に存在するがTimeTreeに存在しないイベント → 削除（O(m)）
   for (const ggEvent of ggEvents) {
-    if (taggedGoogleIds.has(ggEvent.id)) {
-      const exists = ttEvents.some(
-        (e) =>
-          e.title === ggEvent.title &&
-          e.start.getTime() === ggEvent.start.getTime() &&
-          e.end.getTime() === ggEvent.end.getTime(),
-      );
-
-      if (!exists) {
-        toDelete.push({
-          type: 'delete',
-          eventId: ggEvent.id,
-          title: ggEvent.title,
-          timetreeId: ggEvent.originalId,
-          startTime: ggEvent.start,
-          endTime: ggEvent.end,
-        });
-      }
+    if (taggedGoogleIds.has(ggEvent.id) && !matchedKeys.has(eventKey(ggEvent))) {
+      toDelete.push({
+        type: 'delete',
+        eventId: ggEvent.id,
+        title: ggEvent.title,
+        timetreeId: ggEvent.originalId,
+        startTime: ggEvent.start,
+        endTime: ggEvent.end,
+      });
     }
   }
 
   return { toCreate, toUpdate, toDelete };
-}
-
-/**
- * TimeTreeイベントとGoogleイベントの内容が異なるか判定。
- */
-function needsUpdate(ttEvent: CalendarEvent, ggEvent: CalendarEvent): boolean {
-  return (
-    ttEvent.title !== ggEvent.title ||
-    ttEvent.description !== ggEvent.description ||
-    ttEvent.start.getTime() !== ggEvent.start.getTime() ||
-    ttEvent.end.getTime() !== ggEvent.end.getTime()
-  );
 }
 
 /**
@@ -167,7 +149,6 @@ export async function executeSyncActions(
   let deleted = 0;
   let skipped = 0;
 
-  // 作成
   for (const action of actions.toCreate) {
     try {
       await ggAdapter.createEvent(googleCalendarId, {
@@ -184,7 +165,6 @@ export async function executeSyncActions(
     }
   }
 
-  // 更新
   for (const action of actions.toUpdate) {
     try {
       if (!action.eventId) {
@@ -207,7 +187,6 @@ export async function executeSyncActions(
     }
   }
 
-  // 削除
   for (const action of actions.toDelete) {
     try {
       if (!action.eventId) {
@@ -253,7 +232,7 @@ export async function recordSyncLog(
       eventsUpdated: stats.updated,
       eventsDeleted: stats.deleted,
       eventsSkipped: stats.skipped,
-      errorMessage: errorMessage || null,
+      errorMessage: errorMessage ?? null,
       executedAt: FieldValue.serverTimestamp(),
       durationMs,
     });

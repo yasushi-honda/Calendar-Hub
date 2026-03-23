@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getDb } from '../lib/firebase-admin.js';
 import { createAdapter } from '../lib/adapter-factory.js';
+import { requireAuth } from '../middleware/auth.js';
 import {
   fetchTimeTreeEvents,
   fetchGoogleEvents,
@@ -10,6 +11,7 @@ import {
 } from '../lib/timetree-google-sync.js';
 import { nanoid } from 'nanoid';
 import { FieldValue } from 'firebase-admin/firestore';
+import { SYNC_INTERVAL_OPTIONS } from '@calendar-hub/shared';
 import type { SyncConfig } from '@calendar-hub/shared';
 import type { AppEnv } from '../types.js';
 
@@ -25,6 +27,9 @@ function toSyncConfig(data: FirebaseFirestore.DocumentData): SyncConfig {
   } as SyncConfig;
 }
 
+const getErrorMessage = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
+
 /**
  * Cloud Scheduler呼び出し用。
  * Authorization: Bearer <SECRET_TOKEN>
@@ -38,10 +43,9 @@ syncRoutes.post('/timetree-to-google', async (c) => {
   }
 
   const db = getDb();
-  const startTime = Date.now();
+  const jobStartTime = Date.now();
 
   try {
-    // 全SyncConfig（isEnabled=true）を取得
     const snap = await db.collectionGroup('syncConfig').where('isEnabled', '==', true).get();
 
     const configs = snap.docs.map((doc) => ({
@@ -56,19 +60,16 @@ syncRoutes.post('/timetree-to-google', async (c) => {
     let totalSkipped = 0;
     let failureCount = 0;
 
-    // 各configごとに同期実行
     for (const { docId, ownerUid, data: config } of configs) {
+      const configStartTime = Date.now();
       try {
-        // 時間範囲: 前月1日 ～ 翌月末日
         const now = new Date();
         const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1);
         const timeMax = new Date(now.getFullYear(), now.getMonth() + 2, 0);
 
-        // アダプター取得
         const ttAdapter = await createAdapter(ownerUid, config.timetreeAccountId);
         const ggAdapter = await createAdapter(ownerUid, config.googleAccountId);
 
-        // イベント取得
         const ttEvents = await fetchTimeTreeEvents(ttAdapter, timeMin, timeMax);
         const { events: ggEvents, tagged: taggedGoogleIds } = await fetchGoogleEvents(
           ggAdapter,
@@ -77,10 +78,7 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           timeMax,
         );
 
-        // 差分検出
         const actions = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds);
-
-        // アクション実行
         const stats = await executeSyncActions(ggAdapter, config.googleCalendarId, actions);
 
         totalCreated += stats.created;
@@ -88,9 +86,8 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         totalDeleted += stats.deleted;
         totalSkipped += stats.skipped;
 
-        // ログ記録
         const status = stats.skipped > 0 ? 'partial' : 'success';
-        await recordSyncLog(docId, ownerUid, status, stats, Date.now() - startTime);
+        await recordSyncLog(docId, ownerUid, status, stats, Date.now() - configStartTime);
 
         console.log(
           `Sync completed for ${ownerUid}/${config.googleCalendarId}: ${stats.created} created, ${stats.updated} updated, ${stats.deleted} deleted`,
@@ -99,15 +96,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         failureCount++;
         console.error(`Sync failed for ${ownerUid}:`, err);
 
-        // エラーログ記録
-        const errorMsg = err instanceof Error ? err.message : String(err);
         await recordSyncLog(
           docId,
           ownerUid,
           'failed',
           { created: 0, updated: 0, deleted: 0, skipped: 0 },
-          Date.now() - startTime,
-          errorMsg,
+          Date.now() - configStartTime,
+          getErrorMessage(err),
         ).catch((e) => console.error('Failed to record sync log:', e));
       }
     }
@@ -122,14 +117,14 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         eventsDeleted: totalDeleted,
         eventsSkipped: totalSkipped,
       },
-      durationMs: Date.now() - startTime,
+      durationMs: Date.now() - jobStartTime,
     });
   } catch (err) {
     console.error('Sync job failed:', err);
     return c.json(
       {
         error: 'Sync job failed',
-        message: err instanceof Error ? err.message : String(err),
+        message: getErrorMessage(err),
       },
       500,
     );
@@ -138,9 +133,8 @@ syncRoutes.post('/timetree-to-google', async (c) => {
 
 // --- 設定管理 ---
 
-syncRoutes.get('/config', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+syncRoutes.get('/config', requireAuth, async (c) => {
+  const user = c.get('user')!;
 
   const db = getDb();
   const snap = await db
@@ -154,23 +148,16 @@ syncRoutes.get('/config', async (c) => {
   return c.json({ configs });
 });
 
-syncRoutes.post('/config', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+syncRoutes.post('/config', requireAuth, async (c) => {
+  const user = c.get('user')!;
 
-  let body: {
+  const body = await c.req.json<{
     timetreeAccountId?: string;
     googleAccountId?: string;
     timetreeCalendarId?: string;
     googleCalendarId?: string;
     syncIntervalMinutes?: number;
-  };
-
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: 'Invalid JSON' }, 400);
-  }
+  }>();
 
   const {
     timetreeAccountId,
@@ -180,12 +167,11 @@ syncRoutes.post('/config', async (c) => {
     syncIntervalMinutes = 5,
   } = body;
 
-  // バリデーション
   if (!timetreeAccountId || !googleAccountId || !timetreeCalendarId || !googleCalendarId) {
     return c.json({ error: 'Missing required fields' }, 400);
   }
 
-  if (![1, 3, 5, 10, 15].includes(syncIntervalMinutes)) {
+  if (!(SYNC_INTERVAL_OPTIONS as readonly number[]).includes(syncIntervalMinutes)) {
     return c.json({ error: 'Invalid syncIntervalMinutes' }, 400);
   }
 
@@ -208,26 +194,21 @@ syncRoutes.post('/config', async (c) => {
   return c.json({ config: { id: configId } }, 201);
 });
 
-syncRoutes.patch('/config/:configId', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
+syncRoutes.patch('/config/:configId', requireAuth, async (c) => {
+  const user = c.get('user')!;
   const configId = c.req.param('configId');
 
-  let body: {
+  const body = await c.req.json<{
     isEnabled?: boolean;
     syncIntervalMinutes?: number;
-  };
-
-  try {
-    body = (await c.req.json()) as typeof body;
-  } catch {
-    return c.json({ error: 'Invalid JSON' }, 400);
-  }
+  }>();
 
   const { isEnabled, syncIntervalMinutes } = body;
 
-  if (syncIntervalMinutes !== undefined && ![1, 3, 5, 10, 15].includes(syncIntervalMinutes)) {
+  if (
+    syncIntervalMinutes !== undefined &&
+    !(SYNC_INTERVAL_OPTIONS as readonly number[]).includes(syncIntervalMinutes)
+  ) {
     return c.json({ error: 'Invalid syncIntervalMinutes' }, 400);
   }
 
@@ -248,10 +229,8 @@ syncRoutes.patch('/config/:configId', async (c) => {
   return c.json({ status: 'updated' });
 });
 
-syncRoutes.delete('/config/:configId', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
+syncRoutes.delete('/config/:configId', requireAuth, async (c) => {
+  const user = c.get('user')!;
   const configId = c.req.param('configId');
   const db = getDb();
 
@@ -260,10 +239,8 @@ syncRoutes.delete('/config/:configId', async (c) => {
   return c.json({ status: 'deleted' });
 });
 
-syncRoutes.get('/logs', async (c) => {
-  const user = c.get('user');
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
+syncRoutes.get('/logs', requireAuth, async (c) => {
+  const user = c.get('user')!;
   const configId = c.req.query('configId');
 
   const db = getDb();

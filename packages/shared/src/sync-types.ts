@@ -1,5 +1,8 @@
 export type SyncStatus = 'success' | 'partial' | 'failed';
 
+export const SYNC_INTERVAL_OPTIONS = [1, 3, 5, 10, 15] as const;
+export type SyncIntervalMinutes = (typeof SYNC_INTERVAL_OPTIONS)[number];
+
 export interface SyncConfig {
   id: string;
   ownerUid: string;
@@ -8,7 +11,7 @@ export interface SyncConfig {
   timetreeCalendarId: string;
   googleCalendarId: string;
   isEnabled: boolean;
-  syncIntervalMinutes: number; // 1, 3, 5, 10, 15
+  syncIntervalMinutes: SyncIntervalMinutes;
   createdAt: Date;
   updatedAt: Date;
 }

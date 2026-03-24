@@ -71,14 +71,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         const ggAdapter = await createAdapter(ownerUid, config.googleAccountId);
 
         const ttEvents = await fetchTimeTreeEvents(ttAdapter, timeMin, timeMax);
-        const { events: ggEvents, tagged: taggedGoogleIds } = await fetchGoogleEvents(
-          ggAdapter,
-          config.googleCalendarId,
-          timeMin,
-          timeMax,
-        );
+        const {
+          events: ggEvents,
+          tagged: taggedGoogleIds,
+          tagMap,
+        } = await fetchGoogleEvents(ggAdapter, config.googleCalendarId, timeMin, timeMax);
 
-        const actions = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds);
+        const actions = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds, tagMap);
         const stats = await executeSyncActions(ggAdapter, config.googleCalendarId, actions);
 
         totalCreated += stats.created;

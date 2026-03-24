@@ -82,6 +82,9 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       isAllDay,
       status: item.status === 'cancelled' ? 'cancelled' : 'confirmed',
       location: item.location ?? undefined,
+      extendedProperties: item.extendedProperties
+        ? { private: (item.extendedProperties.private as Record<string, string>) ?? undefined }
+        : undefined,
     };
   }
 
@@ -101,6 +104,10 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
         body.start = { dateTime: event.start.toISOString(), timeZone: tz };
         body.end = { dateTime: event.end.toISOString(), timeZone: tz };
       }
+    }
+
+    if (event.extendedProperties) {
+      body.extendedProperties = { private: event.extendedProperties.private };
     }
 
     return body;

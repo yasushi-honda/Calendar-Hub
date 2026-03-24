@@ -4,7 +4,6 @@ import type { CalendarEvent } from '@calendar-hub/shared';
 import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
 
 describe('Sync Logic', () => {
-  // ダミーイベント生成ヘルパー
   const createEvent = (overrides?: Partial<CalendarEvent>): CalendarEvent => ({
     id: 'event-1',
     source: 'google' as const,
@@ -18,17 +17,11 @@ describe('Sync Logic', () => {
     ...overrides,
   });
 
-  describe('buildSyncActions', () => {
+  describe('buildSyncActions - fallback matching (no tagMap)', () => {
     it('should detect new events (not in Google)', () => {
       const ttEvent = createEvent({ originalId: 'tt-1', title: 'TimeTree Event' });
-      const ggEvents: CalendarEvent[] = [];
-      const taggedGoogleIds = new Set<string>();
 
-      const { toCreate, toUpdate, toDelete } = buildSyncActions(
-        [ttEvent],
-        ggEvents,
-        taggedGoogleIds,
-      );
+      const { toCreate, toUpdate, toDelete } = buildSyncActions([ttEvent], [], new Set<string>());
 
       expect(toCreate).toHaveLength(1);
       expect(toCreate[0]?.title).toBe('TimeTree Event');
@@ -36,106 +29,155 @@ describe('Sync Logic', () => {
       expect(toDelete).toHaveLength(0);
     });
 
-    it('should detect updated events (title differs)', () => {
-      const ttEvent = createEvent({ title: 'Updated Title', originalId: 'tt-1' });
-      const ggEvent = createEvent({ title: 'Old Title', id: 'gg-1', originalId: 'gg-orig-1' });
-      const taggedGoogleIds = new Set<string>(['gg-orig-1']);
+    it('should generate tag-update for untagged matching events', () => {
+      const ttEvent = createEvent({ originalId: 'tt-1' });
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1' });
 
       const { toCreate, toUpdate, toDelete } = buildSyncActions(
         [ttEvent],
         [ggEvent],
-        taggedGoogleIds,
+        new Set<string>(),
       );
 
-      expect(toCreate).toHaveLength(1);
-      expect(toUpdate).toHaveLength(0);
-      expect(toDelete).toHaveLength(1);
-    });
-
-    it('should detect matching events (same title and time)', () => {
-      const ttEvent = createEvent({
-        title: 'Meeting',
-        originalId: 'tt-1',
-        start: new Date('2026-03-24T09:00:00Z'),
-        end: new Date('2026-03-24T10:00:00Z'),
-      });
-      const ggEvent = createEvent({
-        title: 'Meeting',
-        id: 'gg-1',
-        start: new Date('2026-03-24T09:00:00Z'),
-        end: new Date('2026-03-24T10:00:00Z'),
-      });
-      const taggedGoogleIds = new Set<string>(['gg-1']);
-
-      const { toCreate, toDelete } = buildSyncActions([ttEvent], [ggEvent], taggedGoogleIds);
-
       expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.timetreeId).toBe('tt-1');
       expect(toDelete).toHaveLength(0);
     });
 
-    it('should detect deleted events (in Google but not TimeTree)', () => {
-      const ttEvents: CalendarEvent[] = [];
-      const ggEvent = createEvent({ title: 'Obsolete Event', id: 'gg-1', originalId: 'gg-orig-1' });
-      const taggedGoogleIds = new Set<string>(['gg-orig-1']);
+    it('should detect deleted tagged events (in Google but not TimeTree)', () => {
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1' });
 
       const { toCreate, toUpdate, toDelete } = buildSyncActions(
-        ttEvents,
+        [],
         [ggEvent],
-        taggedGoogleIds,
+        new Set(['gg-orig-1']),
       );
 
       expect(toCreate).toHaveLength(0);
       expect(toUpdate).toHaveLength(0);
       expect(toDelete).toHaveLength(1);
-      expect(toDelete[0]?.title).toBe('Obsolete Event');
+      expect(toDelete[0]?.title).toBe('Meeting');
     });
 
-    it('should ignore untagged Google events', () => {
-      const ttEvents: CalendarEvent[] = [];
-      const ggEvent = createEvent({ title: 'Untagged Event', id: 'gg-1' });
-      const taggedGoogleIds = new Set<string>();
+    it('should ignore untagged Google events for deletion', () => {
+      const ggEvent = createEvent({ id: 'gg-1' });
 
-      const { toDelete } = buildSyncActions(ttEvents, [ggEvent], taggedGoogleIds);
+      const { toDelete } = buildSyncActions([], [ggEvent], new Set<string>());
 
       expect(toDelete).toHaveLength(0);
     });
+  });
 
-    it('should handle multiple events correctly', () => {
+  describe('buildSyncActions - tagMap matching (timetreeId-based)', () => {
+    it('should match by timetreeId and skip when no content change', () => {
+      const ttEvent = createEvent({ originalId: 'tt-1' });
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1' });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toCreate, toUpdate, toDelete } = buildSyncActions(
+        [ttEvent],
+        [ggEvent],
+        new Set(['gg-orig-1']),
+        tagMap,
+      );
+
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(0);
+      expect(toDelete).toHaveLength(0);
+    });
+
+    it('should update when title changes (matched by timetreeId)', () => {
+      const ttEvent = createEvent({ originalId: 'tt-1', title: 'New Title' });
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1', title: 'Old Title' });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toCreate, toUpdate, toDelete } = buildSyncActions(
+        [ttEvent],
+        [ggEvent],
+        new Set(['gg-orig-1']),
+        tagMap,
+      );
+
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.title).toBe('New Title');
+      expect(toUpdate[0]?.eventId).toBe('gg-orig-1');
+      expect(toDelete).toHaveLength(0);
+    });
+
+    it('should update when time changes (matched by timetreeId)', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        start: new Date('2026-03-24T11:00:00Z'),
+        end: new Date('2026-03-24T12:00:00Z'),
+      });
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1' });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toCreate, toUpdate, toDelete } = buildSyncActions(
+        [ttEvent],
+        [ggEvent],
+        new Set(['gg-orig-1']),
+        tagMap,
+      );
+
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(1);
+      expect(toDelete).toHaveLength(0);
+    });
+
+    it('should delete tagged event when removed from TimeTree', () => {
+      const ggEvent = createEvent({ id: 'gg-1', originalId: 'gg-orig-1' });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toCreate, toUpdate, toDelete } = buildSyncActions(
+        [],
+        [ggEvent],
+        new Set(['gg-orig-1']),
+        tagMap,
+      );
+
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(0);
+      expect(toDelete).toHaveLength(1);
+    });
+
+    it('should handle mixed tagged and untagged events', () => {
       const ttEvents = [
-        createEvent({ title: 'Meeting 1', originalId: 'tt-1' }),
-        createEvent({ title: 'Meeting 2', originalId: 'tt-2' }),
+        createEvent({ title: 'Tagged Event', originalId: 'tt-1' }),
         createEvent({
-          title: 'Meeting 3',
-          originalId: 'tt-3',
-          start: new Date('2026-03-24T11:00:00Z'),
-          end: new Date('2026-03-24T12:00:00Z'),
+          title: 'New Event',
+          originalId: 'tt-2',
+          start: new Date('2026-03-24T14:00:00Z'),
+          end: new Date('2026-03-24T15:00:00Z'),
         }),
       ];
 
       const ggEvents = [
-        createEvent({ title: 'Meeting 1', id: 'gg-1', originalId: 'gg-orig-1' }),
-        createEvent({
-          title: 'Meeting 2',
-          id: 'gg-2',
-          originalId: 'gg-orig-2',
-          description: 'Old description',
-        }),
-        createEvent({ title: 'Old Meeting', id: 'gg-3', originalId: 'gg-orig-3' }),
+        createEvent({ title: 'Tagged Event', id: 'gg-1', originalId: 'gg-orig-1' }),
+        createEvent({ title: 'Orphaned', id: 'gg-2', originalId: 'gg-orig-2' }),
       ];
 
-      const taggedGoogleIds = new Set(['gg-orig-1', 'gg-orig-2', 'gg-orig-3']);
+      const tagMap = new Map([['tt-1', ggEvents[0]]]);
 
-      const { toCreate, toDelete } = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds);
+      const { toCreate, toUpdate, toDelete } = buildSyncActions(
+        ttEvents,
+        ggEvents,
+        new Set(['gg-orig-1', 'gg-orig-2']),
+        tagMap,
+      );
 
       expect(toCreate).toHaveLength(1);
-      expect(toCreate[0]?.title).toBe('Meeting 3');
+      expect(toCreate[0]?.title).toBe('New Event');
+      expect(toUpdate).toHaveLength(0);
       expect(toDelete).toHaveLength(1);
-      expect(toDelete[0]?.title).toBe('Old Meeting');
+      expect(toDelete[0]?.title).toBe('Orphaned');
     });
   });
 
   describe('executeSyncActions', () => {
-    it('should handle create action success', async () => {
+    it('should pass extendedProperties with timetreeId on create', async () => {
       const mockAdapter = {
         createEvent: vi.fn().mockResolvedValue({ id: 'new-gg-1' }),
         updateEvent: vi.fn(),
@@ -159,40 +201,15 @@ describe('Sync Logic', () => {
       const stats = await executeSyncActions(mockAdapter, 'cal-1', actions);
 
       expect(stats.created).toBe(1);
-      expect(stats.updated).toBe(0);
-      expect(stats.deleted).toBe(0);
-      expect(stats.skipped).toBe(0);
-      expect(mockAdapter.createEvent).toHaveBeenCalled();
+      expect(mockAdapter.createEvent).toHaveBeenCalledWith(
+        'cal-1',
+        expect.objectContaining({
+          extendedProperties: { private: { timetreeId: 'tt-1' } },
+        }),
+      );
     });
 
-    it('should increment skipped on create failure', async () => {
-      const mockAdapter = {
-        createEvent: vi.fn().mockRejectedValue(new Error('API error')),
-        updateEvent: vi.fn(),
-        deleteEvent: vi.fn(),
-      } as unknown as CalendarAdapter;
-
-      const actions = {
-        toCreate: [
-          {
-            type: 'create' as const,
-            title: 'Failed Event',
-            timetreeId: 'tt-1',
-            startTime: new Date(),
-            endTime: new Date(),
-          },
-        ],
-        toUpdate: [],
-        toDelete: [],
-      };
-
-      const stats = await executeSyncActions(mockAdapter, 'cal-1', actions);
-
-      expect(stats.created).toBe(0);
-      expect(stats.skipped).toBe(1);
-    });
-
-    it('should handle update action', async () => {
+    it('should pass extendedProperties with timetreeId on update', async () => {
       const mockAdapter = {
         createEvent: vi.fn(),
         updateEvent: vi.fn().mockResolvedValue({ id: 'gg-1' }),
@@ -220,8 +237,37 @@ describe('Sync Logic', () => {
       expect(mockAdapter.updateEvent).toHaveBeenCalledWith(
         'cal-1',
         'gg-1',
-        expect.objectContaining({ title: 'Updated Event' }),
+        expect.objectContaining({
+          extendedProperties: { private: { timetreeId: 'tt-1' } },
+        }),
       );
+    });
+
+    it('should increment skipped on create failure', async () => {
+      const mockAdapter = {
+        createEvent: vi.fn().mockRejectedValue(new Error('API error')),
+        updateEvent: vi.fn(),
+        deleteEvent: vi.fn(),
+      } as unknown as CalendarAdapter;
+
+      const actions = {
+        toCreate: [
+          {
+            type: 'create' as const,
+            title: 'Failed Event',
+            timetreeId: 'tt-1',
+            startTime: new Date(),
+            endTime: new Date(),
+          },
+        ],
+        toUpdate: [],
+        toDelete: [],
+      };
+
+      const stats = await executeSyncActions(mockAdapter, 'cal-1', actions);
+
+      expect(stats.created).toBe(0);
+      expect(stats.skipped).toBe(1);
     });
 
     it('should handle delete action', async () => {

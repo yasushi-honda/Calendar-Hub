@@ -37,14 +37,24 @@ export async function fetchGoogleEvents(
   calendarId: string,
   timeMin: Date,
   timeMax: Date,
-): Promise<{ events: CalendarEvent[]; tagged: Set<string> }> {
+): Promise<{
+  events: CalendarEvent[];
+  tagged: Set<string>;
+  tagMap: Map<string, CalendarEvent>;
+}> {
   const events = await ggAdapter.listEvents(calendarId, timeMin, timeMax);
   const tagged = new Set<string>();
+  const tagMap = new Map<string, CalendarEvent>();
 
-  // TODO: アダプター実装ではextendedPropertiesを取得できないため、
-  // Google API直接呼び出しによるタグ取得は別PRで実装予定。
+  for (const event of events) {
+    const timetreeId = event.extendedProperties?.private?.timetreeId;
+    if (timetreeId) {
+      tagged.add(event.originalId);
+      tagMap.set(timetreeId, event);
+    }
+  }
 
-  return { events, tagged };
+  return { events, tagged, tagMap };
 }
 
 /** イベントのマッチングキー（title + start + end） */
@@ -52,14 +62,26 @@ function eventKey(e: CalendarEvent): string {
   return `${e.title}|${e.start.getTime()}|${e.end.getTime()}`;
 }
 
+/** イベント内容の差分があるか判定 */
+function needsContentUpdate(ttEvent: CalendarEvent, ggEvent: CalendarEvent): boolean {
+  return (
+    ttEvent.title !== ggEvent.title ||
+    ttEvent.description !== ggEvent.description ||
+    ttEvent.start.getTime() !== ggEvent.start.getTime() ||
+    ttEvent.end.getTime() !== ggEvent.end.getTime()
+  );
+}
+
 /**
- * TimeTree vs Google の差分検出。
- * 戻り値: 作成/更新/削除のアクション。
+ * TimeTree vs Google の差分検出（2段階マッチング）。
+ * 1. timetreeIdタグベースマッチ（一次）
+ * 2. title+start+endフォールバックマッチ（二次：未タグイベント用）
  */
 export function buildSyncActions(
   ttEvents: CalendarEvent[],
   ggEvents: CalendarEvent[],
   taggedGoogleIds: Set<string>,
+  tagMap?: Map<string, CalendarEvent>,
 ): {
   toCreate: SyncAction[];
   toUpdate: SyncAction[];
@@ -69,27 +91,26 @@ export function buildSyncActions(
   const toUpdate: SyncAction[] = [];
   const toDelete: SyncAction[] = [];
 
-  // Google側をキーで索引（O(n)）
+  const matchedGoogleOriginalIds = new Set<string>();
+  const ttTagMap = tagMap ?? new Map<string, CalendarEvent>();
+
+  // Google側をtitle+start+endで索引（フォールバック用）
   const ggByKey = new Map<string, CalendarEvent>();
   for (const e of ggEvents) {
     ggByKey.set(eventKey(e), e);
   }
 
-  // TimeTree → Google のマッチング（O(n)）
-  const matchedKeys = new Set<string>();
-
   for (const ttEvent of ttEvents) {
-    const key = eventKey(ttEvent);
-    const ggEvent = ggByKey.get(key);
+    // 一次: timetreeIdタグでマッチ
+    const taggedGgEvent = ttTagMap.get(ttEvent.originalId);
 
-    if (ggEvent) {
-      matchedKeys.add(key);
+    if (taggedGgEvent) {
+      matchedGoogleOriginalIds.add(taggedGgEvent.originalId);
 
-      // title/start/endは一致済み。descriptionのみ差分チェック
-      if (ttEvent.description !== ggEvent.description) {
+      if (needsContentUpdate(ttEvent, taggedGgEvent)) {
         toUpdate.push({
           type: 'update',
-          eventId: ggEvent.originalId,
+          eventId: taggedGgEvent.originalId,
           title: ttEvent.title,
           timetreeId: ttEvent.originalId,
           startTime: ttEvent.start,
@@ -97,6 +118,26 @@ export function buildSyncActions(
           description: ttEvent.description,
         });
       }
+      continue;
+    }
+
+    // 二次: title+start+endフォールバックマッチ
+    const key = eventKey(ttEvent);
+    const ggEvent = ggByKey.get(key);
+
+    if (ggEvent && !matchedGoogleOriginalIds.has(ggEvent.originalId)) {
+      matchedGoogleOriginalIds.add(ggEvent.originalId);
+
+      // 未タグイベントにtimetreeIdタグを付与するupdate
+      toUpdate.push({
+        type: 'update',
+        eventId: ggEvent.originalId,
+        title: ttEvent.title,
+        timetreeId: ttEvent.originalId,
+        startTime: ttEvent.start,
+        endTime: ttEvent.end,
+        description: ttEvent.description,
+      });
     } else {
       toCreate.push({
         type: 'create',
@@ -109,9 +150,12 @@ export function buildSyncActions(
     }
   }
 
-  // Google に存在するがTimeTreeに存在しないイベント → 削除（O(m)）
+  // タグ付きGoogleイベントのうちマッチしなかったもの → 削除
   for (const ggEvent of ggEvents) {
-    if (taggedGoogleIds.has(ggEvent.originalId) && !matchedKeys.has(eventKey(ggEvent))) {
+    if (
+      taggedGoogleIds.has(ggEvent.originalId) &&
+      !matchedGoogleOriginalIds.has(ggEvent.originalId)
+    ) {
       toDelete.push({
         type: 'delete',
         eventId: ggEvent.originalId,
@@ -157,6 +201,7 @@ export async function executeSyncActions(
         start: action.startTime,
         end: action.endTime,
         isAllDay: false,
+        extendedProperties: { private: { timetreeId: action.timetreeId } },
       });
       created++;
     } catch (err) {
@@ -179,6 +224,7 @@ export async function executeSyncActions(
         start: action.startTime,
         end: action.endTime,
         isAllDay: false,
+        extendedProperties: { private: { timetreeId: action.timetreeId } },
       });
       updated++;
     } catch (err) {

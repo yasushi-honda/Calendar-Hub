@@ -10,6 +10,10 @@ export interface Calendar {
   primary?: boolean;
 }
 
+export interface EventExtendedProperties {
+  private?: Record<string, string>;
+}
+
 export interface CreateEventInput {
   title: string;
   description?: string;
@@ -18,6 +22,7 @@ export interface CreateEventInput {
   isAllDay?: boolean;
   location?: string;
   timeZone?: string;
+  extendedProperties?: EventExtendedProperties;
 }
 
 export interface UpdateEventInput {
@@ -28,6 +33,7 @@ export interface UpdateEventInput {
   isAllDay?: boolean;
   location?: string;
   timeZone?: string;
+  extendedProperties?: EventExtendedProperties;
 }
 
 export interface CalendarAdapter {

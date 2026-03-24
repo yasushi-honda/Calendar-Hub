@@ -44,7 +44,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --min-instances=0 \
   --max-instances=3 \
   --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,FRONTEND_URL=$WEB_URL" \
-  --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest"
+  --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
 
 echo "=== API Deploy Complete ==="
 gcloud run services describe "$SERVICE_NAME" \

@@ -38,8 +38,8 @@ describe('Sync Logic', () => {
 
     it('should detect updated events (title differs)', () => {
       const ttEvent = createEvent({ title: 'Updated Title', originalId: 'tt-1' });
-      const ggEvent = createEvent({ title: 'Old Title', id: 'gg-1' });
-      const taggedGoogleIds = new Set<string>(['gg-1']);
+      const ggEvent = createEvent({ title: 'Old Title', id: 'gg-1', originalId: 'gg-orig-1' });
+      const taggedGoogleIds = new Set<string>(['gg-orig-1']);
 
       const { toCreate, toUpdate, toDelete } = buildSyncActions(
         [ttEvent],
@@ -75,8 +75,8 @@ describe('Sync Logic', () => {
 
     it('should detect deleted events (in Google but not TimeTree)', () => {
       const ttEvents: CalendarEvent[] = [];
-      const ggEvent = createEvent({ title: 'Obsolete Event', id: 'gg-1' });
-      const taggedGoogleIds = new Set<string>(['gg-1']);
+      const ggEvent = createEvent({ title: 'Obsolete Event', id: 'gg-1', originalId: 'gg-orig-1' });
+      const taggedGoogleIds = new Set<string>(['gg-orig-1']);
 
       const { toCreate, toUpdate, toDelete } = buildSyncActions(
         ttEvents,
@@ -113,12 +113,17 @@ describe('Sync Logic', () => {
       ];
 
       const ggEvents = [
-        createEvent({ title: 'Meeting 1', id: 'gg-1' }),
-        createEvent({ title: 'Meeting 2', id: 'gg-2', description: 'Old description' }),
-        createEvent({ title: 'Old Meeting', id: 'gg-3' }),
+        createEvent({ title: 'Meeting 1', id: 'gg-1', originalId: 'gg-orig-1' }),
+        createEvent({
+          title: 'Meeting 2',
+          id: 'gg-2',
+          originalId: 'gg-orig-2',
+          description: 'Old description',
+        }),
+        createEvent({ title: 'Old Meeting', id: 'gg-3', originalId: 'gg-orig-3' }),
       ];
 
-      const taggedGoogleIds = new Set(['gg-1', 'gg-2', 'gg-3']);
+      const taggedGoogleIds = new Set(['gg-orig-1', 'gg-orig-2', 'gg-orig-3']);
 
       const { toCreate, toDelete } = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds);
 

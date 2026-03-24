@@ -65,7 +65,7 @@ syncRoutes.post('/timetree-to-google', async (c) => {
       try {
         const now = new Date();
         const timeMin = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const timeMax = new Date(now.getFullYear(), now.getMonth() + 2, 0);
+        const timeMax = new Date(now.getFullYear(), now.getMonth() + 2, 1);
 
         const ttAdapter = await createAdapter(ownerUid, config.timetreeAccountId);
         const ggAdapter = await createAdapter(ownerUid, config.googleAccountId);

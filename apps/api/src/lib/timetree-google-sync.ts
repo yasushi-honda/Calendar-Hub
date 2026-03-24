@@ -89,7 +89,7 @@ export function buildSyncActions(
       if (ttEvent.description !== ggEvent.description) {
         toUpdate.push({
           type: 'update',
-          eventId: ggEvent.id,
+          eventId: ggEvent.originalId,
           title: ttEvent.title,
           timetreeId: ttEvent.originalId,
           startTime: ttEvent.start,
@@ -111,10 +111,10 @@ export function buildSyncActions(
 
   // Google に存在するがTimeTreeに存在しないイベント → 削除（O(m)）
   for (const ggEvent of ggEvents) {
-    if (taggedGoogleIds.has(ggEvent.id) && !matchedKeys.has(eventKey(ggEvent))) {
+    if (taggedGoogleIds.has(ggEvent.originalId) && !matchedKeys.has(eventKey(ggEvent))) {
       toDelete.push({
         type: 'delete',
-        eventId: ggEvent.id,
+        eventId: ggEvent.originalId,
         title: ggEvent.title,
         timetreeId: ggEvent.originalId,
         startTime: ggEvent.start,

@@ -54,6 +54,7 @@ export interface CalendarEvent {
   isAllDay: boolean;
   status: EventStatus;
   location?: string;
+  extendedProperties?: { private?: Record<string, string> };
 }
 
 export interface ConnectedAccount {

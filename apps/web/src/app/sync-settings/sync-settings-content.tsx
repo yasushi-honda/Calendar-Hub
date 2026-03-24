@@ -27,8 +27,12 @@ export function SyncSettingsContent() {
   // フォーム状態
   const [formTtAccountId, setFormTtAccountId] = useState('');
   const [formGgAccountId, setFormGgAccountId] = useState('');
-  const [formTtCalendarId, setFormTtCalendarId] = useState('');
+  // TimeTreeは常に全カレンダー同期
   const [formGgCalendarId, setFormGgCalendarId] = useState('');
+  const [ggCalendars, setGgCalendars] = useState<{ id: string; name: string; primary?: boolean }[]>(
+    [],
+  );
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
 
   const showToast = useCallback((msg: string, type: 'ok' | 'err') => {
     setToast({ msg, type });
@@ -67,8 +71,31 @@ export function SyncSettingsContent() {
     if (user) loadData();
   }, [user, loadData]);
 
+  // Google アカウント選択時にカレンダー一覧を取得
+  const loadGoogleCalendars = useCallback(
+    async (accountId: string) => {
+      setLoadingCalendars(true);
+      setGgCalendars([]);
+      setFormGgCalendarId('');
+      try {
+        const res = await apiGet<{
+          calendars: { id: string; name: string; primary?: boolean; accountId: string }[];
+        }>('/api/calendars');
+        const filtered = res.calendars.filter((c) => c.accountId === accountId);
+        setGgCalendars(filtered);
+        const primary = filtered.find((c) => c.primary);
+        if (primary) setFormGgCalendarId(primary.id);
+      } catch {
+        showToast('カレンダーの取得に失敗しました', 'err');
+      } finally {
+        setLoadingCalendars(false);
+      }
+    },
+    [showToast],
+  );
+
   const handleCreate = async () => {
-    if (!formTtAccountId || !formGgAccountId || !formTtCalendarId || !formGgCalendarId) {
+    if (!formTtAccountId || !formGgAccountId || !formGgCalendarId) {
       showToast('すべてのフィールドを選択してください', 'err');
       return;
     }
@@ -77,7 +104,7 @@ export function SyncSettingsContent() {
       await apiPost('/api/sync/config', {
         timetreeAccountId: formTtAccountId,
         googleAccountId: formGgAccountId,
-        timetreeCalendarId: formTtCalendarId,
+        timetreeCalendarId: '__all__',
         googleCalendarId: formGgCalendarId,
         syncIntervalMinutes: 5,
       });
@@ -85,8 +112,8 @@ export function SyncSettingsContent() {
       setShowForm(false);
       setFormTtAccountId('');
       setFormGgAccountId('');
-      setFormTtCalendarId('');
       setFormGgCalendarId('');
+      setGgCalendars([]);
       await loadData();
     } catch {
       showToast('作成に失敗しました', 'err');
@@ -137,8 +164,6 @@ export function SyncSettingsContent() {
 
   const ttAccounts = accounts.filter((a) => a.provider === 'timetree');
   const ggAccounts = accounts.filter((a) => a.provider === 'google');
-  const selectedTtAccount = ttAccounts.find((a) => a.id === formTtAccountId);
-  const selectedGgAccount = ggAccounts.find((a) => a.id === formGgAccountId);
 
   return (
     <PageShell maxWidth="compact">
@@ -177,10 +202,7 @@ export function SyncSettingsContent() {
                 <select
                   style={s.select}
                   value={formTtAccountId}
-                  onChange={(e) => {
-                    setFormTtAccountId(e.target.value);
-                    setFormTtCalendarId('');
-                  }}
+                  onChange={(e) => setFormTtAccountId(e.target.value)}
                 >
                   <option value="">選択...</option>
                   {ttAccounts.map((a) => (
@@ -191,23 +213,10 @@ export function SyncSettingsContent() {
                 </select>
               </div>
 
-              {selectedTtAccount && (
-                <div>
-                  <label style={s.label}>TimeTree カレンダー</label>
-                  <select
-                    style={s.select}
-                    value={formTtCalendarId}
-                    onChange={(e) => setFormTtCalendarId(e.target.value)}
-                  >
-                    <option value="">選択...</option>
-                    {selectedTtAccount.calendarIds.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label style={s.label}>TimeTree カレンダー</label>
+                <div style={{ ...s.select, opacity: 0.6 }}>全カレンダー（自動）</div>
+              </div>
 
               <div>
                 <label style={s.label}>Google アカウント</label>
@@ -216,7 +225,7 @@ export function SyncSettingsContent() {
                   value={formGgAccountId}
                   onChange={(e) => {
                     setFormGgAccountId(e.target.value);
-                    setFormGgCalendarId('');
+                    if (e.target.value) loadGoogleCalendars(e.target.value);
                   }}
                 >
                   <option value="">選択...</option>
@@ -228,23 +237,26 @@ export function SyncSettingsContent() {
                 </select>
               </div>
 
-              {selectedGgAccount && (
-                <div>
-                  <label style={s.label}>Google カレンダー</label>
+              <div>
+                <label style={s.label}>Google カレンダー</label>
+                {loadingCalendars ? (
+                  <div style={{ ...s.select, opacity: 0.6 }}>読み込み中...</div>
+                ) : (
                   <select
                     style={s.select}
                     value={formGgCalendarId}
                     onChange={(e) => setFormGgCalendarId(e.target.value)}
                   >
                     <option value="">選択...</option>
-                    {selectedGgAccount.calendarIds.map((id) => (
-                      <option key={id} value={id}>
-                        {id}
+                    {ggCalendars.map((cal) => (
+                      <option key={cal.id} value={cal.id}>
+                        {cal.name}
+                        {cal.primary ? ' (デフォルト)' : ''}
                       </option>
                     ))}
                   </select>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             <button style={s.submitBtn} onClick={handleCreate}>
@@ -269,7 +281,13 @@ export function SyncSettingsContent() {
                     <div style={s.configLabel}>
                       <span style={s.badge}>TimeTree</span>
                       {ttAcc?.email ?? config.timetreeAccountId}
-                      <span style={s.muted}> / {config.timetreeCalendarId}</span>
+                      <span style={s.muted}>
+                        {' '}
+                        /{' '}
+                        {config.timetreeCalendarId === '__all__'
+                          ? '全カレンダー'
+                          : config.timetreeCalendarId}
+                      </span>
                     </div>
                     <div style={{ ...s.configLabel, marginTop: 4 }}>
                       <span

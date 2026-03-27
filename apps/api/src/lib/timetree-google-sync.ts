@@ -59,6 +59,10 @@ export async function fetchGoogleEvents(
 
 /** イベントのマッチングキー（title + start + end） */
 function eventKey(e: CalendarEvent): string {
+  if (e.isAllDay) {
+    const tz = 'Asia/Tokyo';
+    return `${e.title}|${toDateStr(e.start, tz)}|${toDateStr(e.end, tz)}`;
+  }
   return `${e.title}|${e.start.getTime()}|${e.end.getTime()}`;
 }
 
@@ -128,10 +132,13 @@ export function buildSyncActions(
   const matchedGoogleOriginalIds = new Set<string>();
   const ttTagMap = tagMap ?? new Map<string, CalendarEvent>();
 
-  // Google側をtitle+start+endで索引（フォールバック用）
-  const ggByKey = new Map<string, CalendarEvent>();
+  // Google側をtitle+start+endで索引（フォールバック用、同一キー複数対応）
+  const ggByKey = new Map<string, CalendarEvent[]>();
   for (const e of ggEvents) {
-    ggByKey.set(eventKey(e), e);
+    const k = eventKey(e);
+    const arr = ggByKey.get(k);
+    if (arr) arr.push(e);
+    else ggByKey.set(k, [e]);
   }
 
   for (const ttEvent of ttEvents) {
@@ -156,11 +163,12 @@ export function buildSyncActions(
       continue;
     }
 
-    // 二次: title+start+endフォールバックマッチ
+    // 二次: title+start+endフォールバックマッチ（同一キー複数対応）
     const key = eventKey(ttEvent);
-    const ggEvent = ggByKey.get(key);
+    const candidates = ggByKey.get(key) ?? [];
+    const ggEvent = candidates.find((e) => !matchedGoogleOriginalIds.has(e.originalId));
 
-    if (ggEvent && !matchedGoogleOriginalIds.has(ggEvent.originalId)) {
+    if (ggEvent) {
       matchedGoogleOriginalIds.add(ggEvent.originalId);
 
       // 未タグイベントにtimetreeIdタグを付与するupdate

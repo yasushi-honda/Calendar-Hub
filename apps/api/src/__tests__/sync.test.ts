@@ -515,4 +515,62 @@ describe('Sync Logic', () => {
       expect(mockAdapter.updateEvent).not.toHaveBeenCalled();
     });
   });
+
+  describe('buildSyncActions - duplicate events and all-day fallback', () => {
+    it('should fallback-match all-day events despite TZ-shifted timestamps', () => {
+      // TimeTree: midnight JST = 2026-03-29T00:00:00+09:00 = 2026-03-28T15:00:00Z
+      const ttEvent = createEvent({
+        originalId: 'tt-allday-1',
+        title: 'Holiday',
+        start: new Date('2026-03-28T15:00:00Z'),
+        end: new Date('2026-03-29T15:00:00Z'),
+        isAllDay: true,
+      });
+      // Google: midnight UTC = 2026-03-29T00:00:00Z (same date, different timestamp)
+      const ggEvent = createEvent({
+        originalId: 'gg-allday-1',
+        title: 'Holiday',
+        start: new Date('2026-03-29T00:00:00Z'),
+        end: new Date('2026-03-30T00:00:00Z'),
+        isAllDay: true,
+      });
+
+      const { toCreate, toUpdate } = buildSyncActions([ttEvent], [ggEvent], new Set());
+
+      // Should match via eventKey (not create a duplicate)
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.timetreeId).toBe('tt-allday-1');
+    });
+
+    it('should match duplicate TT events to separate GG events (same title+time)', () => {
+      const ttEvent1 = createEvent({ originalId: 'tt-1', title: 'Meeting' });
+      const ttEvent2 = createEvent({ originalId: 'tt-2', title: 'Meeting' });
+      const ggEvent1 = createEvent({ originalId: 'gg-1', title: 'Meeting' });
+      const ggEvent2 = createEvent({ originalId: 'gg-2', title: 'Meeting' });
+
+      const { toCreate, toUpdate } = buildSyncActions(
+        [ttEvent1, ttEvent2],
+        [ggEvent1, ggEvent2],
+        new Set(),
+      );
+
+      expect(toCreate).toHaveLength(0);
+      expect(toUpdate).toHaveLength(2);
+      // Each TT event should match a different GG event
+      const matchedGgIds = toUpdate.map((u) => u.eventId);
+      expect(new Set(matchedGgIds).size).toBe(2);
+    });
+
+    it('should create new event when TT duplicates exceed GG count', () => {
+      const ttEvent1 = createEvent({ originalId: 'tt-1', title: 'Meeting' });
+      const ttEvent2 = createEvent({ originalId: 'tt-2', title: 'Meeting' });
+      const ggEvent1 = createEvent({ originalId: 'gg-1', title: 'Meeting' });
+
+      const { toCreate, toUpdate } = buildSyncActions([ttEvent1, ttEvent2], [ggEvent1], new Set());
+
+      expect(toUpdate).toHaveLength(1);
+      expect(toCreate).toHaveLength(1);
+    });
+  });
 });

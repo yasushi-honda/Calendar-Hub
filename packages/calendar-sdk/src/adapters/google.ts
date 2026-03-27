@@ -97,9 +97,9 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     const tz = (event as CreateEventInput).timeZone ?? 'Asia/Tokyo';
 
     if (event.start && event.end) {
-      if ((event as CreateEventInput).isAllDay) {
-        body.start = { date: toDateString(event.start) };
-        body.end = { date: toDateString(event.end) };
+      if (event.isAllDay) {
+        body.start = { date: toDateString(event.start, tz) };
+        body.end = { date: toDateString(event.end, tz) };
       } else {
         body.start = { dateTime: event.start.toISOString(), timeZone: tz };
         body.end = { dateTime: event.end.toISOString(), timeZone: tz };
@@ -114,6 +114,15 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 }
 
-function toDateString(d: Date): string {
-  return d.toISOString().split('T')[0];
+export function toDateString(d: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === 'year')!.value;
+  const m = parts.find((p) => p.type === 'month')!.value;
+  const dd = parts.find((p) => p.type === 'day')!.value;
+  return `${y}-${m}-${dd}`;
 }

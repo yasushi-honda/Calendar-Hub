@@ -38,4 +38,5 @@ export interface SyncAction {
   startTime: Date;
   endTime: Date;
   description?: string;
+  isAllDay: boolean;
 }

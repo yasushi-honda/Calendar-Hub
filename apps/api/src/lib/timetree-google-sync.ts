@@ -68,7 +68,8 @@ function needsContentUpdate(ttEvent: CalendarEvent, ggEvent: CalendarEvent): boo
     ttEvent.title !== ggEvent.title ||
     ttEvent.description !== ggEvent.description ||
     ttEvent.start.getTime() !== ggEvent.start.getTime() ||
-    ttEvent.end.getTime() !== ggEvent.end.getTime()
+    ttEvent.end.getTime() !== ggEvent.end.getTime() ||
+    ttEvent.isAllDay !== ggEvent.isAllDay
   );
 }
 
@@ -116,6 +117,7 @@ export function buildSyncActions(
           startTime: ttEvent.start,
           endTime: ttEvent.end,
           description: ttEvent.description,
+          isAllDay: ttEvent.isAllDay,
         });
       }
       continue;
@@ -137,6 +139,7 @@ export function buildSyncActions(
         startTime: ttEvent.start,
         endTime: ttEvent.end,
         description: ttEvent.description,
+        isAllDay: ttEvent.isAllDay,
       });
     } else {
       toCreate.push({
@@ -146,6 +149,7 @@ export function buildSyncActions(
         startTime: ttEvent.start,
         endTime: ttEvent.end,
         description: ttEvent.description,
+        isAllDay: ttEvent.isAllDay,
       });
     }
   }
@@ -163,6 +167,7 @@ export function buildSyncActions(
         timetreeId: ggEvent.originalId,
         startTime: ggEvent.start,
         endTime: ggEvent.end,
+        isAllDay: ggEvent.isAllDay,
       });
     }
   }
@@ -200,7 +205,7 @@ export async function executeSyncActions(
         description: action.description,
         start: action.startTime,
         end: action.endTime,
-        isAllDay: false,
+        isAllDay: action.isAllDay,
         extendedProperties: { private: { timetreeId: action.timetreeId } },
       });
       created++;
@@ -223,7 +228,7 @@ export async function executeSyncActions(
         description: action.description,
         start: action.startTime,
         end: action.endTime,
-        isAllDay: false,
+        isAllDay: action.isAllDay,
         extendedProperties: { private: { timetreeId: action.timetreeId } },
       });
       updated++;

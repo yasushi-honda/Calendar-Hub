@@ -1,41 +1,38 @@
-# Calendar Hub ハンドオフ (2026-03-23)
+# Calendar Hub ハンドオフ (2026-03-27)
 
-## 完了した作業
+## 最近の完了作業（直近1週間）
 
-| PR  | Issue    | 内容                                                 |
-| --- | -------- | ---------------------------------------------------- |
-| #10 | #1, #2   | GCP初期化 + Firebase Auth + OAuth連携                |
-| #11 | #3, #4   | Google Calendar + TimeTree Adapter                   |
-| #12 | #5, #6   | 統合カレンダーUI + 空き時間算出                      |
-| #13 | #7, #8   | Vertex AI Gemini 2.5 Flash AI提案                    |
-| #14 | -        | テスト追加 + shared exports修正                      |
-| #15 | -        | TimeTree Adapter内部API修正                          |
-| #16 | #9       | メール通知システム (Gmail OAuth2)                    |
-| #20 | #17-19   | CI + PRテンプレート + テスト46件追加                 |
-| #26 | #21, #22 | CORS環境変数化 + Secret Manager + CSRF移行           |
-| #27 | #23, #24 | AI JSONパース堅牢化 + TT session管理                 |
-| #28 | #25      | Cloud Runデプロイ基盤                                |
-| -   | -        | ダークテーマUI全ページリデザイン + simplify修正      |
-| #32 | -        | Firebase初期化スキップ（APIキー未設定時）            |
-| #33 | -        | ダークテーマ視認性改善 + FRONTEND_URL追加            |
-| #34 | -        | react-big-calendarダークテーマ完成                   |
-| #35 | -        | カレンダースタイル !important 全面適用               |
-| #36 | -        | PageShell + useRequireAuth 共通コンポーネント抽出    |
-| #37 | -        | 設定画面にTimeTree接続フォーム追加                   |
-| #38 | -        | 認証完了後にカレンダーイベント取得（タイミング修正） |
-| #39 | -        | カレンダー取得リジェクト結果のデバッグログ追加       |
-| #40 | -        | CLAUDE.md + ハンドオフ + .gitignore                  |
-| #41 | -        | 公開予約リンク機能（Calendlyライク）                 |
-| #45 | #42      | 予約リンクのユニットテスト21件追加                   |
-| #46 | #43      | /simplify リファクタ（DRY・型安全性・効率化）        |
-| #47 | -        | Cloud Runタイムゾーン修正（UTC→JST）                 |
-| #48 | #44      | 公開予約APIのレート制限（429保護）                   |
+| PR  | Issue | 内容                                                                |
+| --- | ----- | ------------------------------------------------------------------- |
+| #59 | #58   | 全日イベント同期のタイムゾーン対応（toDateString→UTC変換）          |
+| #57 | #56   | TimeTree→Google sync で isAllDay フラグを保持                       |
+| -   | -     | sync比較でGoogle Meet メタデータを除去                              |
+| -   | -     | 重複イベント処理・全日フォールバックマッチの修正（未PRコミット3件） |
+| #55 | #52   | extendedProperties タグによる同期済みイベント識別                   |
+| -   | #51   | Google Calendar API呼び出しで originalId を使用                     |
+
+（それ以前の詳細は `docs/handoff/archive/` を参照）
+
+## MVP実装状況
+
+| 機能                               | 状態               |
+| ---------------------------------- | ------------------ |
+| Firebase Auth + Google OAuth       | ✅ 完了            |
+| Google Calendar / TimeTree 統合    | ✅ 完了            |
+| 統合カレンダーUI                   | ✅ 完了            |
+| Vertex AI 提案（Gemini 2.5 Flash） | ✅ 完了            |
+| メール通知（Gmail OAuth2）         | ✅ 完了            |
+| 公開予約リンク（Calendlyライク）   | ✅ 完了            |
+| カレンダー同期（extendedProps）    | ✅ 完了            |
+| 全日イベント同期（TZ対応）         | ✅ 完了（#58/#59） |
+| syncIntervalMinutes スケジューラ   | ⚠️ 未使用（#53）   |
+| timeMax 月末バグ                   | ⚠️ 未修正（#54）   |
 
 ## 品質状態
 
-- テスト: 116件全PASS
+- テスト: 116件全PASS（最終確認: 2026-03-23）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン (最新: #48)
+- CI: GitHub Actions グリーン（最新: main 7b373d5 / 2026-03-27）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -54,14 +51,18 @@
 
 ## オープンIssue
 
-GitHub上のオープンIssueはなし（2026-03-23時点）。
+| #   | タイトル                                                     | ラベル  |
+| --- | ------------------------------------------------------------ | ------- |
+| #54 | fix: timeMax calculation misses last day of month events     | bug, P1 |
+| #53 | fix: syncIntervalMinutes is stored but not used by scheduler | bug, P1 |
 
 ## 次セッションの推奨アクション
 
-1. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-2. 予約リンクのタイムゾーン設定をユーザー選択可能にする（現在JST固定）
-3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
-4. Gmail OAuth再連携（gmail.sendスコープ追加のため設定画面で再接続）
+1. **未PRコミット3件のPR作成**: 重複イベント処理・Google Meetメタデータ除去・全日フォールバックマッチ修正（7b373d5, 520c442, da1abb8）
+2. **#54 修正**: timeMax 計算バグ（月末イベントが取得されない）
+3. **#53 修正**: syncIntervalMinutes をスケジューラに接続して実際に動作させる
+4. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## アカウント情報
 

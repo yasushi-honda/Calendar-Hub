@@ -176,7 +176,192 @@ describe('Sync Logic', () => {
     });
   });
 
+  describe('buildSyncActions - all-day events', () => {
+    it('should include isAllDay flag in create actions', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        title: 'Holiday',
+        isAllDay: true,
+        start: new Date('2026-03-24T00:00:00Z'),
+        end: new Date('2026-03-25T00:00:00Z'),
+      });
+
+      const { toCreate } = buildSyncActions([ttEvent], [], new Set<string>());
+
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0]?.isAllDay).toBe(true);
+    });
+
+    it('should include isAllDay flag in update actions (tagMap match)', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        title: 'Updated Holiday',
+        isAllDay: true,
+        start: new Date('2026-03-24T00:00:00Z'),
+        end: new Date('2026-03-25T00:00:00Z'),
+      });
+      const ggEvent = createEvent({
+        id: 'gg-1',
+        originalId: 'gg-orig-1',
+        title: 'Old Holiday',
+        isAllDay: true,
+        start: new Date('2026-03-24T00:00:00Z'),
+        end: new Date('2026-03-25T00:00:00Z'),
+      });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toUpdate } = buildSyncActions([ttEvent], [ggEvent], new Set(['gg-orig-1']), tagMap);
+
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.isAllDay).toBe(true);
+    });
+
+    it('should detect isAllDay change as content update', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        isAllDay: true,
+        start: new Date('2026-03-24T00:00:00Z'),
+        end: new Date('2026-03-25T00:00:00Z'),
+      });
+      const ggEvent = createEvent({
+        id: 'gg-1',
+        originalId: 'gg-orig-1',
+        isAllDay: false,
+        start: new Date('2026-03-24T00:00:00Z'),
+        end: new Date('2026-03-25T00:00:00Z'),
+      });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toUpdate } = buildSyncActions([ttEvent], [ggEvent], new Set(['gg-orig-1']), tagMap);
+
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.isAllDay).toBe(true);
+    });
+
+    it('should detect isAllDay change from true to false', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        isAllDay: false,
+      });
+      const ggEvent = createEvent({
+        id: 'gg-1',
+        originalId: 'gg-orig-1',
+        isAllDay: true,
+        start: new Date('2026-03-24T09:00:00Z'),
+        end: new Date('2026-03-24T10:00:00Z'),
+      });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toUpdate } = buildSyncActions([ttEvent], [ggEvent], new Set(['gg-orig-1']), tagMap);
+
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.isAllDay).toBe(false);
+    });
+
+    it('should handle mixed all-day and timed events in same batch', () => {
+      const ttEvents = [
+        createEvent({
+          originalId: 'tt-allday',
+          title: 'Holiday',
+          isAllDay: true,
+          start: new Date('2026-03-24T00:00:00Z'),
+          end: new Date('2026-03-25T00:00:00Z'),
+        }),
+        createEvent({
+          originalId: 'tt-timed',
+          title: 'Meeting',
+          isAllDay: false,
+          start: new Date('2026-03-24T09:00:00Z'),
+          end: new Date('2026-03-24T10:00:00Z'),
+        }),
+      ];
+
+      const { toCreate } = buildSyncActions(ttEvents, [], new Set<string>());
+
+      expect(toCreate).toHaveLength(2);
+      const allDay = toCreate.find((a) => a.title === 'Holiday');
+      const timed = toCreate.find((a) => a.title === 'Meeting');
+      expect(allDay?.isAllDay).toBe(true);
+      expect(timed?.isAllDay).toBe(false);
+    });
+
+    it('should preserve isAllDay: false for timed events', () => {
+      const ttEvent = createEvent({ originalId: 'tt-1', isAllDay: false });
+
+      const { toCreate } = buildSyncActions([ttEvent], [], new Set<string>());
+
+      expect(toCreate).toHaveLength(1);
+      expect(toCreate[0]?.isAllDay).toBe(false);
+    });
+  });
+
   describe('executeSyncActions', () => {
+    it('should create all-day event with isAllDay: true', async () => {
+      const mockAdapter = {
+        createEvent: vi.fn().mockResolvedValue({ id: 'new-gg-1' }),
+        updateEvent: vi.fn(),
+        deleteEvent: vi.fn(),
+      } as unknown as CalendarAdapter;
+
+      const actions = {
+        toCreate: [
+          {
+            type: 'create' as const,
+            title: 'Holiday',
+            timetreeId: 'tt-1',
+            startTime: new Date('2026-03-24T00:00:00Z'),
+            endTime: new Date('2026-03-25T00:00:00Z'),
+            isAllDay: true,
+          },
+        ],
+        toUpdate: [],
+        toDelete: [],
+      };
+
+      await executeSyncActions(mockAdapter, 'cal-1', actions);
+
+      expect(mockAdapter.createEvent).toHaveBeenCalledWith(
+        'cal-1',
+        expect.objectContaining({
+          isAllDay: true,
+        }),
+      );
+    });
+
+    it('should update all-day event with isAllDay: true', async () => {
+      const mockAdapter = {
+        createEvent: vi.fn(),
+        updateEvent: vi.fn().mockResolvedValue({ id: 'gg-1' }),
+        deleteEvent: vi.fn(),
+      } as unknown as CalendarAdapter;
+
+      const actions = {
+        toCreate: [],
+        toUpdate: [
+          {
+            type: 'update' as const,
+            eventId: 'gg-1',
+            title: 'Holiday',
+            timetreeId: 'tt-1',
+            startTime: new Date('2026-03-24T00:00:00Z'),
+            endTime: new Date('2026-03-25T00:00:00Z'),
+            isAllDay: true,
+          },
+        ],
+        toDelete: [],
+      };
+
+      await executeSyncActions(mockAdapter, 'cal-1', actions);
+
+      expect(mockAdapter.updateEvent).toHaveBeenCalledWith(
+        'cal-1',
+        'gg-1',
+        expect.objectContaining({
+          isAllDay: true,
+        }),
+      );
+    });
+
     it('should pass extendedProperties with timetreeId on create', async () => {
       const mockAdapter = {
         createEvent: vi.fn().mockResolvedValue({ id: 'new-gg-1' }),
@@ -192,6 +377,7 @@ describe('Sync Logic', () => {
             timetreeId: 'tt-1',
             startTime: new Date('2026-03-24T09:00:00Z'),
             endTime: new Date('2026-03-24T10:00:00Z'),
+            isAllDay: false,
           },
         ],
         toUpdate: [],
@@ -226,6 +412,7 @@ describe('Sync Logic', () => {
             timetreeId: 'tt-1',
             startTime: new Date('2026-03-24T10:00:00Z'),
             endTime: new Date('2026-03-24T11:00:00Z'),
+            isAllDay: false,
           },
         ],
         toDelete: [],
@@ -258,6 +445,7 @@ describe('Sync Logic', () => {
             timetreeId: 'tt-1',
             startTime: new Date(),
             endTime: new Date(),
+            isAllDay: false,
           },
         ],
         toUpdate: [],
@@ -288,6 +476,7 @@ describe('Sync Logic', () => {
             timetreeId: 'tt-1',
             startTime: new Date(),
             endTime: new Date(),
+            isAllDay: false,
           },
         ],
       };
@@ -314,6 +503,7 @@ describe('Sync Logic', () => {
             timetreeId: 'tt-1',
             startTime: new Date(),
             endTime: new Date(),
+            isAllDay: false,
           },
         ],
         toDelete: [],

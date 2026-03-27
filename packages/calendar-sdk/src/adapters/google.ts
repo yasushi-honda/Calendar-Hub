@@ -98,11 +98,11 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 
     if (event.start && event.end) {
       if (event.isAllDay) {
-        body.start = { date: toDateString(event.start, tz) };
-        body.end = { date: toDateString(event.end, tz) };
+        body.start = { date: toDateString(event.start, tz), dateTime: null };
+        body.end = { date: toDateString(event.end, tz), dateTime: null };
       } else {
-        body.start = { dateTime: event.start.toISOString(), timeZone: tz };
-        body.end = { dateTime: event.end.toISOString(), timeZone: tz };
+        body.start = { dateTime: event.start.toISOString(), timeZone: tz, date: null };
+        body.end = { dateTime: event.end.toISOString(), timeZone: tz, date: null };
       }
     }
 

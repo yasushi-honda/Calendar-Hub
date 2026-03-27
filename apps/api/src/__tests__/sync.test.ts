@@ -238,6 +238,53 @@ describe('Sync Logic', () => {
       expect(toUpdate[0]?.isAllDay).toBe(true);
     });
 
+    it('should detect isAllDay change from true to false', () => {
+      const ttEvent = createEvent({
+        originalId: 'tt-1',
+        isAllDay: false,
+      });
+      const ggEvent = createEvent({
+        id: 'gg-1',
+        originalId: 'gg-orig-1',
+        isAllDay: true,
+        start: new Date('2026-03-24T09:00:00Z'),
+        end: new Date('2026-03-24T10:00:00Z'),
+      });
+      const tagMap = new Map([['tt-1', ggEvent]]);
+
+      const { toUpdate } = buildSyncActions([ttEvent], [ggEvent], new Set(['gg-orig-1']), tagMap);
+
+      expect(toUpdate).toHaveLength(1);
+      expect(toUpdate[0]?.isAllDay).toBe(false);
+    });
+
+    it('should handle mixed all-day and timed events in same batch', () => {
+      const ttEvents = [
+        createEvent({
+          originalId: 'tt-allday',
+          title: 'Holiday',
+          isAllDay: true,
+          start: new Date('2026-03-24T00:00:00Z'),
+          end: new Date('2026-03-25T00:00:00Z'),
+        }),
+        createEvent({
+          originalId: 'tt-timed',
+          title: 'Meeting',
+          isAllDay: false,
+          start: new Date('2026-03-24T09:00:00Z'),
+          end: new Date('2026-03-24T10:00:00Z'),
+        }),
+      ];
+
+      const { toCreate } = buildSyncActions(ttEvents, [], new Set<string>());
+
+      expect(toCreate).toHaveLength(2);
+      const allDay = toCreate.find((a) => a.title === 'Holiday');
+      const timed = toCreate.find((a) => a.title === 'Meeting');
+      expect(allDay?.isAllDay).toBe(true);
+      expect(timed?.isAllDay).toBe(false);
+    });
+
     it('should preserve isAllDay: false for timed events', () => {
       const ttEvent = createEvent({ originalId: 'tt-1', isAllDay: false });
 

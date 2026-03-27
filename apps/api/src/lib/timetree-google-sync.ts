@@ -76,18 +76,23 @@ function toDateStr(d: Date, tz: string): string {
   return `${y}-${m}-${dd}`;
 }
 
+/** Google Meetが自動付与するdescription末尾メタデータを除去 */
+function stripGoogleMeetMetadata(desc: string | undefined): string | undefined {
+  if (!desc) return desc;
+  return desc.replace(/-::~:~::~:~:~:~:~:~:~:~:~:~[\s\S]*$/, '').trim() || undefined;
+}
+
 /** イベント内容の差分があるか判定 */
 function needsContentUpdate(ttEvent: CalendarEvent, ggEvent: CalendarEvent): boolean {
-  if (ttEvent.title !== ggEvent.title || ttEvent.description !== ggEvent.description) {
-    return true;
-  }
+  if (ttEvent.title !== ggEvent.title) return true;
+  if (ttEvent.isAllDay !== ggEvent.isAllDay) return true;
 
-  if (ttEvent.isAllDay !== ggEvent.isAllDay) {
-    return true;
-  }
+  // description比較: 両側のMeetメタデータを除去して比較
+  const ttDesc = stripGoogleMeetMetadata(ttEvent.description) || undefined;
+  const ggDesc = stripGoogleMeetMetadata(ggEvent.description) || undefined;
+  if (ttDesc !== ggDesc) return true;
 
   if (ttEvent.isAllDay && ggEvent.isAllDay) {
-    // 全日イベント: タイムスタンプはTZ由来で異なるため日付文字列で比較
     const tz = 'Asia/Tokyo';
     return (
       toDateStr(ttEvent.start, tz) !== toDateStr(ggEvent.start, tz) ||
@@ -144,7 +149,7 @@ export function buildSyncActions(
           timetreeId: ttEvent.originalId,
           startTime: ttEvent.start,
           endTime: ttEvent.end,
-          description: ttEvent.description,
+          description: stripGoogleMeetMetadata(ttEvent.description) || undefined,
           isAllDay: ttEvent.isAllDay,
         });
       }

@@ -47,23 +47,23 @@ if gcloud scheduler jobs describe "${JOB_NAME}" \
     --quiet
 fi
 
-# ジョブ作成（5分毎）
+# ジョブ作成（1分毎 — 実際の同期間隔はFirestore syncIntervalMinutesで制御）
 echo "Creating Cloud Scheduler job '${JOB_NAME}'..."
 gcloud scheduler jobs create http "${JOB_NAME}" \
   --location="${REGION}" \
   --project="${PROJECT_ID}" \
-  --schedule="*/5 * * * *" \
+  --schedule="*/1 * * * *" \
   --uri="${ENDPOINT}" \
   --http-method=POST \
   --headers="Authorization=Bearer ${SYNC_TOKEN},Content-Type=application/json" \
   --attempt-deadline="300s" \
   --time-zone="Asia/Tokyo" \
-  --description="TimeTree → Google Calendar sync (every 5 minutes)"
+  --description="TimeTree → Google Calendar sync (interval per user config)"
 
 echo ""
 echo "=== Setup Complete ==="
 echo "Job:      ${JOB_NAME}"
-echo "Schedule: */5 * * * * (every 5 minutes, JST)"
+echo "Schedule: */1 * * * * (every 1 minute, JST — actual interval per user config)"
 echo "Endpoint: ${ENDPOINT}"
 echo ""
 echo "Test run:"

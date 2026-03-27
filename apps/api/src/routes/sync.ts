@@ -22,6 +22,7 @@ export const syncRoutes = new Hono<AppEnv>();
 function toSyncConfig(data: FirebaseFirestore.DocumentData): SyncConfig {
   return {
     ...data,
+    lastSyncedAt: data.lastSyncedAt?.toDate?.() ?? undefined,
     createdAt: data.createdAt?.toDate?.() ?? new Date(),
     updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
   } as SyncConfig;
@@ -61,6 +62,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
     let failureCount = 0;
 
     for (const { docId, ownerUid, data: config } of configs) {
+      // syncIntervalMinutes に基づく経過時間チェック
+      const lastSyncedAt = config.lastSyncedAt?.getTime() ?? 0;
+      const intervalMs = (config.syncIntervalMinutes ?? 5) * 60_000;
+      if (Date.now() - lastSyncedAt < intervalMs) {
+        continue;
+      }
+
       const configStartTime = Date.now();
       try {
         const now = new Date();
@@ -87,6 +95,14 @@ syncRoutes.post('/timetree-to-google', async (c) => {
 
         const status = stats.skipped > 0 ? 'partial' : 'success';
         await recordSyncLog(docId, ownerUid, status, stats, Date.now() - configStartTime);
+
+        // lastSyncedAt を更新
+        await db
+          .collection('users')
+          .doc(ownerUid)
+          .collection('syncConfig')
+          .doc(docId)
+          .update({ lastSyncedAt: FieldValue.serverTimestamp() });
 
         console.log(
           `Sync completed for ${ownerUid}/${config.googleCalendarId}: ${stats.created} created, ${stats.updated} updated, ${stats.deleted} deleted`,

@@ -12,6 +12,7 @@ export interface SyncConfig {
   googleCalendarId: string;
   isEnabled: boolean;
   syncIntervalMinutes: SyncIntervalMinutes;
+  lastSyncedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

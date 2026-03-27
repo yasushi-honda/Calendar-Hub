@@ -62,14 +62,42 @@ function eventKey(e: CalendarEvent): string {
   return `${e.title}|${e.start.getTime()}|${e.end.getTime()}`;
 }
 
+/** 全日イベント用: タイムゾーン安全な日付文字列（YYYY-MM-DD） */
+function toDateStr(d: Date, tz: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const y = parts.find((p) => p.type === 'year')!.value;
+  const m = parts.find((p) => p.type === 'month')!.value;
+  const dd = parts.find((p) => p.type === 'day')!.value;
+  return `${y}-${m}-${dd}`;
+}
+
 /** イベント内容の差分があるか判定 */
 function needsContentUpdate(ttEvent: CalendarEvent, ggEvent: CalendarEvent): boolean {
+  if (ttEvent.title !== ggEvent.title || ttEvent.description !== ggEvent.description) {
+    return true;
+  }
+
+  if (ttEvent.isAllDay !== ggEvent.isAllDay) {
+    return true;
+  }
+
+  if (ttEvent.isAllDay && ggEvent.isAllDay) {
+    // 全日イベント: タイムスタンプはTZ由来で異なるため日付文字列で比較
+    const tz = 'Asia/Tokyo';
+    return (
+      toDateStr(ttEvent.start, tz) !== toDateStr(ggEvent.start, tz) ||
+      toDateStr(ttEvent.end, tz) !== toDateStr(ggEvent.end, tz)
+    );
+  }
+
   return (
-    ttEvent.title !== ggEvent.title ||
-    ttEvent.description !== ggEvent.description ||
     ttEvent.start.getTime() !== ggEvent.start.getTime() ||
-    ttEvent.end.getTime() !== ggEvent.end.getTime() ||
-    ttEvent.isAllDay !== ggEvent.isAllDay
+    ttEvent.end.getTime() !== ggEvent.end.getTime()
   );
 }
 

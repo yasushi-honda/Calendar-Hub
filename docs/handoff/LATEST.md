@@ -58,11 +58,10 @@
 
 ## 次セッションの推奨アクション
 
-1. **未PRコミット3件のPR作成**: 重複イベント処理・Google Meetメタデータ除去・全日フォールバックマッチ修正（7b373d5, 520c442, da1abb8）
-2. **#54 修正**: timeMax 計算バグ（月末イベントが取得されない）
-3. **#53 修正**: syncIntervalMinutes をスケジューラに接続して実際に動作させる
-4. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+1. **#54 修正**: timeMax 計算バグ（月末イベントが取得されない）
+2. **#53 修正**: syncIntervalMinutes をスケジューラに接続して実際に動作させる
+3. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## アカウント情報
 

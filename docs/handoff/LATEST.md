@@ -25,7 +25,7 @@
 | 公開予約リンク（Calendlyライク）   | ✅ 完了            |
 | カレンダー同期（extendedProps）    | ✅ 完了            |
 | 全日イベント同期（TZ対応）         | ✅ 完了（#58/#59） |
-| syncIntervalMinutes スケジューラ   | ⚠️ 未使用（#53）   |
+| syncIntervalMinutes スケジューラ   | ✅ 完了（#53）     |
 | timeMax 月末バグ                   | ⚠️ 未修正（#54）   |
 
 ## 品質状態
@@ -51,17 +51,15 @@
 
 ## オープンIssue
 
-| #   | タイトル                                                     | ラベル  |
-| --- | ------------------------------------------------------------ | ------- |
-| #54 | fix: timeMax calculation misses last day of month events     | bug, P1 |
-| #53 | fix: syncIntervalMinutes is stored but not used by scheduler | bug, P1 |
+| #   | タイトル                                                 | ラベル  |
+| --- | -------------------------------------------------------- | ------- |
+| #54 | fix: timeMax calculation misses last day of month events | bug, P1 |
 
 ## 次セッションの推奨アクション
 
 1. **#54 修正**: timeMax 計算バグ（月末イベントが取得されない）
-2. **#53 修正**: syncIntervalMinutes をスケジューラに接続して実際に動作させる
-3. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+2. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## アカウント情報
 

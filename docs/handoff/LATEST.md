@@ -26,13 +26,13 @@
 | カレンダー同期（extendedProps）    | ✅ 完了            |
 | 全日イベント同期（TZ対応）         | ✅ 完了（#58/#59） |
 | syncIntervalMinutes スケジューラ   | ✅ 完了（#53）     |
-| timeMax 月末バグ                   | ⚠️ 未修正（#54）   |
+| timeMax 月末バグ                   | ✅ 完了（dd241df） |
 
 ## 品質状態
 
-- テスト: 116件全PASS（最終確認: 2026-03-23）
+- テスト: 178件全PASS（最終確認: 2026-03-27）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main 7b373d5 / 2026-03-27）
+- CI: GitHub Actions グリーン（最新: main 104c9c7 / 2026-03-27）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -51,15 +51,12 @@
 
 ## オープンIssue
 
-| #   | タイトル                                                 | ラベル  |
-| --- | -------------------------------------------------------- | ------- |
-| #54 | fix: timeMax calculation misses last day of month events | bug, P1 |
+なし（2026-03-27時点）
 
 ## 次セッションの推奨アクション
 
-1. **#54 修正**: timeMax 計算バグ（月末イベントが取得されない）
-2. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+1. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+2. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## アカウント情報
 

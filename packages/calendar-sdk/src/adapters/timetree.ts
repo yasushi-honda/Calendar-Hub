@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@calendar-hub/shared';
 import type { Calendar, CalendarAdapter, CreateEventInput, UpdateEventInput } from '../types.js';
+import { expandRecurringEvent, instanceDateSuffix } from './timetree-recurrence.js';
 
 const BASE_URL = 'https://timetreeapp.com';
 const APP_HEADER = 'web/2.1.0/ja';
@@ -31,6 +32,7 @@ interface TimeTreeRawEvent {
   calendar_id: string;
   updated_at: number;
   created_at: number;
+  recurrences: string[]; // RRULE/EXDATE strings (e.g. ["RRULE:FREQ=WEEKLY;BYDAY=TU", "EXDATE:20220503T070000Z"])
 }
 
 interface TimeTreeV2Calendar {
@@ -214,13 +216,51 @@ export class TimeTreeAdapter implements CalendarAdapter {
       }
     }
 
-    return allEvents
-      .filter((ev) => {
-        const start = new Date(ev.start_at); // ms timestamp → Date
+    const result: CalendarEvent[] = [];
+
+    for (const ev of allEvents) {
+      const recurrences = ev.recurrences ?? [];
+      const hasRecurrence = recurrences.some((r) => r.startsWith('RRULE:'));
+
+      if (hasRecurrence) {
+        // 繰り返しイベント: RRULE展開してインスタンスを生成
+        const masterStart = new Date(ev.start_at);
+        const masterEnd = new Date(ev.end_at);
+        let instances: { start: Date; end: Date }[];
+        try {
+          instances = expandRecurringEvent(recurrences, masterStart, masterEnd, timeMin, timeMax);
+        } catch {
+          // 無効なRRULEや日付のイベントはスキップ
+          continue;
+        }
+
+        for (const instance of instances) {
+          const suffix = instanceDateSuffix(instance.start, ev.all_day);
+          result.push({
+            id: `timetree_${ev.id}${suffix}`,
+            source: 'timetree',
+            originalId: `${ev.id}${suffix}`,
+            calendarId,
+            title: ev.title || '(無題)',
+            description: ev.note || undefined,
+            start: instance.start,
+            end: instance.end,
+            isAllDay: ev.all_day,
+            status: 'confirmed',
+            location: ev.location || undefined,
+          });
+        }
+      } else {
+        // 通常イベント: 時間範囲フィルタ
+        const start = new Date(ev.start_at);
         const end = new Date(ev.end_at);
-        return start < timeMax && end > timeMin;
-      })
-      .map((ev) => this.toCalendarEvent(ev, calendarId));
+        if (start < timeMax && end > timeMin) {
+          result.push(this.toCalendarEvent(ev, calendarId));
+        }
+      }
+    }
+
+    return result;
   }
 
   async createEvent(calendarId: string, event: CreateEventInput): Promise<CalendarEvent> {

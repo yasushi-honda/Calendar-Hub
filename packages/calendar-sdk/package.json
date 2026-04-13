@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@calendar-hub/shared": "workspace:*",
-    "googleapis": "^171.4.0"
+    "googleapis": "^171.4.0",
+    "rrule": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

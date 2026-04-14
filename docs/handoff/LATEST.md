@@ -4,6 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
+| #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                |
 | #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正） |
 | #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                  |
 | #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                              |
@@ -46,8 +47,9 @@
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
 - Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: calendar-hub-api-00036（PR #61 + #64 修正含む、手動デプロイ 2026-04-14）
-  - 注: PR #64 マージ後の再デプロイは未実施（00036は #64 のコードを含むが、main先端 73441b0 相当の再デプロイは次セッション推奨）
+- API最新リビジョン: calendar-hub-api-00038-d6x（GitHub Actions自動デプロイ経由、2026-04-14）
+- Web最新リビジョン: calendar-hub-web-00013-crs
+- デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）
 
 ## オープンIssue
 
@@ -55,14 +57,14 @@
 | -------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
 | [#65](https://github.com/yasushi-honda/Calendar-Hub/issues/65) | 同期ヘルスチェックの自動アラート化（tt!=tagged / RRULE-SKIP検知） | P0, enhancement |
 
-**#66 CI/CD自動デプロイ化は対応中（feat/issue-66-cicd-auto-deploy ブランチ）。** 残る#65（監視アラート）完了までは受動的な報告待ちでは静かな同期欠落を検知できない点に注意。
+**#66 CI/CD自動デプロイ化は完了（PR #68 / 初回自動デプロイ成功: revision 00038 / 00013）。** 残る#65（監視アラート）完了までは受動的な報告待ちでは静かな同期欠落を検知できない点に注意。
 
 ## 次セッションの推奨アクション
 
-1. **#66 PR完了確認** — 初回main pushでのE2E動作検証、branch protectionの required check 更新
-2. **#65 同期ヘルスチェック自動アラート** — `[RRULE-SKIP]` と `tt != tagged` をCloud Monitoringで検知
-3. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+1. **#65 同期ヘルスチェック自動アラート** — `[RRULE-SKIP]` と `tt != tagged` をCloud Monitoringで検知
+2. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+4. Node.js 20 → Node.js 24 移行（GitHub Actions 非推奨警告対応、2026-09-16まで）
 
 ## 技術メモ（今セッション）
 

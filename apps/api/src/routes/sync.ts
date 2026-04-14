@@ -85,7 +85,11 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           tagMap,
         } = await fetchGoogleEvents(ggAdapter, config.googleCalendarId, timeMin, timeMax);
 
+        const ttRecurring = ttEvents.filter((e) => /_R\d{8}/.test(e.originalId)).length;
         const actions = buildSyncActions(ttEvents, ggEvents, taggedGoogleIds, tagMap);
+        console.log(
+          `[SYNC-STATS] tt=${ttEvents.length} (recurring=${ttRecurring}) gg=${ggEvents.length} tagged=${taggedGoogleIds.size} actions: c=${actions.toCreate.length} u=${actions.toUpdate.length} d=${actions.toDelete.length}`,
+        );
         const stats = await executeSyncActions(ggAdapter, config.googleCalendarId, actions);
 
         totalCreated += stats.created;

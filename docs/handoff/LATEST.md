@@ -53,18 +53,16 @@
 
 | #                                                              | タイトル                                                          | ラベル          |
 | -------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
-| [#66](https://github.com/yasushi-honda/Calendar-Hub/issues/66) | CI/CD自動デプロイ化（mainマージ→Cloud Run自動反映）               | P0, enhancement |
 | [#65](https://github.com/yasushi-honda/Calendar-Hub/issues/65) | 同期ヘルスチェックの自動アラート化（tt!=tagged / RRULE-SKIP検知） | P0, enhancement |
 
-**本番運用として上記2件が未対応のため、現状は「安定運用可能」水準に未到達。** 受動的な報告待ちでは静かな同期欠落（今回のPR #64のようなケース）を検知できない。
+**#66 CI/CD自動デプロイ化は対応中（feat/issue-66-cicd-auto-deploy ブランチ）。** 残る#65（監視アラート）完了までは受動的な報告待ちでは静かな同期欠落を検知できない点に注意。
 
 ## 次セッションの推奨アクション
 
-1. **#66 CI/CD自動デプロイ化** — 今回判明した「PR #61が本番未反映」再発防止のため最優先
+1. **#66 PR完了確認** — 初回main pushでのE2E動作検証、branch protectionの required check 更新
 2. **#65 同期ヘルスチェック自動アラート** — `[RRULE-SKIP]` と `tt != tagged` をCloud Monitoringで検知
-3. PR #64 反映デプロイ状況の最終確認（`[SYNC-STATS]` 1日観測 → RRULE-SKIP 0件なら安定判定）
-4. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
+3. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## 技術メモ（今セッション）
 

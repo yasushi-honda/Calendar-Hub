@@ -1,0 +1,151 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GCP_REGION: asia-northeast1
+  REPO_NAME: calendar-hub
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm turbo build
+      - name: Lint
+        run: pnpm lint
+      - name: Type Check
+        run: pnpm turbo type-check
+      - name: Test
+        run: pnpm test
+
+  deploy-api:
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      api_url: ${{ steps.deploy.outputs.url }}
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Web URL for CORS
+        id: weburl
+        run: |
+          WEB_URL=$(gcloud run services describe calendar-hub-web \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --format="value(status.url)" 2>/dev/null || echo "http://localhost:3000")
+          echo "url=${WEB_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Cloud Build submit (API image)
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPO_NAME}/calendar-hub-api:${COMMIT_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          gcloud builds submit \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --config=infra/cloudbuild-api.yaml \
+            --substitutions="_IMAGE=${IMAGE}" \
+            .
+
+      - name: Deploy API to Cloud Run
+        id: deploy
+        env:
+          WEB_URL: ${{ steps.weburl.outputs.url }}
+        run: |
+          gcloud run deploy calendar-hub-api \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --image="$IMAGE" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},FRONTEND_URL=${WEB_URL}" \
+            --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
+          URL=$(gcloud run services describe calendar-hub-api \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --format="value(status.url)")
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+  deploy-web:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      API_URL: ${{ needs.deploy-api.outputs.api_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Cloud Build submit (Web image)
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPO_NAME}/calendar-hub-web:${COMMIT_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          gcloud builds submit \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --config=infra/cloudbuild-web.yaml \
+            --substitutions="_IMAGE=${IMAGE},_API_URL=${API_URL}" \
+            .
+
+      - name: Deploy Web to Cloud Run
+        run: |
+          gcloud run deploy calendar-hub-web \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --image="$IMAGE" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=3000 \
+            --memory=512Mi \
+            --cpu=1 \
+            --min-instances=0 \
+            --max-instances=3 \
+            --set-env-vars="NEXT_PUBLIC_API_URL=${API_URL},NEXT_PUBLIC_FIREBASE_PROJECT_ID=${GCP_PROJECT_ID}"

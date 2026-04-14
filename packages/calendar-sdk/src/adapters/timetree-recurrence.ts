@@ -29,8 +29,12 @@ export function expandRecurringEvent(
       const rule = rrulestr(line, { dtstart: masterStart });
       rruleSet.rrule(rule as InstanceType<typeof pkg.RRule>);
     } else if (line.startsWith('EXDATE:')) {
+      // TimeTreeは1行のEXDATEに複数日をカンマで並べる（RFC 5545準拠）
       const dateStr = line.replace('EXDATE:', '');
-      rruleSet.exdate(parseExdate(dateStr));
+      for (const d of dateStr.split(',')) {
+        const trimmed = d.trim();
+        if (trimmed) rruleSet.exdate(parseExdate(trimmed));
+      }
     }
   }
 

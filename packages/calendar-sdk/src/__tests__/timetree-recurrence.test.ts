@@ -115,6 +115,26 @@ describe('expandRecurringEvent', () => {
     expect(result.length).toBe(3);
   });
 
+  it('カンマ区切りEXDATE: 1行に複数除外日をRFC5545準拠で指定', () => {
+    // TimeTree APIが実際に返す形式: EXDATE:日付1,日付2,日付3
+    const masterStart = new Date('2026-04-14T00:00:00Z'); // 火曜
+    const masterEnd = new Date('2026-04-14T01:00:00Z');
+    const recurrences = [
+      'RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20260601',
+      'EXDATE:20260421T000000Z,20260505T000000Z,20260519T000000Z',
+    ];
+
+    const result = expandRecurringEvent(recurrences, masterStart, masterEnd, timeMin, timeMax);
+
+    // 4/14, 4/28, 5/12, 5/26 = 4週（4/21, 5/5, 5/19除外）
+    expect(result.length).toBe(4);
+    const startDates = result.map((r) => r.start.toISOString());
+    expect(startDates).not.toContain('2026-04-21T00:00:00.000Z');
+    expect(startDates).not.toContain('2026-05-05T00:00:00.000Z');
+    expect(startDates).not.toContain('2026-05-19T00:00:00.000Z');
+    expect(startDates).toContain('2026-04-14T00:00:00.000Z');
+  });
+
   it('空のrecurrencesは空配列を返す', () => {
     const result = expandRecurringEvent([], new Date(), new Date(), timeMin, timeMax);
     expect(result).toEqual([]);

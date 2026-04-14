@@ -229,8 +229,13 @@ export class TimeTreeAdapter implements CalendarAdapter {
         let instances: { start: Date; end: Date }[];
         try {
           instances = expandRecurringEvent(recurrences, masterStart, masterEnd, timeMin, timeMax);
-        } catch {
-          // 無効なRRULEや日付のイベントはスキップ
+        } catch (err) {
+          // 無効なRRULEや日付のイベントはスキップ。同じ失敗の再発検知のため最小情報を残す
+          console.error(
+            `[RRULE-SKIP] calendar=${calendarId} event=${ev.id} title="${ev.title}" recurrences=${JSON.stringify(
+              recurrences,
+            )} err=${err instanceof Error ? err.message : String(err)}`,
+          );
           continue;
         }
 

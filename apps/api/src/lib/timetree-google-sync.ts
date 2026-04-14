@@ -5,6 +5,29 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { nanoid } from 'nanoid';
 
 /**
+ * sync 完了後の整合性チェック。
+ *
+ * 健全: tt == taggedBefore + created - deleted
+ * 乖離: 何らかの理由でTT側の件数が反映できていない（静かな欠落疑い）
+ *
+ * 前提:
+ * - `stats.updated`（タグのみ更新）は taggedBefore に既に含まれるため計算に入れない。
+ *   更新で tag を付け替える仕様変更が入った場合は再検討が必要。
+ * - `ttCount` は展開後の有効なTTイベント数。RRULE展開で SKIP されたイベントは含まれないため、
+ *   SYNC-GAP と RRULE-SKIP は独立したアラートとして扱う（ADR-006 参照）。
+ */
+export function computeSyncGap(input: {
+  ttCount: number;
+  taggedBefore: number;
+  created: number;
+  deleted: number;
+}): { hasGap: boolean; diff: number } {
+  const postSyncTagged = input.taggedBefore + input.created - input.deleted;
+  const diff = input.ttCount - postSyncTagged;
+  return { hasGap: diff !== 0, diff };
+}
+
+/**
  * TimeTreeからイベント取得。
  * 全カレンダーの全イベントを集約。
  */

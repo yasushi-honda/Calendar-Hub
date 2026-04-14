@@ -1,0 +1,24 @@
+displayName: '[Calendar Hub] RRULE-SKIP detected'
+documentation:
+  content: |
+    TimeTreeの繰り返しイベント展開で例外が発生してスキップされた。
+    過去に[SYNC-GAP]として検出できなかった「静かな欠落」の原因。
+
+    対応: Cloud Loggingで `textPayload:"[RRULE-SKIP]"` を検索し、
+    recurrences の内容と err メッセージを確認。必要に応じて timetree-recurrence.ts を修正。
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: 'rrule_skip_count >= 1 in 1h'
+    conditionThreshold:
+      filter: 'metric.type="logging.googleapis.com/user/calendar_hub_rrule_skip" AND resource.type="cloud_run_revision"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0
+      duration: 0s
+      aggregations:
+        - alignmentPeriod: 3600s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+alertStrategy:
+  autoClose: 86400s
+enabled: true

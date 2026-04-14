@@ -1,0 +1,26 @@
+displayName: '[Calendar Hub] Sync job failure'
+documentation:
+  content: |
+    TimeTree→Google 同期ジョブが丸ごと失敗した（`Sync failed for ...` ログ）。
+    個別configの失敗がrecordSyncLogで`status=failed`記録されている状態。
+
+    対応: `gcloud logging read 'textPayload=~"^Sync failed for"'` で原因特定。
+    - 認証失敗（TimeTree session / Google OAuth）→ トークン再登録
+    - API rate limit → 次回サイクルで回復可能
+    - コードバグ → hotfix
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: 'sync_failed_count >= 1 in 1min (≒即時)'
+    conditionThreshold:
+      filter: 'metric.type="logging.googleapis.com/user/calendar_hub_sync_failed" AND resource.type="cloud_run_revision"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0
+      duration: 0s
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+alertStrategy:
+  autoClose: 86400s
+enabled: true

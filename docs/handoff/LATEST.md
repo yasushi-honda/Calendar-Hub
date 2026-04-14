@@ -1,10 +1,11 @@
-# Calendar Hub ハンドオフ (2026-04-13)
+# Calendar Hub ハンドオフ (2026-04-14)
 
 ## 最近の完了作業（直近1週間）
 
-| PR  | Issue | 内容                                                       |
-| --- | ----- | ---------------------------------------------------------- |
-| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応 |
+| PR  | Issue | 内容                                                                   |
+| --- | ----- | ---------------------------------------------------------------------- |
+| -   | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035） |
+| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応             |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -26,9 +27,9 @@
 
 ## 品質状態
 
-- テスト: 200件全PASS（最終確認: 2026-04-13）
+- テスト: 200件全PASS（最終確認: 2026-04-14）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main 35e0748 / 2026-04-13）
+- CI: GitHub Actions グリーン（最新: main d686622 / 2026-04-13）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -44,7 +45,8 @@
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
 - Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: calendar-hub-api-00032-ftb（繰り返しイベント対応済み、手動デプロイ）
+- API最新リビジョン: calendar-hub-api-00035（PR #61修正含む、commit d686622、手動デプロイ 2026-04-14）
+  - 注: 00032-ftb は実態として commit 4f75b61（#61修正を含まない旧コード）だった。前回ハンドオフ誤記。2026-04-14に 00033→00035 で再デプロイ済み。
 
 ## オープンIssue
 
@@ -57,6 +59,12 @@
 3. CI/CDパイプライン構築（mainマージ時に自動デプロイ）— 現在は手動 `bash infra/deploy-api.sh`
 
 ## 技術メモ（今セッション）
+
+### 観測ログ `[SYNC-STATS]`（2026-04-14 追加）
+
+- 場所: `apps/api/src/routes/sync.ts` の `/timetree-to-google` ハンドラ内
+- 形式: `[SYNC-STATS] tt=N (recurring=M) gg=K tagged=T actions: c=X u=Y d=Z`
+- 用途: 同期が0件のとき、「TT側に無い」「既に全マッチ」「タグ欠落」のどれかを判別可能。
 
 ### TimeTree繰り返しイベント同期（#61）
 

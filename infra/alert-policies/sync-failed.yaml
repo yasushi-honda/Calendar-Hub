@@ -11,14 +11,14 @@ documentation:
   mimeType: text/markdown
 combiner: OR
 conditions:
-  - displayName: 'sync_failed_count >= 1 in 10min'
+  - displayName: 'sync_failed_count >= 1 in 1min (≒即時)'
     conditionThreshold:
       filter: 'metric.type="logging.googleapis.com/user/calendar_hub_sync_failed" AND resource.type="cloud_run_revision"'
       comparison: COMPARISON_GT
       thresholdValue: 0
       duration: 0s
       aggregations:
-        - alignmentPeriod: 600s
+        - alignmentPeriod: 60s
           perSeriesAligner: ALIGN_SUM
           crossSeriesReducer: REDUCE_SUM
 alertStrategy:

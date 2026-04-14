@@ -102,8 +102,10 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           deleted: stats.deleted,
         });
         if (gap.hasGap) {
+          // taggedBefore も出力することで、diff<0（過剰tagged残存）のケースで
+          // 「元から多かったのか」「delete漏れか」を切り分けやすくする
           console.error(
-            `[SYNC-GAP] calendar=${config.googleCalendarId} tt=${ttEvents.length} diff=${gap.diff} skipped=${stats.skipped}`,
+            `[SYNC-GAP] calendar=${config.googleCalendarId} tt=${ttEvents.length} taggedBefore=${taggedGoogleIds.size} diff=${gap.diff} created=${stats.created} deleted=${stats.deleted} skipped=${stats.skipped}`,
           );
         }
 

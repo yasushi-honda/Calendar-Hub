@@ -62,7 +62,30 @@ gap.hasGap = (gap.diff !== 0)
 
 - ログベースメトリクスは Cloud Logging からの抽出に数分遅延
 - メール通知は即時性が低い（Slack化は Issue として別途）
-- `computeSyncGap` は `stats.updated`（タグのみ更新）を考慮しない。tagged前の数に含まれるため問題ないが、将来の仕様変更時に見直しが必要
+- `computeSyncGap` は `stats.updated`（タグのみ更新）を考慮しない。tagged前の数に含まれる前提のため現状は問題なし（JSDoc に明記）。更新で tag を付け替えるロジックが入る場合は要見直し
+
+### アラート間の独立性
+
+**SYNC-GAP は RRULE-SKIP を包含しない。** `computeSyncGap` に渡す `ttCount` は
+`ttEvents.length`（展開後配列長）であり、RRULE展開で例外が発生して SKIP されたイベントは
+`ttEvents` に含まれない。結果として「RRULE-SKIP が発生したが SYNC-GAP は diff=0」という
+状態が起こり得る。
+
+これは意図的な設計: RRULE-SKIP と SYNC-GAP は**独立したアラート**として両立させ、
+どちらか一方の見逃しを相互に補完する。片方のアラートが「欠落全てを捕捉する」前提を
+置かない。
+
+### 閾値の根拠
+
+| 項目                                  | 設計値                         | 根拠                                                                                   |
+| ------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
+| RRULE-SKIP の `alignmentPeriod=3600s` | 1時間                          | 例外型のイベントは日次レベルで問題ないが、ライブラリバグ等の連続発火に備え短めに       |
+| Sync failed の `alignmentPeriod=60s`  | ほぼ即時                       | Issue #65 AC「即時」要件。認証失敗等の一時障害で誤報する可能性は許容                   |
+| SYNC-GAP の `duration=900s`           | 3サイクル（sync 5min間隔想定） | 1サイクル単発は実行タイミング / Cloud Logging 遅延の揺らぎで発生しうる。継続時のみ発報 |
+| SYNC-GAP の `alignmentPeriod=300s`    | 1サイクル分                    | 集計窓と sync 周期を一致させる                                                         |
+
+`syncIntervalMinutes` 変更時は 「3サイクル」の意味が変わるため、ユーザー設定が 5 分以外に
+なる場合は `duration` の見直しが必要（現状は全 config デフォルト値を使用）。
 
 ## Implementation
 

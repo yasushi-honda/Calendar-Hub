@@ -61,12 +61,18 @@ create_or_update_metric \
 
 # --- 2. Notification channel (email) ---
 
-# 既存のチャネルを検索（gcloud --filter の labels.email_address が不安定なため
-# 全取得 → ローカルで email で絞り込む）
-EXISTING_CHANNEL=$(gcloud alpha monitoring channels list \
+# 既存のチャネルを検索。権限失敗を NOT_FOUND と取り違えて重複作成しないよう、
+# gcloud list の終了コードを明示的に確認する。
+# csv[no-heading] で区切りをカンマに固定（value(...) はgcloudバージョン依存でタブ/空白）。
+if ! channels_out=$(gcloud alpha monitoring channels list \
   --project="$PROJECT_ID" \
-  --format="value(name,labels.email_address)" 2>/dev/null \
-  | awk -v email="$NOTIFICATION_EMAIL" '$2 == email {print $1; exit}' || true)
+  --format="csv[no-heading](name,labels.email_address)" 2>&1); then
+  echo "ERROR: failed to list notification channels (auth or API access issue):" >&2
+  echo "$channels_out" >&2
+  exit 1
+fi
+EXISTING_CHANNEL=$(echo "$channels_out" \
+  | awk -F, -v email="$NOTIFICATION_EMAIL" '$2 == email {print $1; exit}')
 
 if [ -n "$EXISTING_CHANNEL" ]; then
   echo "Using existing notification channel: $EXISTING_CHANNEL"
@@ -82,24 +88,46 @@ else
   echo "Created: $CHANNEL_NAME"
 fi
 
+# verify 状態チェック: 未 VERIFIED だと alert は発火しても通知が届かない
+VERIFY_STATUS=$(gcloud alpha monitoring channels describe "$CHANNEL_NAME" \
+  --project="$PROJECT_ID" --format="value(verificationStatus)" 2>/dev/null || echo "UNKNOWN")
+if [ "$VERIFY_STATUS" != "VERIFIED" ]; then
+  echo ""
+  echo "⚠️  WARNING: Notification channel is NOT verified (status='$VERIFY_STATUS')"
+  echo "   GCP sent a verification email to $NOTIFICATION_EMAIL on channel creation."
+  echo "   Click the link in that email to enable delivery."
+  echo "   Until verified, alert policies fire but emails are silently dropped."
+  echo "   Status check:"
+  echo "     gcloud alpha monitoring channels describe $CHANNEL_NAME --project=$PROJECT_ID --format='value(verificationStatus)'"
+  echo ""
+fi
+
 # --- 3. Alert policies ---
 
 apply_policy() {
   local policy_file="$1"
   local display_name
-  display_name=$(grep '^displayName:' "$policy_file" | head -1 | sed 's/displayName: *//; s/^"//; s/"$//')
+  display_name=$(grep '^displayName:' "$policy_file" | head -1 | sed "s/displayName: *//; s/^['\"]//; s/['\"]$//")
 
-  # 既存ポリシーを表示名で検索（--filter で displayName の角括弧が扱いづらいため、
-  # 全取得してローカルで完全一致検索する）
-  local existing
-  existing=$(gcloud alpha monitoring policies list \
+  # 既存ポリシーを表示名で検索。権限失敗時は明示的にエラー終了（重複作成防止）。
+  # csv[no-heading] で区切りをカンマに固定（displayName にカンマを含まない前提）。
+  local policies_out
+  if ! policies_out=$(gcloud alpha monitoring policies list \
     --project="$PROJECT_ID" \
-    --format="value(name,displayName)" 2>/dev/null \
-    | awk -F'\t' -v name="$display_name" '$2 == name {print $1; exit}' || true)
+    --format="csv[no-heading](name,displayName)" 2>&1); then
+    echo "ERROR: failed to list alert policies:" >&2
+    echo "$policies_out" >&2
+    exit 1
+  fi
+  local existing
+  existing=$(echo "$policies_out" \
+    | awk -F, -v name="$display_name" '$2 == name {print $1; exit}')
 
-  # ポリシーファイルに notificationChannels を動的に追加して適用
+  # ポリシーファイルに notificationChannels を動的に追加して適用。
+  # trap で関数終了時に確実にクリーンアップ（update/create 失敗時も /tmp にゴミを残さない）。
   local tmpfile
   tmpfile=$(mktemp)
+  trap "rm -f '$tmpfile'" RETURN
   {
     cat "$policy_file"
     echo "notificationChannels:"
@@ -117,8 +145,6 @@ apply_policy() {
       --project="$PROJECT_ID" \
       --policy-from-file="$tmpfile"
   fi
-
-  rm -f "$tmpfile"
 }
 
 apply_policy "${SCRIPT_DIR}/alert-policies/rrule-skip.yaml"
@@ -132,5 +158,5 @@ echo "Verify:"
 echo "  gcloud logging metrics list --project=$PROJECT_ID --filter='name:calendar_hub'"
 echo "  gcloud alpha monitoring policies list --project=$PROJECT_ID --filter='displayName:Calendar Hub'"
 echo ""
-echo "Test notification delivery:"
-echo "  gcloud alpha monitoring channels verify $CHANNEL_NAME --project=$PROJECT_ID"
+echo "Verification: check inbox of $NOTIFICATION_EMAIL and click the GCP verification link."
+echo "  Status check: gcloud alpha monitoring channels describe $CHANNEL_NAME --project=$PROJECT_ID"

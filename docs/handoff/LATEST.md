@@ -58,14 +58,43 @@
 
 ## オープンIssue
 
-P0 のオープンはなし。#65/#66 ともに対応完了。
+本番運用棚卸しで判明した残リスクを Issue 化（2026-04-14）。
+
+### P0（早急対応）
+
+| #                                                              | タイトル                                                   |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| [#72](https://github.com/yasushi-honda/Calendar-Hub/issues/72) | アラート発火の実地確認（end-to-end検証）                   |
+| [#73](https://github.com/yasushi-honda/Calendar-Hub/issues/73) | Firestore バックアップ・PITR設定                           |
+| [#74](https://github.com/yasushi-honda/Calendar-Hub/issues/74) | Gmail OAuth トークン失効時の可視化（静かな送信失敗の検知） |
+
+### P1（次週対応）
+
+| #                                                              | タイトル                                 |
+| -------------------------------------------------------------- | ---------------------------------------- |
+| [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト                |
+| [#76](https://github.com/yasushi-honda/Calendar-Hub/issues/76) | GCP 予算アラート・コストモニタリング     |
+| [#77](https://github.com/yasushi-honda/Calendar-Hub/issues/77) | API エラー率・レイテンシ監視（sync以外） |
+| [#78](https://github.com/yasushi-honda/Calendar-Hub/issues/78) | ロールバック手順の実地確認               |
+
+### P2（中期対応）
+
+| #                                                              | タイトル                                        |
+| -------------------------------------------------------------- | ----------------------------------------------- |
+| [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79) | TimeTree session 切れの自動検知と再ログイン手順 |
+| [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
+| [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
+
+**本番運用として #72/#73/#74 の P0 3件は #65/#66 と同等リスク**のため、次セッションで優先対応する。
 
 ## 次セッションの推奨アクション
 
-1. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-2. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
-3. Node.js 20 → Node.js 24 移行（GitHub Actions 非推奨警告対応、2026-09-16まで）
-4. アラート通知チャネル拡張（Slack / PagerDuty、現状は Email のみ）
+1. **#72 アラート実地発火テスト** — 設定のみで終わっているアラート3種が本当にメール着弾するか検証
+2. **#73 Firestore PITR + 日次バックアップ** — データ損失時のリカバリ手段確立
+3. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
+4. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
+5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+6. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 
 ## 技術メモ（今セッション）
 

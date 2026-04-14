@@ -93,13 +93,47 @@ VERIFY_STATUS=$(gcloud alpha monitoring channels describe "$CHANNEL_NAME" \
   --project="$PROJECT_ID" --format="value(verificationStatus)" 2>/dev/null || echo "UNKNOWN")
 if [ "$VERIFY_STATUS" != "VERIFIED" ]; then
   echo ""
-  echo "⚠️  WARNING: Notification channel is NOT verified (status='$VERIFY_STATUS')"
-  echo "   GCP sent a verification email to $NOTIFICATION_EMAIL on channel creation."
-  echo "   Click the link in that email to enable delivery."
-  echo "   Until verified, alert policies fire but emails are silently dropped."
-  echo "   Status check:"
-  echo "     gcloud alpha monitoring channels describe $CHANNEL_NAME --project=$PROJECT_ID --format='value(verificationStatus)'"
-  echo ""
+  echo "⚠️  Notification channel is NOT verified (status='$VERIFY_STATUS')"
+  echo "   Sending verification code to $NOTIFICATION_EMAIL ..."
+
+  # sendVerificationCode API を明示的に呼ぶ（GCP は channel 作成時に自動送信しない）
+  ACCESS_TOKEN=$(gcloud auth print-access-token 2>/dev/null)
+  if [ -z "$ACCESS_TOKEN" ]; then
+    echo "   ERROR: Failed to obtain access token; cannot trigger verification email." >&2
+  else
+    if curl -sSf -X POST \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -H "Content-Type: application/json" \
+      "https://monitoring.googleapis.com/v3/${CHANNEL_NAME}:sendVerificationCode" \
+      -d '{}' >/dev/null; then
+      echo "   ✓ Verification email sent."
+    else
+      echo "   ERROR: sendVerificationCode API call failed." >&2
+    fi
+  fi
+
+  cat <<EOF
+
+   Next steps:
+   1. Check inbox of $NOTIFICATION_EMAIL for a mail from "Google Cloud Alerting"
+      (subject: "Your alerting verification code").
+   2. Extract the code (format: G-XXXXXX) and submit it:
+
+      CODE=G-XXXXXX
+      curl -X POST \\
+        -H "Authorization: Bearer \$(gcloud auth print-access-token)" \\
+        -H "Content-Type: application/json" \\
+        "https://monitoring.googleapis.com/v3/${CHANNEL_NAME}:verify" \\
+        -d "{\\"code\\": \\"\$CODE\\"}"
+
+   3. Confirm verified:
+        gcloud alpha monitoring channels describe ${CHANNEL_NAME} \\
+          --project=${PROJECT_ID} --format='value(verificationStatus)'
+      Expected output: VERIFIED
+
+   Until VERIFIED, alert policies fire but emails are silently dropped.
+
+EOF
 fi
 
 # --- 3. Alert policies ---
@@ -158,5 +192,6 @@ echo "Verify:"
 echo "  gcloud logging metrics list --project=$PROJECT_ID --filter='name:calendar_hub'"
 echo "  gcloud alpha monitoring policies list --project=$PROJECT_ID --filter='displayName:Calendar Hub'"
 echo ""
-echo "Verification: check inbox of $NOTIFICATION_EMAIL and click the GCP verification link."
-echo "  Status check: gcloud alpha monitoring channels describe $CHANNEL_NAME --project=$PROJECT_ID"
+echo "Channel verification (if not already VERIFIED above):"
+echo "  Status check: gcloud alpha monitoring channels describe $CHANNEL_NAME \\"
+echo "    --project=$PROJECT_ID --format='value(verificationStatus)'"

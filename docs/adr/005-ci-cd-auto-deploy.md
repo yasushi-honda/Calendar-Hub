@@ -57,13 +57,15 @@ type-check / test が再検証される構造。
   - 属性条件: `assertion.repository_owner == 'yasushi-honda'`
   - 属性マッピング: `repository`, `repository_owner`, `ref`, `actor` を propagate
 - SA: `github-deployer@calendar-hub-prod.iam.gserviceaccount.com`
-- SA Roles:
+- SA Roles（最終構成、初回デプロイ失敗から導出した実働セット）:
   - `roles/run.admin`（Cloud Runデプロイ）
   - `roles/iam.serviceAccountUser`（Cloud Run runtime SA の actAs）
   - `roles/artifactregistry.writer`（イメージpush）
   - `roles/cloudbuild.builds.editor`（Cloud Build submit）
-  - `roles/storage.objectAdmin`（Cloud Build ソースバケット）
-  - `roles/logging.logWriter`
+  - `roles/storage.admin`（regional Cloud Build ソースバケット作成・管理。objectAdminでは不足）
+  - `roles/serviceusage.serviceUsageAdmin`（Cloud Build submit時の `serviceusage.services.use` 権限）
+  - `roles/viewer`（`gcloud builds submit` のログストリーミング。これが無いと build 自体は成功しても gcloud が exit 1 で終了）
+  - `roles/logging.logWriter` / `roles/logging.viewer`
   - `roles/secretmanager.secretAccessor`
 - WIF ↔ SA binding: `attribute.repository/yasushi-honda/Calendar-Hub` のみ
 

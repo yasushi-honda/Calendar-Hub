@@ -58,10 +58,29 @@ jobs:
       - name: Resolve Web URL for CORS
         id: weburl
         run: |
+          # 既存Webサービス未存在（初回ブートストラップ）のみ空を許容。
+          # 他の失敗（権限/API無効/ネットワーク）は localhost にフォールバックせず失敗させる
+          set +e
           WEB_URL=$(gcloud run services describe calendar-hub-web \
             --project="$GCP_PROJECT_ID" \
             --region="$GCP_REGION" \
-            --format="value(status.url)" 2>/dev/null || echo "http://localhost:3000")
+            --format="value(status.url)" 2>describe_err.log)
+          DESCRIBE_EXIT=$?
+          set -e
+          if [ "$DESCRIBE_EXIT" -ne 0 ]; then
+            if grep -q "NOT_FOUND\|Cannot find service" describe_err.log; then
+              echo "::warning::calendar-hub-web not yet deployed; FRONTEND_URL will be empty on first bootstrap"
+              WEB_URL=""
+            else
+              echo "::error::failed to describe calendar-hub-web"
+              cat describe_err.log
+              exit 1
+            fi
+          fi
+          if [ -z "$WEB_URL" ] && [ "${ALLOW_BOOTSTRAP:-false}" != "true" ]; then
+            echo "::error::Web URL empty and ALLOW_BOOTSTRAP!=true; refusing to deploy API with placeholder CORS"
+            exit 1
+          fi
           echo "url=${WEB_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Cloud Build submit (API image)
@@ -99,6 +118,10 @@ jobs:
             --project="$GCP_PROJECT_ID" \
             --region="$GCP_REGION" \
             --format="value(status.url)")
+          if [ -z "$URL" ]; then
+            echo "::error::API URL empty after deploy; aborting"
+            exit 1
+          fi
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
 
   deploy-web:
@@ -121,6 +144,14 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify API URL is set
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "::error::API_URL is empty; deploy-api output missing"
+            exit 1
+          fi
+          echo "Using API_URL=$API_URL"
 
       - name: Cloud Build submit (Web image)
         env:

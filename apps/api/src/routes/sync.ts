@@ -8,6 +8,7 @@ import {
   buildSyncActions,
   executeSyncActions,
   recordSyncLog,
+  computeSyncGap,
 } from '../lib/timetree-google-sync.js';
 import { nanoid } from 'nanoid';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -91,6 +92,20 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           `[SYNC-STATS] tt=${ttEvents.length} (recurring=${ttRecurring}) gg=${ggEvents.length} tagged=${taggedGoogleIds.size} actions: c=${actions.toCreate.length} u=${actions.toUpdate.length} d=${actions.toDelete.length}`,
         );
         const stats = await executeSyncActions(ggAdapter, config.googleCalendarId, actions);
+
+        // 事後整合性チェック: sync後に tt と (taggedBefore + created - deleted) が一致するはず。
+        // 不一致 → 同期漏れ（静かな欠落）の可能性。Cloud Monitoring alertで検知する。
+        const gap = computeSyncGap({
+          ttCount: ttEvents.length,
+          taggedBefore: taggedGoogleIds.size,
+          created: stats.created,
+          deleted: stats.deleted,
+        });
+        if (gap.hasGap) {
+          console.error(
+            `[SYNC-GAP] calendar=${config.googleCalendarId} tt=${ttEvents.length} diff=${gap.diff} skipped=${stats.skipped}`,
+          );
+        }
 
         totalCreated += stats.created;
         totalUpdated += stats.updated;

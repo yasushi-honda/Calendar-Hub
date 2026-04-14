@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildSyncActions, executeSyncActions } from '../lib/timetree-google-sync.js';
+import {
+  buildSyncActions,
+  executeSyncActions,
+  computeSyncGap,
+} from '../lib/timetree-google-sync.js';
 import type { CalendarEvent } from '@calendar-hub/shared';
 import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
 
@@ -571,6 +575,55 @@ describe('Sync Logic', () => {
 
       expect(toUpdate).toHaveLength(1);
       expect(toCreate).toHaveLength(1);
+    });
+  });
+
+  describe('computeSyncGap - post-sync consistency check', () => {
+    it('健全ケース: tagged==tt（既に全件同期済み）ならgapなし', () => {
+      const result = computeSyncGap({ ttCount: 10, taggedBefore: 10, created: 0, deleted: 0 });
+      expect(result.hasGap).toBe(false);
+      expect(result.diff).toBe(0);
+    });
+
+    it('健全ケース: 全件新規作成（tagged=0, created=tt）でgapなし', () => {
+      const result = computeSyncGap({ ttCount: 5, taggedBefore: 0, created: 5, deleted: 0 });
+      expect(result.hasGap).toBe(false);
+      expect(result.diff).toBe(0);
+    });
+
+    it('健全ケース: 削除込みでも整合（tagged=10, deleted=3, tt=7）', () => {
+      const result = computeSyncGap({ ttCount: 7, taggedBefore: 10, created: 0, deleted: 3 });
+      expect(result.hasGap).toBe(false);
+      expect(result.diff).toBe(0);
+    });
+
+    it('乖離ケース: TT側にあるがGoogleに反映できていない（created不足）→ 正のdiff', () => {
+      // 10件TT、5件tagged既存、5件作成予定だが3件しか作れなかった（2件skipped）
+      const result = computeSyncGap({ ttCount: 10, taggedBefore: 5, created: 3, deleted: 0 });
+      expect(result.hasGap).toBe(true);
+      expect(result.diff).toBe(2);
+    });
+
+    it('乖離ケース: 過剰タグ（Google側にTT対応なしのtagged残存）→ 負のdiff', () => {
+      const result = computeSyncGap({ ttCount: 5, taggedBefore: 10, created: 0, deleted: 0 });
+      expect(result.hasGap).toBe(true);
+      expect(result.diff).toBe(-5);
+    });
+
+    it('境界値: 全ゼロでもgapなし', () => {
+      const result = computeSyncGap({ ttCount: 0, taggedBefore: 0, created: 0, deleted: 0 });
+      expect(result.hasGap).toBe(false);
+      expect(result.diff).toBe(0);
+    });
+
+    it('境界値: ±1の差異でも検出する', () => {
+      const plus1 = computeSyncGap({ ttCount: 11, taggedBefore: 10, created: 0, deleted: 0 });
+      expect(plus1.hasGap).toBe(true);
+      expect(plus1.diff).toBe(1);
+
+      const minus1 = computeSyncGap({ ttCount: 9, taggedBefore: 10, created: 0, deleted: 0 });
+      expect(minus1.hasGap).toBe(true);
+      expect(minus1.diff).toBe(-1);
     });
   });
 });

@@ -1,0 +1,29 @@
+displayName: '[Calendar Hub] Sync gap (tt != tagged+created-deleted)'
+documentation:
+  content: |
+    同期サイクル事後チェックで TT側イベント数と Google側の (tagged + created - deleted)
+    が一致しなかった。静かな同期欠落の直接的指標。
+
+    閾値: 3サイクル連続（15分）検出で発報（sync間隔 5min × 3）。
+    1サイクルのみなら実行タイミング差異の可能性あり。
+
+    対応:
+    - Cloud Loggingで `[SYNC-GAP]` を検索し diff と skipped を確認
+    - diff > 0: TT側にあるのにGoogleに反映できていない → create 失敗の原因特定
+    - diff < 0: 過剰tagged残存 → delete 漏れ or 外部からのタグ汚染
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: 'sync_gap_count >= 1 for 15min'
+    conditionThreshold:
+      filter: 'metric.type="logging.googleapis.com/user/calendar_hub_sync_gap" AND resource.type="cloud_run_revision"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0
+      duration: 900s
+      aggregations:
+        - alignmentPeriod: 300s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+alertStrategy:
+  autoClose: 86400s
+enabled: true

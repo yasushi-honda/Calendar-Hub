@@ -2,10 +2,11 @@
 
 ## 最近の完了作業（直近1週間）
 
-| PR  | Issue | 内容                                                                   |
-| --- | ----- | ---------------------------------------------------------------------- |
-| -   | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035） |
-| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応             |
+| PR  | Issue | 内容                                                                                    |
+| --- | ----- | --------------------------------------------------------------------------------------- |
+| #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正） |
+| #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                  |
+| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                              |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -23,13 +24,13 @@
 | 全日イベント同期（TZ対応）         | ✅ 完了（#58/#59） |
 | syncIntervalMinutes スケジューラ   | ✅ 完了（#53）     |
 | timeMax 月末バグ                   | ✅ 完了（dd241df） |
-| 繰り返しイベント同期（RRULE展開）  | ✅ 完了（#61）     |
+| 繰り返しイベント同期（RRULE展開）  | ✅ 完了（#61/#64） |
 
 ## 品質状態
 
-- テスト: 200件全PASS（最終確認: 2026-04-14）
+- テスト: 201件全PASS（最終確認: 2026-04-14）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main d686622 / 2026-04-13）
+- CI: GitHub Actions グリーン（最新: main 73441b0 / 2026-04-14）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -45,33 +46,56 @@
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
 - Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: calendar-hub-api-00035（PR #61修正含む、commit d686622、手動デプロイ 2026-04-14）
-  - 注: 00032-ftb は実態として commit 4f75b61（#61修正を含まない旧コード）だった。前回ハンドオフ誤記。2026-04-14に 00033→00035 で再デプロイ済み。
+- API最新リビジョン: calendar-hub-api-00036（PR #61 + #64 修正含む、手動デプロイ 2026-04-14）
+  - 注: PR #64 マージ後の再デプロイは未実施（00036は #64 のコードを含むが、main先端 73441b0 相当の再デプロイは次セッション推奨）
 
 ## オープンIssue
 
-なし（2026-04-13時点）
+| #                                                              | タイトル                                                          | ラベル          |
+| -------------------------------------------------------------- | ----------------------------------------------------------------- | --------------- |
+| [#66](https://github.com/yasushi-honda/Calendar-Hub/issues/66) | CI/CD自動デプロイ化（mainマージ→Cloud Run自動反映）               | P0, enhancement |
+| [#65](https://github.com/yasushi-honda/Calendar-Hub/issues/65) | 同期ヘルスチェックの自動アラート化（tt!=tagged / RRULE-SKIP検知） | P0, enhancement |
+
+**本番運用として上記2件が未対応のため、現状は「安定運用可能」水準に未到達。** 受動的な報告待ちでは静かな同期欠落（今回のPR #64のようなケース）を検知できない。
 
 ## 次セッションの推奨アクション
 
-1. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
-2. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
-3. CI/CDパイプライン構築（mainマージ時に自動デプロイ）— 現在は手動 `bash infra/deploy-api.sh`
+1. **#66 CI/CD自動デプロイ化** — 今回判明した「PR #61が本番未反映」再発防止のため最優先
+2. **#65 同期ヘルスチェック自動アラート** — `[RRULE-SKIP]` と `tt != tagged` をCloud Monitoringで検知
+3. PR #64 反映デプロイ状況の最終確認（`[SYNC-STATS]` 1日観測 → RRULE-SKIP 0件なら安定判定）
+4. 公開予約ページで実際に予約テスト（スロット選択 → フォーム入力 → 予約確定 → メール受信確認）
+5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化（calendars.ts, ai.ts, public-booking.ts）
 
 ## 技術メモ（今セッション）
 
-### 観測ログ `[SYNC-STATS]`（2026-04-14 追加）
+### TimeTree繰り返しイベント同期の不具合連鎖（2026-04-14）
 
-- 場所: `apps/api/src/routes/sync.ts` の `/timetree-to-google` ハンドラ内
-- 形式: `[SYNC-STATS] tt=N (recurring=M) gg=K tagged=T actions: c=X u=Y d=Z`
-- 用途: 同期が0件のとき、「TT側に無い」「既に全マッチ」「タグ欠落」のどれかを判別可能。
+ユーザー報告「2026-04-14以降の繰り返しイベントが未反映」の調査で**2つの独立した問題**が連鎖していたことが判明：
 
-### TimeTree繰り返しイベント同期（#61）
+1. **デプロイ漏れ（PR #63で対応）** — PR #61（RRULE展開）の修正がそもそも本番に入っていなかった。revision 00032-ftb は commit 4f75b61（#61前）でビルドされており、前回ハンドオフの「繰り返しイベント対応済み」記載が誤り。
+2. **カンマ区切りEXDATE未対応（PR #64で対応）** — TimeTreeはRFC 5545準拠で1行EXDATEに複数日をカンマ並列（例: `EXDATE:20260505T000000Z,20260526T000000Z,...`）。旧 `parseExdate` は単一値想定で `Invalid Date` を生成 → `rrule.between()` 内で `RangeError: Invalid date passed to DateWithZone` → `try/catch` で握り潰され、該当マスターの全インスタンスが静かに消失。
 
-- **根本原因**: TimeTree API `/events/sync` は繰り返しイベントをマスター1件のみ返す。`recurrences`フィールドにRRULE文字列を格納。アダプターがこれを無視し、`start_at`（初回日時、多くは数年前）で時間範囲フィルタしていたため全除外。
-- **修正**: `rrule`ライブラリでRRULE/EXDATEを解析、同期期間内のインスタンスを個別イベントとして展開。ID形式: `{masterId}_R{YYYYMMDD}`（決定論的）。
-- **注意**: `rrule`はCJSモジュールのためデフォルトインポート必須（`import pkg from 'rrule'`）。無効なRRULE/日付は`try-catch`でスキップ。
-- **GCPアカウント**: gcloud操作時は `hy.unimail.11@gmail.com` に切り替え必要（.envrcの`sasaki.system0801`にはcalendar-hub-prodの権限なし）
+### `[SYNC-STATS]` / `[RRULE-SKIP]` 観測ログ
+
+- 場所: `apps/api/src/routes/sync.ts` / `packages/calendar-sdk/src/adapters/timetree.ts`
+- `[SYNC-STATS]` 形式: `tt=N (recurring=M) gg=K tagged=T actions: c=X u=Y d=Z`
+  - 同期結果0件時に「TT側に無い」「既に全マッチ」「タグ欠落」を判別可能
+- `[RRULE-SKIP]` 形式: `calendar=X event=Y title="..." recurrences=[...] err=...`
+  - 今後の静かなスキップ再発を即座に検知するため `console.error` で出力
+- 両ログは Cloud Logging で検索可能。次ステップ #65 でアラート化予定。
+
+### TimeTree繰り返しイベント展開の実装要点（#61 + #64）
+
+- TimeTree API `/events/sync` は繰り返しイベントをマスター1件のみ返す。`recurrences`フィールドに RRULE/EXDATE 文字列配列を格納。
+- `rrule` ライブラリで解析、同期期間内のインスタンスを個別イベントとして展開。ID形式: `{masterId}_R{YYYYMMDD[THHmmss]}`（決定論的）。
+- `rrule` はCJSモジュールのためデフォルトインポート必須（`import pkg from 'rrule'`）。
+- EXDATE は RFC 5545 準拠のカンマ区切りに対応（`split(',')` で分解して各日付を `rruleSet.exdate()` へ）。
+- 無効なRRULE/日付は `try-catch` でスキップし `[RRULE-SKIP]` で可視化。
+
+### 運用メモ
+
+- **GCPアカウント**: gcloud操作時は `hy.unimail.11@gmail.com` に切り替え必要（`.envrc` の `sasaki.system0801` には calendar-hub-prod の権限なし）
+- **デプロイ**: `bash infra/deploy-api.sh`（`git rev-parse --short HEAD` をイメージタグにするため、デプロイ前に必ず `git checkout main && git pull` 必須）
 
 ## アカウント情報
 

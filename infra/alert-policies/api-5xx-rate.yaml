@@ -1,0 +1,38 @@
+displayName: '[Calendar Hub] API 5xx errors'
+documentation:
+  content: |
+    Cloud Run の API サービス (`calendar-hub-api`) で 5xx が 5 分間で 3 件以上発生。
+    sync 経路以外も含む全ルート（auth / calendars / ai / notifications / profile /
+    public-booking）の包括的な健全性指標。
+
+    対応:
+    - `gcloud logging read 'resource.type="cloud_run_revision" AND severity>=ERROR'
+       --project=calendar-hub-prod --freshness=10m --limit=50`
+    - リクエスト path (`httpRequest.requestUrl`) と stack trace から原因特定
+    - 既存 `Sync failed` alert が同時発火している場合は sync 経路の認証失敗が有力
+
+    単独開発の低トラフィック想定のため、spec 原文の "5% 率" ではなく絶対件数閾値を採用。
+    1 リクエスト /5min しか来ない idle window で 1 件の 5xx が 100% になる
+    false-positive を構造的に防ぐ（ADR-006 参照）。
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: '5xx_count >= 3 in 5min'
+    conditionThreshold:
+      filter: >-
+        metric.type="run.googleapis.com/request_count"
+        AND resource.type="cloud_run_revision"
+        AND resource.labels.service_name="calendar-hub-api"
+        AND metric.labels.response_code_class="5xx"
+      comparison: COMPARISON_GT
+      thresholdValue: 2
+      duration: 0s
+      aggregations:
+        - alignmentPeriod: 300s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+          groupByFields:
+            - resource.label.service_name
+alertStrategy:
+  autoClose: 86400s
+enabled: true

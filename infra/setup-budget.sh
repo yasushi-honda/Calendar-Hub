@@ -36,12 +36,28 @@ gcloud services enable billingbudgets.googleapis.com --project="$PROJECT_ID" --q
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 API_BASE="https://billingbudgets.googleapis.com/v1/billingAccounts/${BILLING_ACCOUNT}/budgets"
 
-# 1. 既存 budget を displayName で検索
-BUDGETS_JSON=$(curl -sSf -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H "x-goog-user-project: ${PROJECT_ID}" "${API_BASE}")
-EXISTING=$(printf '%s' "$BUDGETS_JSON" \
-  | jq -r --arg name "$DISPLAY_NAME" '.budgets[]? | select(.displayName == $name) | .name' \
-  | head -n 1)
+# 1. 既存 budget を displayName で検索（ページング対応）
+# billing account 全体の budget 数が 1 ページに収まらなくなる可能性があるため、
+# nextPageToken を追いかけて全件走査する。
+EXISTING=""
+PAGE_TOKEN=""
+while :; do
+  URL="${API_BASE}?pageSize=100"
+  if [ -n "$PAGE_TOKEN" ]; then
+    URL="${URL}&pageToken=${PAGE_TOKEN}"
+  fi
+  BUDGETS_JSON=$(curl -sSf -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -H "x-goog-user-project: ${PROJECT_ID}" "$URL")
+  MATCH=$(printf '%s' "$BUDGETS_JSON" \
+    | jq -r --arg name "$DISPLAY_NAME" '.budgets[]? | select(.displayName == $name) | .name' \
+    | head -n 1)
+  if [ -n "$MATCH" ]; then
+    EXISTING="$MATCH"
+    break
+  fi
+  PAGE_TOKEN=$(printf '%s' "$BUDGETS_JSON" | jq -r '.nextPageToken // empty')
+  [ -z "$PAGE_TOKEN" ] && break
+done
 
 # 2. body を jq で構築（閾値展開・資源名・フィルタの quote を安全に）
 IFS=',' read -r -a THR_ARR <<< "$THRESHOLDS"
@@ -73,21 +89,38 @@ BODY=$(jq -nc \
     }
   }')
 
+# API 呼び出しを body + HTTP ステータスに分離し、非 2xx なら body をログして exit する。
+# `curl -sSf | jq '.name // "updated"'` だと -f + pipefail で失敗自体は検知するが、
+# API エラー body が消えて原因追跡が難しい。明示的に status を確認する。
+call_api() {
+  local method="$1"
+  local url="$2"
+  local payload="$3"
+  local http_code response_file
+  response_file=$(mktemp)
+  http_code=$(curl -sS -o "$response_file" -w '%{http_code}' -X "$method" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "x-goog-user-project: ${PROJECT_ID}" \
+    -H "Content-Type: application/json" \
+    "$url" -d "$payload")
+  if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+    echo "ERROR: $method $url failed (HTTP $http_code)" >&2
+    cat "$response_file" >&2
+    rm -f "$response_file"
+    exit 1
+  fi
+  jq -r '.name // "ok"' < "$response_file"
+  rm -f "$response_file"
+}
+
 if [ -n "$EXISTING" ]; then
   echo "Updating budget: $(basename "$EXISTING")"
-  curl -sSf -X PATCH \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H "x-goog-user-project: ${PROJECT_ID}" \
-    -H "Content-Type: application/json" \
+  call_api PATCH \
     "https://billingbudgets.googleapis.com/v1/${EXISTING}?updateMask=displayName,budgetFilter,amount,thresholdRules,notificationsRule" \
-    -d "$(jq -n --argjson b "$BODY" '$b')" | jq -r '.name // "updated"'
+    "$BODY"
 else
   echo "Creating budget"
-  curl -sSf -X POST \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H "x-goog-user-project: ${PROJECT_ID}" \
-    -H "Content-Type: application/json" \
-    "${API_BASE}" -d "$BODY" | jq -r '.name // "created"'
+  call_api POST "$API_BASE" "$BODY"
 fi
 
 echo ""

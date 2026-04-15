@@ -1,0 +1,26 @@
+# Dependabot 設定（最小構成: 安定性のための脆弱性検知のみ）
+#
+# 方針:
+# - 脆弱性検知 (Dependabot security updates) は repo 設定で有効化済み
+# - npm は version 更新を抑止 (open-pull-requests-limit: 0) し、
+#   security 更新 PR のみ発行。個人利用のためバージョン更新ノイズを回避。
+# - GitHub Actions は使用アクション数が少ないため月次で version 更新も許可。
+version: 2
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    open-pull-requests-limit: 3
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'monthly'
+    open-pull-requests-limit: 0
+    labels:
+      - 'dependencies'
+      - 'security'

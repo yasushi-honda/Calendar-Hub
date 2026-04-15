@@ -1,10 +1,18 @@
 import nodemailer from 'nodemailer';
+import { logMailFailure } from './mail-fail.js';
 
 interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /**
+   * 失敗時のアラート／トリアージに使う識別子。
+   * 例: `owner-notification`, `guest-confirmation`, `ai-suggestion`, `test-notification`.
+   * 指定すると送信失敗時に `[MAIL-FAIL] context=<context> ...` として console.error し、
+   * その後エラーを再 throw する（呼び出し側の既存 try-catch ロジックには非互換変更なし）。
+   */
+  context?: string;
 }
 
 interface GmailAuth {
@@ -28,13 +36,20 @@ export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Pro
     },
   });
 
-  await transporter.sendMail({
-    from: `Calendar Hub <${auth.email}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text,
-  });
+  try {
+    await transporter.sendMail({
+      from: `Calendar Hub <${auth.email}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+    });
+  } catch (err) {
+    if (options.context) {
+      logMailFailure({ context: options.context, recipient: options.to }, err);
+    }
+    throw err;
+  }
 }
 
 /**

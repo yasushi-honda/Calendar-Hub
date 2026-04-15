@@ -4,6 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
+| TBD | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
 | #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
 | #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
 | #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
@@ -54,8 +55,8 @@
 - Web最新リビジョン: calendar-hub-web-00013-crs
 - デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）
 - Cloud Monitoring:
-  - Log metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap`
-  - Alert policies（3件）→ Email 通知 `hy.unimail.11@gmail.com`
+  - Log metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
+  - Alert policies（4件）→ Email 通知 `hy.unimail.11@gmail.com`
   - セットアップ: `bash infra/setup-monitoring.sh`（冪等）
 - Firestore Backup（ADR-007, #73）:
   - PITR 有効（7日 `versionRetentionPeriod=604800s`）
@@ -69,11 +70,7 @@
 
 ### P0（早急対応）
 
-| #                                                              | タイトル                                                   |
-| -------------------------------------------------------------- | ---------------------------------------------------------- |
-| [#74](https://github.com/yasushi-honda/Calendar-Hub/issues/74) | Gmail OAuth トークン失効時の可視化（静かな送信失敗の検知） |
-
-（#72 は PR #83、#73 は PR #85 で完了）
+_すべて完了_（#72: PR #83 / #73: PR #85 / #74: 本PR）。
 
 ### P1（次週対応）
 
@@ -92,16 +89,24 @@
 | [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
 | [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
 
-**本番運用として #74 の P0 残 1件は優先対応**する。
+**本番運用の P0 はすべて解消済**（#72/#73/#74）。次は P1 群の対応を推奨。
 
 ## 次セッションの推奨アクション
 
-1. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
-2. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
-3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-4. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+1. P1 群（予約E2E #75 / 予算アラート #76 / エラー率監視 #77 / ロールバック検証 #78）
+2. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+3. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+4. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
+
+### Gmail 送信失敗の可視化（2026-04-15, #74）
+
+- **`apps/api/src/lib/mail-fail.ts`**: `classifyMailError(err)` は `invalid_grant` / HTTP 401/403 / SMTP 535 を `AUTH`、429/503/ETIMEDOUT/ECONNRESET を `TRANSIENT`、それ以外を `UNKNOWN` に分類する純粋関数。`logMailFailure()` が `[MAIL-FAIL] context=X recipient=***@domain kind=K reason=R` 形式で `console.error` 出力（recipient のローカル部をマスク）。
+- **`sendEmail()`** は互換性維持のため `context` をオプショナルに追加。省略時は従来通り。指定時は内部で分類＋ログ出力してから再 throw（呼び出し側の既存 `try-catch` ロジックは不変）。
+- **呼び出し側**: 予約通知の `context=owner-notification` / `guest-confirmation` / `booking-auth`（refresh token 取得段階）、AI 提案の `ai-suggestion`、テスト通知の `test-notification`。
+- **アラート**: `calendar_hub_mail_fail` metric + `[Calendar Hub] Mail send failure` policy（10分内 ≥1件、 Sync failed と同等）。
+- **E2E 注入**: `bash infra/inject-test-alert-log.sh mail-fail` で単発発火検証可能（sync-failed と同程度の時間で発火する想定）。
 
 ### Firestore Backup セットアップの落とし穴（2026-04-15, #73）
 

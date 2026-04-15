@@ -59,6 +59,11 @@ create_or_update_metric \
   "Count of [SYNC-GAP] occurrences (tt != tagged+created-deleted)" \
   "${BASE_FILTER} AND textPayload:\"[SYNC-GAP]\""
 
+create_or_update_metric \
+  "calendar_hub_mail_fail" \
+  "Count of [MAIL-FAIL] occurrences (Gmail OAuth2 send failure, #74)" \
+  "${BASE_FILTER} AND textPayload:\"[MAIL-FAIL]\""
+
 # --- 2. Notification channel (email) ---
 
 # 既存のチャネルを検索。権限失敗を NOT_FOUND と取り違えて重複作成しないよう、
@@ -184,6 +189,7 @@ apply_policy() {
 apply_policy "${SCRIPT_DIR}/alert-policies/rrule-skip.yaml"
 apply_policy "${SCRIPT_DIR}/alert-policies/sync-failed.yaml"
 apply_policy "${SCRIPT_DIR}/alert-policies/sync-gap.yaml"
+apply_policy "${SCRIPT_DIR}/alert-policies/mail-fail.yaml"
 
 echo ""
 echo "=== Monitoring setup complete ==="

@@ -1,20 +1,21 @@
-# Calendar Hub ハンドオフ (2026-04-15)
+# Calendar Hub ハンドオフ (2026-04-16)
 
 ## 最近の完了作業（直近1週間）
 
-| PR  | Issue | 内容                                                                                     |
-| --- | ----- | ---------------------------------------------------------------------------------------- |
-| #94 | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新 |
-| #91 | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                |
-| #90 | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                        |
-| #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                 |
-| #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007          |
-| #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                       |
-| #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                    |
-| #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                 |
-| #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）  |
-| #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                   |
-| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                               |
+| PR   | Issue | 内容                                                                                         |
+| ---- | ----- | -------------------------------------------------------------------------------------------- |
+| #100 | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化 |
+| #94  | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新     |
+| #91  | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                    |
+| #90  | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                            |
+| #87  | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                     |
+| #85  | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007              |
+| #83  | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                           |
+| #70  | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                        |
+| #68  | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                     |
+| #64  | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）      |
+| #63  | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                       |
+| #61  | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                   |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -95,20 +96,30 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 | #                                                              | タイトル                                        |
 | -------------------------------------------------------------- | ----------------------------------------------- |
 | [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79) | TimeTree session 切れの自動検知と再ログイン手順 |
-| [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
 | [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
+
+（#80 は PR #100 で完了）
 
 **本番運用の P0 はすべて解消済**（#72/#73/#74）。P1 も残り **#75** のみ。
 
 ## 次セッションの推奨アクション
 
-1. 残 P1: **#75 公開予約ページ E2E テスト** （最後の P1）
-2. P2 群: #79 TimeTree session 自動検知 / #80 Dependabot / #81 SLO
-3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-4. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
-5. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
+1. 残 P1: **#75 公開予約ページ E2E テスト** （最後の P1、個人利用のため実装要否は再検討余地あり）
+2. P2 群: #79 TimeTree session 自動検知 / #81 SLO（個人利用のため必要性は再検討）
+3. Dependabot 初回 security PR レビュー（既に 24 件検知、順次 PR が来る）
+4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+5. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+6. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
+
+### Dependabot 最小構成（2026-04-16, #80 / PR #100）
+
+- **方針**: 個人利用のため version 更新ノイズを回避。CVE 対応のみを自動 PR 化。
+- **repo 設定**: `gh api -X PUT repos/:owner/:repo/vulnerability-alerts` と `.../automated-security-fixes` の 2 API で有効化（両方 disabled だった）。
+- **`.github/dependabot.yml`**: npm は `open-pull-requests-limit: 0` で version 更新 PR を抑止しつつ、security 更新 PR は継続発行（公式仕様）。github-actions は月次で version 更新も許可（使用アクション数が少ないためノイズ小）。
+- **pnpm monorepo カバレッジ**: `directory: "/"` のみだが、security 更新の実体は repo 全体の `pnpm-lock.yaml` をスキャンするため全 workspace カバー。push 時に GitHub が 24 件（9 high / 13 moderate / 2 low）を即時検知で実証。
+- **次回対応**: マージ後に Dependabot が順次 security PR を発行する。手動マージで反映（自動マージは個人利用のため未導入）。
 
 ### API 健全性アラート: Cloud Run built-in metrics 活用（2026-04-15, #77 / PR #94）
 

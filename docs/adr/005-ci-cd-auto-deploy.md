@@ -103,10 +103,39 @@ type-check / test が再検証される構造。
 Cloud Runコンソールから過去リビジョンにトラフィック切替、または:
 
 ```bash
-gcloud run services update-traffic calendar-hub-api \
-  --project=calendar-hub-prod --region=asia-northeast1 \
-  --to-revisions=calendar-hub-api-00036=100
+# 直前のリビジョンへ（引数省略時は 2 番目に新しいものを選択）
+bash infra/rollback.sh api
+bash infra/rollback.sh web
+
+# 特定リビジョンへ（suffix だけでも、完全名でも可）
+bash infra/rollback.sh api 00048-tvv
+bash infra/rollback.sh api calendar-hub-api-00048-tvv
+
+# 候補一覧
+bash infra/rollback.sh api --list
 ```
+
+`infra/rollback.sh` が裏で `gcloud run services update-traffic ... --to-revisions=...=100`
+を実行する。現在のアクティブは `status.traffic[0].revisionName` で取得しており、
+`latestReadyRevisionName` はデプロイ最新を指すだけなので rollback 後の再判定には使えない。
+
+#### 実地検証済み（2026-04-15, Issue #78）
+
+| サービス         | 切替元 → 切替先              | 所要時間 | ヘルス                          | 復元時間 |
+| ---------------- | ---------------------------- | -------- | ------------------------------- | -------- |
+| calendar-hub-api | 00049-nfd → 00048-tvv → 戻す | 7s, 4s   | `/health` 200 `{"status":"ok"}` | —        |
+| calendar-hub-web | 00024-thk → 00023-r6n → 戻す | 5s, 4s   | `/` 200                         | —        |
+
+4 操作すべて単発コマンドで完結。所要時間は `gcloud run services update-traffic` の
+返り時間のみで、Cloud Run 内部のトラフィック切替はさらに短い（実測体感で数秒以内）。
+
+#### 台本（障害時の実際の流れ）
+
+1. `gh run list --workflow=deploy.yml --limit 5` で直近デプロイ履歴確認（怪しい PR を特定）
+2. `bash infra/rollback.sh api --list` で候補リビジョン確認
+3. `bash infra/rollback.sh api <suffix>` で切替
+4. `/health` と主要 UI 動作を目視確認
+5. 復旧後、原因特定 → 新しい commit で forward-fix（revert は最終手段）
 
 ## Related
 

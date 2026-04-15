@@ -4,7 +4,8 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
-| TBD | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                       |
+| TBD | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                               |
+| #90 | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                       |
 | #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
 | #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
 | #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
@@ -83,9 +84,8 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 | -------------------------------------------------------------- | ---------------------------------------- |
 | [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト                |
 | [#77](https://github.com/yasushi-honda/Calendar-Hub/issues/77) | API エラー率・レイテンシ監視（sync以外） |
-| [#78](https://github.com/yasushi-honda/Calendar-Hub/issues/78) | ロールバック手順の実地確認               |
 
-（#76 は本PRで完了予定）
+（#76 は PR #90、#78 は本PRで完了予定）
 
 ### P2（中期対応）
 
@@ -99,10 +99,11 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 ## 次セッションの推奨アクション
 
-1. P1 群（予約E2E #75 / 予算アラート #76 / エラー率監視 #77 / ロールバック検証 #78）
-2. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-3. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
-4. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
+1. 残 P1: **#75 予約 E2E テスト** / **#77 sync 以外の API エラー率監視**
+2. P2 (任意): #79 TimeTree session 自動検知 / #80 Dependabot / #81 SLO
+3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+4. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+5. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
 

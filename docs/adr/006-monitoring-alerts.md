@@ -1,8 +1,8 @@
-# ADR-006: 同期ヘルスチェックの自動アラート化
+# ADR-006: API 健全性アラート（同期 + 全 API ルート）
 
 - Status: Accepted
-- Date: 2026-04-14
-- Issue: #65
+- Date: 2026-04-14（#65 同期系）/ 2026-04-15（#77 API全般に拡張）
+- Issue: #65 / #77
 
 ## Context
 
@@ -208,9 +208,104 @@ for p in "RRULE-SKIP detected" "Sync job failure" "Sync gap"; do
 done
 ```
 
+## 2026-04-15 拡張: API 全般のエラー率・レイテンシ監視 (#77)
+
+### 背景
+
+sync 系アラート（上記 3 種）は同期ジョブに特化しており、auth / ai / notifications /
+profile / public-booking / calendars CRUD 等、**その他の API ルートのエラーは検知できない**。
+本番運用として、sync 以外の事故をユーザー報告に依存している状態は許容不可。
+
+### 追加アラート
+
+Cloud Run の built-in metrics (`run.googleapis.com/request_count`,
+`run.googleapis.com/request_latencies`) を使用（アプリ側にコード追加不要）。
+
+| #   | 検知対象           | メトリクス                                  | 閾値             |
+| --- | ------------------ | ------------------------------------------- | ---------------- |
+| 4   | API 5xx            | `request_count` `response_code_class="5xx"` | 5min で ≥3 件    |
+| 5a  | API 4xx 総量       | `request_count` `response_code_class="4xx"` | 5min で ≥20 件   |
+| 5b  | 認証系 4xx         | `request_count` `response_code="401"/"403"` | 5min で ≥5 件    |
+| 6   | API p99 レイテンシ | `request_latencies` `ALIGN_PERCENTILE_99`   | 3 秒を 5min 継続 |
+
+5b は単一ポリシー内の 2 nd condition として定義。400 (client input) の 20 件ノイズに
+401/403 (OAuth 失効 / session 破綻) の致命 5 件が埋もれる silent-failure を避ける。
+
+### spec 原文との deviation（意図的）
+
+| 原文                      | 実装                               | 理由                                                                                                                                                    |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 5xx "率 5%"               | 絶対件数 ≥3/5min                   | 単独開発の低トラフィック環境では idle window で 1 件の 500 が 100% 化する false-positive が多発する。絶対件数の方が「確かな異常パターン」として機能する |
+| 4xx "前日同時刻比 +300%"  | 絶対件数 ≥20/5min                  | 時系列ベースライン（MQL 1d shift）は idle window が多い環境で不安定。絶対値の連続検出で運用目的に十分                                                   |
+| 対象を "sync 以外" に限定 | **全 API 対象**（sync と重複許容） | Cloud Run built-in metrics には URL path 別ラベルがない。二重検知は defense-in-depth として許容（sync 特化アラートと補完関係）                          |
+
+### 追加リソース
+
+**Alert policies**:
+
+- `[Calendar Hub] API 5xx errors`
+- `[Calendar Hub] API 4xx spike`
+- `[Calendar Hub] API p99 latency`
+
+**ファイル**:
+
+- `infra/alert-policies/api-5xx-rate.yaml`
+- `infra/alert-policies/api-4xx-spike.yaml`
+- `infra/alert-policies/api-latency-p99.yaml`
+- `infra/setup-monitoring.sh` に apply 3 行追加
+
+### log-based metric との相補関係
+
+| シナリオ                         | 発火するアラート                                      |
+| -------------------------------- | ----------------------------------------------------- |
+| sync 内部で認証失敗 → 500 返却   | Sync failed (log-based) + API 5xx (built-in) の両方   |
+| sync 外の 500（ai / booking 等） | API 5xx のみ（新規検知領域）                          |
+| Gmail OAuth 失効                 | MAIL-FAIL (log-based) + 呼出側が 500 返すなら API 5xx |
+| 静かな同期欠落                   | SYNC-GAP のみ（HTTP は 200 で返る）                   |
+
+sync 系 log-based metric は「何が起きたか」、API 系 built-in metric は「どのくらい
+深刻か」を別角度で捕捉する補完関係。
+
+### 検知死角（本 ADR で扱わない / 別機構が必要）
+
+Cloud Run built-in request metrics では捕捉できない事象。スコープは `calendar-hub-api`
+のみで `calendar-hub-web` は別途:
+
+- (a) **fire-and-forget の非同期失敗** — `public-booking.ts` の `sendBookingNotificationsAsync`
+  は HTTP 201 を返した後に sendEmail を走らせる。失敗しても HTTP ステータスに反映されない。
+  これは log-based の `calendar_hub_mail_fail` (#74) で既に捕捉されている（死角ではなく
+  別経路でカバー済）。
+- (b) **アプリ層で握り潰して 2xx 返す経路** — 呼出先 API 失敗を catch して成功応答を
+  返す実装が将来入った場合に盲点化する。現時点の `apps/api/src/routes/*` には
+  該当なし。
+- (c) **Cloud Run OOM / SIGKILL** — 未完了リクエストは `request_count` に計上されない。
+  必要なら `run.googleapis.com/container/memory/utilizations` 監視 +
+  ログ側の `severity=ERROR AND textPayload=~"Memory limit"` で検知。
+- (d) **min-instances=0 の cold-start probe 失敗** — `run.googleapis.com/container/startup_latencies`
+  および Error Reporting / Cloud Run revision logs で検知。`request_count` には出ない。
+
+### 注意
+
+- min-instances=0 (`infra/deploy-api.sh:44`) のため cold start で p99 が瞬間的に 3s
+  超過しうるが、`duration=300s` の sustained 条件で一過性発火を除外。
+- `response_code_class` ラベルの値は Cloud Run で `"1xx" / "2xx" / "3xx" / "4xx" / "5xx"`
+  の文字列リテラル（`"2xx"` 等ではなく）、`response_code` は `"200" / "401"` 等
+  整数文字列（2026-04-15 実機 `metricDescriptors` 確認）。ポリシー apply 後は
+  一度実測値が流れるか確認する:
+  ```bash
+  gcloud monitoring time-series list \
+    --project=calendar-hub-prod \
+    --filter='metric.type="run.googleapis.com/request_count" AND metric.labels.response_code_class="5xx"' \
+    --interval-start-time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ) \
+    --interval-end-time=$(date -u +%Y-%m-%dT%H:%M:%SZ) --format=json | jq '.[].points | length'
+  ```
+  0 件でも filter が typo ではなく「期間内に 5xx が発生していない」だけの
+  可能性が高いが、ログ側で 5xx の存在を確認できるのにメトリクスが 0 件なら
+  ラベル不一致を疑う。
+
 ## Related
 
-- Issue #65: 同期ヘルスチェックの自動アラート化（本ADR）
-- PR #64: カンマ区切りEXDATE修正（本ADRの動機）
-- PR #63: `[SYNC-STATS]` 観測ログ追加（本ADRの前段）
+- Issue #65 / #77: 本ADRの動機
+- PR #64: カンマ区切りEXDATE修正（#65 の動機）
+- PR #63: `[SYNC-STATS]` 観測ログ追加（#65 の前段）
 - ADR-005: CI/CD自動デプロイ（姉妹ADR、共通の production-readiness 文脈）

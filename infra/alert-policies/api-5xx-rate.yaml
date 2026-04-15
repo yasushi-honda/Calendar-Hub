@@ -31,8 +31,6 @@ conditions:
         - alignmentPeriod: 300s
           perSeriesAligner: ALIGN_SUM
           crossSeriesReducer: REDUCE_SUM
-          groupByFields:
-            - resource.label.service_name
 alertStrategy:
   autoClose: 86400s
 enabled: true

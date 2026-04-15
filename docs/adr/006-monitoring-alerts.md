@@ -268,26 +268,30 @@ sync 系 log-based metric は「何が起きたか」、API 系 built-in metric 
 
 ### 検知死角（本 ADR で扱わない / 別機構が必要）
 
-Cloud Run built-in request metrics では捕捉できない事象。いずれも対応するなら
-別の log-based metric もしくは uptime check が必要（本 Issue #77 のスコープ外）:
+Cloud Run built-in request metrics では捕捉できない事象。スコープは `calendar-hub-api`
+のみで `calendar-hub-web` は別途:
 
-- (a) **try-catch で握り潰して 200 返す経路** — エラーを application 層が吸収すると
-  HTTP ステータスは正常扱い。log-based alert が別途必要。
-- (b) **public-booking の `{error: ...}` 200 返却** — 現状のクライアントは HTTP 200
-  でも body にエラーが入る設計がある（意図的）。build-in 5xx alert では出ない。
-- (c) **Cloud Run OOM / SIGKILL** — request が完了せず request_count に
-  カウントされない。Cloud Run の `container/cpu/utilization` や
-  `instance_count` 別系統の監視が必要。
-- (d) **min-instances=0 の cold-start probe 失敗** — startup probe 失敗は
-  `request_count` に計上されない。必要なら `serving.knative.dev/*` 系の
-  revision status を監視。
+- (a) **fire-and-forget の非同期失敗** — `public-booking.ts` の `sendBookingNotificationsAsync`
+  は HTTP 201 を返した後に sendEmail を走らせる。失敗しても HTTP ステータスに反映されない。
+  これは log-based の `calendar_hub_mail_fail` (#74) で既に捕捉されている（死角ではなく
+  別経路でカバー済）。
+- (b) **アプリ層で握り潰して 2xx 返す経路** — 呼出先 API 失敗を catch して成功応答を
+  返す実装が将来入った場合に盲点化する。現時点の `apps/api/src/routes/*` には
+  該当なし。
+- (c) **Cloud Run OOM / SIGKILL** — 未完了リクエストは `request_count` に計上されない。
+  必要なら `run.googleapis.com/container/memory/utilizations` 監視 +
+  ログ側の `severity=ERROR AND textPayload=~"Memory limit"` で検知。
+- (d) **min-instances=0 の cold-start probe 失敗** — `run.googleapis.com/container/startup_latencies`
+  および Error Reporting / Cloud Run revision logs で検知。`request_count` には出ない。
 
 ### 注意
 
-- min-instances=0 のため cold start で p99 が瞬間的に 3s 超過しうるが、
-  `duration=300s` の sustained 条件で一過性発火を除外。
+- min-instances=0 (`infra/deploy-api.sh:44`) のため cold start で p99 が瞬間的に 3s
+  超過しうるが、`duration=300s` の sustained 条件で一過性発火を除外。
 - `response_code_class` ラベルの値は Cloud Run で `"1xx" / "2xx" / "3xx" / "4xx" / "5xx"`
-  の文字列リテラル。ポリシー apply 後は一度実測値が流れるか確認する:
+  の文字列リテラル（`"2xx"` 等ではなく）、`response_code` は `"200" / "401"` 等
+  整数文字列（2026-04-15 実機 `metricDescriptors` 確認）。ポリシー apply 後は
+  一度実測値が流れるか確認する:
   ```bash
   gcloud monitoring time-series list \
     --project=calendar-hub-prod \

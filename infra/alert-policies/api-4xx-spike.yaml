@@ -1,21 +1,16 @@
 displayName: '[Calendar Hub] API 4xx spike'
 documentation:
   content: |
-    Cloud Run の API サービス (`calendar-hub-api`) で 4xx が 5 分間で 20 件以上発生。
-    単発のクライアント入力ミス (400) や認証切れ (401) ではなく、連続発生する
-    異常パターン（攻撃 / クライアント側のバグ / OAuth 一括失効）を検知する。
+    Cloud Run の API サービス (`calendar-hub-api`) で 4xx が連続発生。2 条件 OR 結合:
+    - 全 4xx (401/403 含む) が 5min で ≥ 20 件 (攻撃 / 400 入力不整合の連続化等)
+    - 401/403 のみ 5min で ≥ 5 件 (OAuth 一括失効 / session 破綻を早期検知)
 
     対応:
     - 401/403 集中 → OAuth トークン失効 or Firebase Auth 設定変更
     - 404 集中 → Next.js ルーティングの破損、古いクライアントキャッシュ
     - 400 集中 → request body スキーマ変更の後方互換性欠如
 
-    spec 原文の "前日同時刻比 +300%" は MQL の 1d shift を要するが、
-    単独開発の低トラフィック環境では時系列ベースラインが不安定（idle window が
-    多い）。絶対件数で連続異常を捕捉する方が false-positive/negative 共に健全。
-    4xx 全量 20 件閾値だと 400 (client input error) のノイズと 401/403
-    (OAuth 一括失効 / session 破綻) の致命レベルが同じ閾値に埋もれるため、
-    認証系 (401/403) は別条件で 5 件 /5min と低く設定する。
+    閾値の deviation 根拠は ADR-006 §deviation 参照。
   mimeType: text/markdown
 combiner: OR
 conditions:
@@ -33,8 +28,6 @@ conditions:
         - alignmentPeriod: 300s
           perSeriesAligner: ALIGN_SUM
           crossSeriesReducer: REDUCE_SUM
-          groupByFields:
-            - resource.label.service_name
   - displayName: 'auth_4xx (401+403) >= 5 in 5min'
     conditionThreshold:
       filter: >-
@@ -49,8 +42,6 @@ conditions:
         - alignmentPeriod: 300s
           perSeriesAligner: ALIGN_SUM
           crossSeriesReducer: REDUCE_SUM
-          groupByFields:
-            - resource.label.service_name
 alertStrategy:
   autoClose: 86400s
 enabled: true

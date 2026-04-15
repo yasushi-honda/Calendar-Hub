@@ -2,20 +2,22 @@
 
 ## 最近の完了作業（直近1週間）
 
-| PR   | Issue | 内容                                                                                         |
-| ---- | ----- | -------------------------------------------------------------------------------------------- |
-| #100 | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化 |
-| #94  | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新     |
-| #91  | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                    |
-| #90  | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                            |
-| #87  | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                     |
-| #85  | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007              |
-| #83  | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                           |
-| #70  | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                        |
-| #68  | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                     |
-| #64  | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）      |
-| #63  | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                       |
-| #61  | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                   |
+| PR             | Issue | 内容                                                                                         |
+| -------------- | ----- | -------------------------------------------------------------------------------------------- |
+| #96/#97/#105   | -     | Dependabot security: nodemailer/hono-node-server/next 15.5.15/hono 4.12.14（9件脆弱性解消）  |
+| #101/#102/#103 | -     | GitHub Actions major bump: auth v3 / checkout v6 / setup-gcloud v3                           |
+| #100           | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化 |
+| #94            | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新     |
+| #91            | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                    |
+| #90            | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                            |
+| #87            | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                     |
+| #85            | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007              |
+| #83            | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                           |
+| #70            | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                        |
+| #68            | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                     |
+| #64            | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）      |
+| #63            | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                       |
+| #61            | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                   |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -106,12 +108,19 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 1. 残 P1: **#75 公開予約ページ E2E テスト** （最後の P1、個人利用のため実装要否は再検討余地あり）
 2. P2 群: #79 TimeTree session 自動検知 / #81 SLO（個人利用のため必要性は再検討）
-3. Dependabot 初回 security PR レビュー（既に 24 件検知、順次 PR が来る）
+3. 残 15 件の transitive 脆弱性（lodash / node-forge / vite 等）は個人利用では受容。必要なら `pnpm overrides` で強制更新可能だが transitive API 崩壊リスクあり
 4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
 5. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 6. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
+
+### Dependabot security 運用の初期対応（2026-04-16, PR #96/#97/#101-#103/#105）
+
+- **9 件脆弱性解消**（24 → 15）: direct deps の nodemailer/hono-node-server/next(high DoS)/hono(medium x5) は patch/minor で解消。Actions は auth v3/checkout v6/setup-gcloud v3 へ major bump（パラメータ互換性確認済）。
+- **`open-pull-requests-limit: 0` の副作用**: Dependabot が PR 再作成を拒否する（"dependabot.yml entry deleted"）。`update-branch` API も「user edit」と判定され rebase 不可。→ 手動 `pnpm update <pkg>` でローカル更新 → PR する運用が現実的。
+- **Actions major bump 判断基準**: release notes で使用中パラメータの deprecated/removed を確認。本プロジェクトは `workload_identity_provider` + `service_account` のみ使用、v3 でも維持されるため安全。
+- **残 15 件の実質リスク評価**: dev-only (vite 3, picomatch 2) は prod 非搭載。runtime-transitive (lodash 4, node-forge 4, brace-expansion 1, @tootallnate/once 1 low) は攻撃者入力の到達経路なし（個人利用のため template/certificate 解析に外部入力が流れない）。現状受容が合理的。
 
 ### Dependabot 最小構成（2026-04-16, #80 / PR #100）
 

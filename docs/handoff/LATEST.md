@@ -4,7 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
-| TBD | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                               |
+| #91 | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                               |
 | #90 | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                       |
 | #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
 | #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
@@ -85,7 +85,7 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 | [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト                |
 | [#77](https://github.com/yasushi-honda/Calendar-Hub/issues/77) | API エラー率・レイテンシ監視（sync以外） |
 
-（#76 は PR #90、#78 は本PRで完了予定）
+（#76 は PR #90、#78 は PR #91 で完了）
 
 ### P2（中期対応）
 

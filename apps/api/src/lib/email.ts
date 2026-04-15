@@ -25,18 +25,20 @@ interface GmailAuth {
  * access_tokenはrefreshAccessToken()で事前に取得しておく
  */
 export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Promise<void> {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      type: 'OAuth2',
-      user: auth.email,
-      accessToken: auth.accessToken,
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    },
-  });
-
   try {
+    // createTransport も try 内に含める: OAuth2 config 検証等で synchronous に
+    // 例外が出るケースも `[MAIL-FAIL]` で捕捉するため。
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: auth.email,
+        accessToken: auth.accessToken,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      },
+    });
+
     await transporter.sendMail({
       from: `Calendar Hub <${auth.email}>`,
       to: options.to,

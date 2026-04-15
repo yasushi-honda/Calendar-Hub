@@ -85,11 +85,20 @@ function maskRecipient(recipient: string): string {
 }
 
 /**
+ * key=value 形式ログの区切り崩壊を防ぐため、空白・改行・`=` をアンダースコア化し、
+ * 長大スタック等を吸い込まないよう 200 文字で切る。
+ */
+function sanitizeReason(raw: string): string {
+  const squashed = raw.replace(/[\s=]+/g, '_');
+  return squashed.length > 200 ? squashed.slice(0, 200) + '...' : squashed;
+}
+
+/**
  * `[MAIL-FAIL] context=<x> recipient=<y> kind=<K> reason=<R>` 形式で console.error。
  * 第二引数として元のエラーを渡し、Cloud Logging 上でスタックトレースを確認できるようにする。
  */
 export function logMailFailure(ctx: MailFailContext, err: unknown): void {
   const { kind, reason } = classifyMailError(err);
-  const line = `[MAIL-FAIL] context=${ctx.context} recipient=${maskRecipient(ctx.recipient)} kind=${kind} reason=${reason}`;
+  const line = `[MAIL-FAIL] context=${ctx.context} recipient=${maskRecipient(ctx.recipient)} kind=${kind} reason=${sanitizeReason(reason)}`;
   console.error(line, err);
 }

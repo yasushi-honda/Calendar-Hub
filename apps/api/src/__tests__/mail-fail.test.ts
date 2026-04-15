@@ -92,7 +92,8 @@ describe('logMailFailure', () => {
 
     const logLine = errorSpy.mock.calls[0][0];
     expect(logLine).toContain('kind=TRANSIENT');
-    expect(logLine).toContain('reason=code=ETIMEDOUT');
+    // sanitizeReason で `=` は `_` に置換される（key=value パース崩壊防止）
+    expect(logLine).toContain('reason=code_ETIMEDOUT');
   });
 
   it('redacts local part of recipient but keeps domain', () => {
@@ -118,5 +119,36 @@ describe('logMailFailure', () => {
     logMailFailure({ context: 'ai-suggestion', recipient: 'a@b.com' }, err);
 
     expect(errorSpy.mock.calls[0][1]).toBe(err);
+  });
+
+  it('sanitizes whitespace/= in reason so key=value parsing stays intact', () => {
+    const err = new Error('multi line\nwith = sign  and  spaces');
+    logMailFailure({ context: 'test', recipient: 'a@b.com' }, err);
+    const logLine = errorSpy.mock.calls[0][0] as string;
+    // 空白・改行・= が連続する場合も 1 つの `_` にまとまる
+    expect(logLine).toMatch(/reason=multi_line_with_sign_and_spaces( |$)/);
+    expect(logLine).toContain('kind=UNKNOWN');
+  });
+
+  it('truncates very long reason to 200 chars + ellipsis', () => {
+    const longMessage = 'x'.repeat(500);
+    const err = new Error(longMessage);
+    logMailFailure({ context: 'test', recipient: 'a@b.com' }, err);
+    const logLine = errorSpy.mock.calls[0][0] as string;
+    const reasonPart = logLine.split('reason=')[1] ?? '';
+    expect(reasonPart.endsWith('...')).toBe(true);
+    expect(reasonPart.length).toBeLessThanOrEqual(203);
+  });
+
+  it('classifies synthetic Errors from booking-auth flow as UNKNOWN with useful reason', () => {
+    const err1 = new Error('no_refresh_token_stored');
+    logMailFailure({ context: 'booking-auth', recipient: 'o@example.com' }, err1);
+    expect(errorSpy.mock.calls[0][0]).toContain('kind=UNKNOWN');
+    expect(errorSpy.mock.calls[0][0]).toContain('reason=no_refresh_token_stored');
+
+    errorSpy.mockClear();
+    const err2 = new Error('empty_access_token');
+    logMailFailure({ context: 'booking-auth', recipient: 'o@example.com' }, err2);
+    expect(errorSpy.mock.calls[0][0]).toContain('reason=empty_access_token');
   });
 });

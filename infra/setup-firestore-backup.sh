@@ -62,9 +62,12 @@ gsutil lifecycle set "$LIFECYCLE_JSON" "gs://${BACKUP_BUCKET}"
 
 # --- 2. PITR 有効化（直近7日間のpoint-in-time restore） ---
 
-PITR_STATUS=$(gcloud firestore databases describe \
+# パイプライン化せず2段に分けることで、gcloud 失敗を set -e で確実に捕捉する
+# （`gcloud ... | head` 等にすると pipefail でも後段の成功が優先され silent fallback する）
+PITR_DESCRIBE=$(gcloud firestore databases describe \
   --database="$DATABASE" --project="$PROJECT_ID" \
   --format="value(pointInTimeRecoveryEnablement)")
+PITR_STATUS="$PITR_DESCRIBE"
 
 if [ "$PITR_STATUS" = "POINT_IN_TIME_RECOVERY_ENABLED" ]; then
   echo "✓ PITR already enabled"
@@ -83,10 +86,13 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# `--filter` は dailyRecurrence:{} (空オブジェクト) を認識できないため jq で判定する
-SCHEDULE_EXISTS=$(gcloud firestore backups schedules list \
-  --database="$DATABASE" --project="$PROJECT_ID" --format=json \
-  | jq -r '.[] | select(.dailyRecurrence != null) | .name' | head -n 1)
+# `--filter` は dailyRecurrence:{} (空オブジェクト) を認識できないため jq で判定する。
+# gcloud を一旦変数に受けて、失敗を set -e で捕捉（パイプライン化すると
+# gcloud auth エラー等で空を返した場合に silent fallback する）。
+SCHEDULES_JSON=$(gcloud firestore backups schedules list \
+  --database="$DATABASE" --project="$PROJECT_ID" --format=json)
+SCHEDULE_EXISTS=$(printf '%s' "$SCHEDULES_JSON" \
+  | jq -r '.[]? | select(.dailyRecurrence != null) | .name' | head -n 1)
 
 if [ -n "$SCHEDULE_EXISTS" ]; then
   echo "✓ Daily backup schedule already exists: $(basename "$SCHEDULE_EXISTS")"

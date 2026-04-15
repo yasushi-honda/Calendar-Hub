@@ -54,13 +54,15 @@ if [ -n "$ARG" ]; then
     *) TARGET="${SERVICE}-${ARG}" ;;
   esac
 else
-  # 引数なし: 直前（2番目に新しい）リビジョン
+  # 引数なし: "現行以外で最新" のリビジョン。単純に "2番目に新しい" を選ぶと、
+  # 前回ロールバック後で traffic が既にその revision に乗っているケースで
+  # No-op になってしまうため、現行を除外してから最新を取る。
   TARGET=$(gcloud run revisions list --service="$SERVICE" \
     --region="$REGION" --project="$PROJECT_ID" \
-    --format="value(name)" --sort-by="~creationTimestamp" --limit=2 \
-    | sed -n '2p')
+    --format="value(name)" --sort-by="~creationTimestamp" --limit=10 \
+    | grep -v -x "$CURRENT" | head -n 1)
   if [ -z "$TARGET" ]; then
-    echo "ERROR: no previous revision found for $SERVICE" >&2
+    echo "ERROR: no other revision found to roll back to for $SERVICE" >&2
     exit 1
   fi
 fi
@@ -82,18 +84,42 @@ gcloud run services update-traffic "$SERVICE" \
 
 ELAPSED=$(( $(date +%s) - START ))
 
+# 切替が想定先に適用されたか検証（gcloud が部分的に失敗しても exit 0 することがあるため）。
 NEW=$(gcloud run services describe "$SERVICE" \
   --region="$REGION" --project="$PROJECT_ID" \
   --format="value(status.traffic[0].revisionName)")
+
+if [ "$NEW" != "$TARGET" ]; then
+  echo "ERROR: traffic did not move to expected target" >&2
+  echo "  expected = $TARGET" >&2
+  echo "  observed = $NEW" >&2
+  exit 1
+fi
+
+# 切替先への疎通確認。API は /health、Web は / を探る。失敗しても exit はしない
+# （rollback 目的の時点で元も壊れている可能性があり、情報を出すに留める）。
+SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+  --region="$REGION" --project="$PROJECT_ID" \
+  --format="value(status.url)")
+PROBE_PATH="/health"
+[ "$TARGET_SVC" = "web" ] && PROBE_PATH="/"
+if HEALTH_CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "${SERVICE_URL}${PROBE_PATH}"); then
+  HEALTH_STATUS="HTTP ${HEALTH_CODE}"
+else
+  HEALTH_STATUS="probe failed"
+fi
 
 echo ""
 echo "=== Rollback complete ==="
 echo "  service       = $SERVICE"
 echo "  active now    = $NEW (previous: $CURRENT)"
 echo "  elapsed       = ${ELAPSED}s"
-
-SERVICE_URL=$(gcloud run services describe "$SERVICE" \
-  --region="$REGION" --project="$PROJECT_ID" \
-  --format="value(status.url)")
-echo "  verify health = curl -sSf ${SERVICE_URL}/health || echo 'FAILED'"
+echo "  probe         = ${SERVICE_URL}${PROBE_PATH} → ${HEALTH_STATUS}"
 echo "  restore with  = bash $0 ${TARGET_SVC} ${CURRENT#${SERVICE}-}"
+
+if [ "$HEALTH_STATUS" != "HTTP 200" ]; then
+  echo ""
+  echo "⚠️  Health probe did not return 200. Target revision may be unhealthy." >&2
+  echo "   Consider restoring immediately with the command above." >&2
+  exit 2
+fi

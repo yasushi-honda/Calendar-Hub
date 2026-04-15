@@ -15,7 +15,7 @@
     "@calendar-hub/calendar-sdk": "workspace:*",
     "@calendar-hub/shared": "workspace:*",
     "@google-cloud/secret-manager": "^6.1.1",
-    "@hono/node-server": "^1.19.11",
+    "@hono/node-server": "^1.19.13",
     "firebase-admin": "^13.7.0",
     "googleapis": "^171.4.0",
     "hono": "^4.12.8",

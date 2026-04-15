@@ -35,7 +35,7 @@
 
 ## 品質状態
 
-- テスト: 209件全PASS（最終確認: 2026-04-14）
+- テスト: 260件全PASS（最終確認: 2026-04-15、#74 で +22 件: `mail-fail.test.ts` 19 + `email-send.test.ts` 3）
 - ビルド: 全5パッケージ成功
 - CI: GitHub Actions グリーン（最新: main 73441b0 / 2026-04-14）
 - PRテンプレート: Quality Gateチェックリスト強制

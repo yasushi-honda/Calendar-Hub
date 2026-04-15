@@ -129,12 +129,74 @@ gcloud alpha monitoring policies list --project=calendar-hub-prod --filter='disp
 
 ### 手動トリガテスト
 
+**⚠️ `gcloud logging write` は使えない**: デフォルトで `resource.type=global` で書き込むが、
+log-based metric の filter は `resource.type="cloud_run_revision"` を要求するため、
+メトリクスがカウントされず alert は発火しない（Issue #72 で判明）。
+
+代わりに `infra/inject-test-alert-log.sh` を使う（Cloud Logging REST API で
+`cloud_run_revision` リソースを明示指定する実装）:
+
 ```bash
-# sync API に手動で不整合を起こさず、ログのみで疎通確認する場合:
-gcloud logging write calendar-hub-api "[SYNC-GAP] calendar=test tt=99 diff=1 skipped=0" \
-  --severity=ERROR --project=calendar-hub-prod
-# 5〜10分後に Monitoring > Alerts で incident が立ち上がるか確認
+# 3種すべて注入
+bash infra/inject-test-alert-log.sh
+
+# 個別注入
+bash infra/inject-test-alert-log.sh sync-failed   # 1-5分で発火
+bash infra/inject-test-alert-log.sh sync-gap      # 持続注入が必要（次項参照）
+bash infra/inject-test-alert-log.sh rrule-skip    # 最大1時間で発火
 ```
+
+**SYNC-GAP の持続注入**: `duration=900s` の設計により1回の注入では発火しない。
+境界で逃さないために 3分間隔で6回注入（18分の sustained signal を生成）:
+
+```bash
+for i in 1 2 3 4 5 6; do
+  bash infra/inject-test-alert-log.sh sync-gap
+  [ $i -lt 6 ] && sleep 180
+done
+```
+
+実測: 5分間隔で4回注入は発火しないケースあり（アラート評価の境界条件）。
+3分間隔で6回注入は 2026-04-15 の E2E で確実に発火確認済み（下記の検証結果参照）。
+
+メトリクス集計確認:
+
+```bash
+# 最新のmetric値を確認（value=1 が出ればログ検知成功）
+ACCESS_TOKEN=$(gcloud auth print-access-token)
+NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+FROM=$(date -u -v-10M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+curl -sS -G -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  "https://monitoring.googleapis.com/v3/projects/calendar-hub-prod/timeSeries" \
+  --data-urlencode 'filter=metric.type="logging.googleapis.com/user/calendar_hub_sync_failed"' \
+  --data-urlencode "interval.endTime=${NOW}" \
+  --data-urlencode "interval.startTime=${FROM}" \
+  --data-urlencode "aggregation.alignmentPeriod=60s" \
+  --data-urlencode "aggregation.perSeriesAligner=ALIGN_SUM"
+```
+
+Incident/メール着弾は Cloud Console で確認:
+https://console.cloud.google.com/monitoring/alerting?project=calendar-hub-prod
+
+### E2E 発火検証結果（Issue #72, 2026-04-15）
+
+通知メール受信結果（`hy.unimail.11@gmail.com`）:
+
+| アラート    | 注入方法          | 発火 (UTC) | メール受信 (JST) | Recovery 通知         |
+| ----------- | ----------------- | ---------- | ---------------- | --------------------- |
+| RRULE-SKIP  | 1回注入           | 00:47      | 09:47            | ✅ 01:47 (59分54秒後) |
+| Sync failed | 1回注入           | 00:48      | 09:48            | ✅ 00:48:41 (41秒後)  |
+| SYNC-GAP    | 6回注入 (3分間隔) | 02:46      | 11:46            | auto-close 24h        |
+
+**知見**:
+
+1. **Issue #72 原文の `gcloud logging write` 例は動作しない**（resource.type=global で
+   log-based metric フィルタ `cloud_run_revision` と不一致）。再発防止のため
+   `infra/inject-test-alert-log.sh` を追加した（REST API で cloud_run_revision を明示指定）。
+2. **SYNC-GAP は 1回注入では発火しない**（設計通り）。`duration=900s` の条件を満たすには
+   3分間隔で6回（18分の sustained signal）の注入が必要。4回注入（5分間隔）は境界条件で
+   発火を逃したケースがあり、実運用では連続3サイクル以上の持続欠落時のみ発火する設計意図
+   と整合する。
 
 ### 無効化（障害対応時）
 

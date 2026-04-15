@@ -4,6 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
+| TBD | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                       |
 | #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
 | #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
 | #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
@@ -58,6 +59,10 @@
   - Log metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
   - Alert policies（4件）→ Email 通知 `hy.unimail.11@gmail.com`
   - セットアップ: `bash infra/setup-monitoring.sh`（冪等）
+- Budget Alert（#76）:
+  - Calendar Hub Monthly: **¥10/月**（検知用の最小設定、50%/90%/100% threshold）
+  - 通知先: `hy.unimail.11@gmail.com`（`disableDefaultIamRecipients=true` でチャネル指定のみ）
+  - セットアップ: `bash infra/setup-budget.sh`（冪等、REST API 直接呼び出し）
 - Firestore Backup（ADR-007, #73）:
   - PITR 有効（7日 `versionRetentionPeriod=604800s`）
   - 日次バックアップスケジュール（30日保持）
@@ -77,9 +82,10 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 | #                                                              | タイトル                                 |
 | -------------------------------------------------------------- | ---------------------------------------- |
 | [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト                |
-| [#76](https://github.com/yasushi-honda/Calendar-Hub/issues/76) | GCP 予算アラート・コストモニタリング     |
 | [#77](https://github.com/yasushi-honda/Calendar-Hub/issues/77) | API エラー率・レイテンシ監視（sync以外） |
 | [#78](https://github.com/yasushi-honda/Calendar-Hub/issues/78) | ロールバック手順の実地確認               |
+
+（#76 は本PRで完了予定）
 
 ### P2（中期対応）
 

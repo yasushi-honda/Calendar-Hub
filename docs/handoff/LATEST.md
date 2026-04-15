@@ -100,13 +100,13 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 ## 技術メモ（今セッション）
 
-### Gmail 送信失敗の可視化（2026-04-15, #74）
+### Gmail 送信失敗の可視化（2026-04-15, #74 / PR #87）
 
-- **`apps/api/src/lib/mail-fail.ts`**: `classifyMailError(err)` は `invalid_grant` / HTTP 401/403 / SMTP 535 を `AUTH`、429/503/ETIMEDOUT/ECONNRESET を `TRANSIENT`、それ以外を `UNKNOWN` に分類する純粋関数。`logMailFailure()` が `[MAIL-FAIL] context=X recipient=***@domain kind=K reason=R` 形式で `console.error` 出力（recipient のローカル部をマスク）。
-- **`sendEmail()`** は互換性維持のため `context` をオプショナルに追加。省略時は従来通り。指定時は内部で分類＋ログ出力してから再 throw（呼び出し側の既存 `try-catch` ロジックは不変）。
+- **`apps/api/src/lib/mail-fail.ts`**: `classifyMailError(err)` は `invalid_grant` / HTTP 401/403 / SMTP 535 を `AUTH`、429/503/ETIMEDOUT/ECONNRESET を `TRANSIENT`、それ以外を `UNKNOWN` に分類する純粋関数。`logMailFailure()` が `[MAIL-FAIL] context=X recipient=***@domain kind=K reason=R` 形式で `console.error` 出力（recipient のローカル部をマスク、`reason` は空白/=/改行を `_` に sanitize）。
+- **`sendEmail()`** は互換性維持のため `context` をオプショナルに追加。省略時は従来通り。指定時は内部で分類＋ログ出力してから再 throw（呼び出し側の既存 `try-catch` ロジックは不変）。`createTransport` も try 内に包含しているため OAuth2 config 由来の synchronous 例外も捕捉可能。
 - **呼び出し側**: 予約通知の `context=owner-notification` / `guest-confirmation` / `booking-auth`（refresh token 取得段階）、AI 提案の `ai-suggestion`、テスト通知の `test-notification`。
-- **アラート**: `calendar_hub_mail_fail` metric + `[Calendar Hub] Mail send failure` policy（10分内 ≥1件、 Sync failed と同等）。
-- **E2E 注入**: `bash infra/inject-test-alert-log.sh mail-fail` で単発発火検証可能（sync-failed と同程度の時間で発火する想定）。
+- **アラート**: `calendar_hub_mail_fail` metric + `[Calendar Hub] Mail send failure` policy（10分内 ≥1件、 Sync failed と同等、auto-close 24h）。
+- **E2E 注入検証 (2026-04-15 04:49 UTC)**: `bash infra/inject-test-alert-log.sh mail-fail` で `[MAIL-FAIL]` ログを `cloud_run_revision=00047-qcm` 上に 1 件注入 → `calendar_hub_mail_fail` metric `int64Value=1` を 04:49-04:50 window で確認済。`alignmentPeriod=600s` のためアラート発火タイミングは注入から最大 10 分後、メール配信までは GCP 側の揺らぎで追加遅延あり（#72 の Sync failed 実測: 1-3 分）。次セッションで実メール受信を目視確認する場合は `gcloud logging read 'textPayload:"[MAIL-FAIL]"'` と Monitoring > Alerts を並べて確認。
 
 ### Firestore Backup セットアップの落とし穴（2026-04-15, #73）
 

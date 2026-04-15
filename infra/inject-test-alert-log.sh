@@ -21,9 +21,9 @@ TARGET="${1:-all}"
 TEST_ID="e2e-$(date +%s)"
 
 case "$TARGET" in
-  all | sync-gap | sync-failed | rrule-skip) ;;
+  all | sync-gap | sync-failed | rrule-skip | mail-fail) ;;
   *)
-    echo "Usage: $0 [all|sync-gap|sync-failed|rrule-skip]" >&2
+    echo "Usage: $0 [all|sync-gap|sync-failed|rrule-skip|mail-fail]" >&2
     exit 2
     ;;
 esac
@@ -100,11 +100,17 @@ inject_rrule_skip() {
   write_entry "[RRULE-SKIP] calendar=TEST-${TEST_ID} event=test-evt title=\"e2e verification\" recurrences=[FREQ=INVALID] err=injected for alert E2E verification"
 }
 
+inject_mail_fail() {
+  echo "-> [MAIL-FAIL] (発火目安: 1-10分)"
+  write_entry "[MAIL-FAIL] context=test-notification recipient=***@example.com kind=AUTH reason=oauth_error=invalid_grant injected for alert E2E verification TEST-${TEST_ID}"
+}
+
 case "$TARGET" in
   all)
     inject_sync_gap
     inject_sync_failed
     inject_rrule_skip
+    inject_mail_fail
     ;;
   sync-gap)
     inject_sync_gap
@@ -114,6 +120,9 @@ case "$TARGET" in
     ;;
   rrule-skip)
     inject_rrule_skip
+    ;;
+  mail-fail)
+    inject_mail_fail
     ;;
 esac
 

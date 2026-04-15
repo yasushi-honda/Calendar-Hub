@@ -1,10 +1,18 @@
 import nodemailer from 'nodemailer';
+import { logMailFailure } from './mail-fail.js';
 
 interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /**
+   * 失敗時のアラート／トリアージに使う識別子。
+   * 例: `owner-notification`, `guest-confirmation`, `ai-suggestion`, `test-notification`.
+   * 指定すると送信失敗時に `[MAIL-FAIL] context=<context> ...` として console.error し、
+   * その後エラーを再 throw する（呼び出し側の既存 try-catch ロジックには非互換変更なし）。
+   */
+  context?: string;
 }
 
 interface GmailAuth {
@@ -17,24 +25,33 @@ interface GmailAuth {
  * access_tokenはrefreshAccessToken()で事前に取得しておく
  */
 export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Promise<void> {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      type: 'OAuth2',
-      user: auth.email,
-      accessToken: auth.accessToken,
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    },
-  });
+  try {
+    // createTransport も try 内に含める: OAuth2 config 検証等で synchronous に
+    // 例外が出るケースも `[MAIL-FAIL]` で捕捉するため。
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        type: 'OAuth2',
+        user: auth.email,
+        accessToken: auth.accessToken,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      },
+    });
 
-  await transporter.sendMail({
-    from: `Calendar Hub <${auth.email}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text,
-  });
+    await transporter.sendMail({
+      from: `Calendar Hub <${auth.email}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+    });
+  } catch (err) {
+    if (options.context) {
+      logMailFailure({ context: options.context, recipient: options.to }, err);
+    }
+    throw err;
+  }
 }
 
 /**

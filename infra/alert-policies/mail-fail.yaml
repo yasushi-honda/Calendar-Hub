@@ -1,0 +1,34 @@
+displayName: '[Calendar Hub] Mail send failure'
+documentation:
+  content: |
+    Gmail 経由のメール送信が失敗した（`[MAIL-FAIL]` ログ）。
+    Issue #74: 静かな失敗の検知（OAuth refresh token 失効・一時的な送信失敗・認証拒否）。
+
+    分類:
+    - `kind=AUTH`   → トークン失効。Firestore `connectedAccounts` で再ログインが必要。
+    - `kind=TRANSIENT` → 一時障害（429/503/ETIMEDOUT 等）。次回送信で回復可能性あり。
+    - `kind=UNKNOWN` → 分類外。ログ本文を確認しコード側で分類を拡張。
+
+    対応コマンド:
+      gcloud logging read 'textPayload:"[MAIL-FAIL]"' --project=calendar-hub-prod --limit=20
+
+    関連コンテキスト:
+    - `context=booking-auth` → 予約時の refresh_token 取得段階で失敗
+    - `context=owner-notification` / `context=guest-confirmation` → 予約通知送信
+    - `context=ai-suggestion` / `context=test-notification` → AI / 手動テスト通知
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: 'mail_fail_count >= 1 in 10min'
+    conditionThreshold:
+      filter: 'metric.type="logging.googleapis.com/user/calendar_hub_mail_fail" AND resource.type="cloud_run_revision"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0
+      duration: 0s
+      aggregations:
+        - alignmentPeriod: 600s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+alertStrategy:
+  autoClose: 86400s
+enabled: true

@@ -190,6 +190,7 @@ async function sendSuggestionNotification(
       to: userInfo.email,
       subject: `Calendar Hub - ${suggestions.length}件の新しいスケジュール提案`,
       html,
+      context: 'ai-suggestion',
     },
   );
 }

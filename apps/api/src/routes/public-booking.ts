@@ -11,6 +11,7 @@ import {
   buildBookingNotificationHtml,
   buildBookingConfirmationHtml,
 } from '../lib/email.js';
+import { logMailFailure } from '../lib/mail-fail.js';
 import { calculateFreeSlots, splitFreeIntoBookingSlots } from '@calendar-hub/shared/free-time';
 import type {
   CalendarEvent,
@@ -381,12 +382,25 @@ function sendBookingNotificationsAsync(
     let auth: { email: string; accessToken: string };
     try {
       const refreshToken = await getRefreshToken(link.ownerUid, googleAccount.id);
-      if (!refreshToken) return;
+      if (!refreshToken) {
+        // refresh_token が Firestore に残っていないケース。再ログインが必要。
+        logMailFailure(
+          { context: 'booking-auth', recipient: googleAccount.email },
+          new Error('no_refresh_token_stored'),
+        );
+        return;
+      }
       const tokens = await refreshAccessToken(refreshToken);
-      if (!tokens.access_token) return;
+      if (!tokens.access_token) {
+        logMailFailure(
+          { context: 'booking-auth', recipient: googleAccount.email },
+          new Error('empty_access_token'),
+        );
+        return;
+      }
       auth = { email: googleAccount.email, accessToken: tokens.access_token };
     } catch (err) {
-      console.error(`Failed to get auth for notifications: ${bookingId}`, err);
+      logMailFailure({ context: 'booking-auth', recipient: googleAccount.email }, err);
       return;
     }
 
@@ -403,10 +417,11 @@ function sendBookingNotificationsAsync(
           slotStart,
           slotEnd,
         }),
+        context: 'owner-notification',
       });
       await db.collection('bookings').doc(bookingId).update({ notificationSentToOwner: true });
-    } catch (err) {
-      console.error(`Failed to send owner notification: ${bookingId}`, err);
+    } catch {
+      // sendEmail が context 指定済のため内部で [MAIL-FAIL] 出力済。ここではスタックを握り潰さず無視。
     }
 
     // ゲストへ確認メール（独立try-catch）
@@ -423,10 +438,11 @@ function sendBookingNotificationsAsync(
             slotEnd,
             durationMinutes: link.durationMinutes,
           }),
+          context: 'guest-confirmation',
         });
         await db.collection('bookings').doc(bookingId).update({ notificationSentToGuest: true });
-      } catch (err) {
-        console.error(`Failed to send guest confirmation: ${bookingId}`, err);
+      } catch {
+        // sendEmail 内で [MAIL-FAIL] 出力済
       }
     }
   })();

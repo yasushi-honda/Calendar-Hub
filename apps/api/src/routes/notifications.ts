@@ -81,6 +81,7 @@ notificationRoutes.post('/test', requireAuth, async (c) => {
         to: userInfo.email,
         subject: 'Calendar Hub - テスト通知',
         html: buildTestEmailHtml(),
+        context: 'test-notification',
       },
     );
 

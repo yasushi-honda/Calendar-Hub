@@ -1,10 +1,11 @@
-# Calendar Hub ハンドオフ (2026-04-14)
+# Calendar Hub ハンドオフ (2026-04-15)
 
 ## 最近の完了作業（直近1週間）
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
-| TBD | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
+| #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
+| #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
 | #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                |
 | #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正） |
 | #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                  |
@@ -64,9 +65,10 @@
 
 | #                                                              | タイトル                                                   |
 | -------------------------------------------------------------- | ---------------------------------------------------------- |
-| [#72](https://github.com/yasushi-honda/Calendar-Hub/issues/72) | アラート発火の実地確認（end-to-end検証）                   |
 | [#73](https://github.com/yasushi-honda/Calendar-Hub/issues/73) | Firestore バックアップ・PITR設定                           |
 | [#74](https://github.com/yasushi-honda/Calendar-Hub/issues/74) | Gmail OAuth トークン失効時の可視化（静かな送信失敗の検知） |
+
+（#72 は PR #83 で完了）
 
 ### P1（次週対応）
 
@@ -85,18 +87,27 @@
 | [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
 | [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
 
-**本番運用として #72/#73/#74 の P0 3件は #65/#66 と同等リスク**のため、次セッションで優先対応する。
+**本番運用として #73/#74 の P0 2件は優先対応**する。
 
 ## 次セッションの推奨アクション
 
-1. **#72 アラート実地発火テスト** — 設定のみで終わっているアラート3種が本当にメール着弾するか検証
-2. **#73 Firestore PITR + 日次バックアップ** — データ損失時のリカバリ手段確立
-3. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
-4. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
-5. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-6. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+1. **#73 Firestore PITR + 日次バックアップ** — データ損失時のリカバリ手段確立
+2. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
+3. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
+4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+5. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 
 ## 技術メモ（今セッション）
+
+### アラート E2E 検証の落とし穴（2026-04-15, #72 / PR #83）
+
+1. **`gcloud logging write` は使えない**: `resource.type=global` でログを書き込むため、
+   log-based metric の filter (`resource.type="cloud_run_revision"`) と一致せず、
+   アラートは発火しない。Issue #72 / ADR-006 の原文例が silent に動いていなかった。
+   → `infra/inject-test-alert-log.sh` で REST API 直接呼び出し（`cloud_run_revision` 明示）。
+2. **SYNC-GAP は 1回注入では発火しない**: `duration=900s` により sustained signal が必須。
+   3分間隔で6回注入（18分連続）で確実発火確認。5分間隔4回は境界で逃す事例あり。
+3. **E2E 結果**: 3種すべて発火 + メール到着確認済（RRULE-SKIP 2min / Sync failed 3min / SYNC-GAP 19min）。
 
 ### TimeTree繰り返しイベント同期の不具合連鎖（2026-04-14）
 

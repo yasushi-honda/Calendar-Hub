@@ -4,6 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
+| TBD | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
 | #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
 | #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
 | #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                |
@@ -56,6 +57,11 @@
   - Log metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap`
   - Alert policies（3件）→ Email 通知 `hy.unimail.11@gmail.com`
   - セットアップ: `bash infra/setup-monitoring.sh`（冪等）
+- Firestore Backup（ADR-007, #73）:
+  - PITR 有効（7日 `versionRetentionPeriod=604800s`）
+  - 日次バックアップスケジュール（30日保持）
+  - GCS: `gs://calendar-hub-prod-firestore-backup`（30日 lifecycle delete）
+  - セットアップ: `bash infra/setup-firestore-backup.sh`（冪等）
 
 ## オープンIssue
 
@@ -65,10 +71,9 @@
 
 | #                                                              | タイトル                                                   |
 | -------------------------------------------------------------- | ---------------------------------------------------------- |
-| [#73](https://github.com/yasushi-honda/Calendar-Hub/issues/73) | Firestore バックアップ・PITR設定                           |
 | [#74](https://github.com/yasushi-honda/Calendar-Hub/issues/74) | Gmail OAuth トークン失効時の可視化（静かな送信失敗の検知） |
 
-（#72 は PR #83 で完了）
+（#72 は PR #83 で完了 / #73 は本PRで完了予定）
 
 ### P1（次週対応）
 
@@ -87,17 +92,26 @@
 | [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
 | [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
 
-**本番運用として #73/#74 の P0 2件は優先対応**する。
+**本番運用として #74 の P0 残 1件は優先対応**する。
 
 ## 次セッションの推奨アクション
 
-1. **#73 Firestore PITR + 日次バックアップ** — データ損失時のリカバリ手段確立
-2. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
-3. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
-4. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-5. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+1. **#74 Gmail 送信失敗の可視化** — 静かに失敗する通知の検知
+2. P1 群（予約E2E / 予算アラート / エラー率監視 / ロールバック検証）
+3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+4. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 
 ## 技術メモ（今セッション）
+
+### Firestore Backup セットアップの落とし穴（2026-04-15, #73）
+
+1. **`gcloud firestore backups schedules list --filter=...` で `dailyRecurrence` を検出できない**:
+   `dailyRecurrence: {}` は空オブジェクトで filter の `:*` マッチが機能しない。
+   冪等判定には `--format=json | jq '.[] | select(.dailyRecurrence != null)'` が必要。
+2. **PITR の `earliestVersionTime` は有効化時刻から進行**: 有効化直後は直近まで、
+   7日分のウィンドウが埋まるまで最大 7 日かかる（version_retention_period=604800s）。
+3. **復元は新 DB へ**: `gcloud firestore databases restore` は常に新しい database を作成する。
+   `(default)` を直接上書きする手段はない（ADR-007 復元後 orchestration 節参照）。
 
 ### アラート E2E 検証の落とし穴（2026-04-15, #72 / PR #83）
 

@@ -2,18 +2,19 @@
 
 ## 最近の完了作業（直近1週間）
 
-| PR  | Issue | 内容                                                                                    |
-| --- | ----- | --------------------------------------------------------------------------------------- |
-| #91 | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                               |
-| #90 | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                       |
-| #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
-| #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
-| #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
-| #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
-| #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                |
-| #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正） |
-| #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                  |
-| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                              |
+| PR  | Issue | 内容                                                                                     |
+| --- | ----- | ---------------------------------------------------------------------------------------- |
+| #94 | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新 |
+| #91 | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                |
+| #90 | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                        |
+| #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                 |
+| #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007          |
+| #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                       |
+| #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                    |
+| #68 | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                 |
+| #64 | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）  |
+| #63 | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                   |
+| #61 | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                               |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -57,9 +58,12 @@
 - Web最新リビジョン: calendar-hub-web-00013-crs
 - デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）
 - Cloud Monitoring:
-  - Log metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
-  - Alert policies（4件）→ Email 通知 `hy.unimail.11@gmail.com`
-  - セットアップ: `bash infra/setup-monitoring.sh`（冪等）
+  - Log-based metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
+  - Built-in metrics (Cloud Run): `request_count` / `request_latencies`（#77 で導入、policy 側で利用）
+  - Alert policies（**7件**）→ Email 通知 `hy.unimail.11@gmail.com`
+    - sync系4件（RRULE-SKIP / Sync failed / SYNC-GAP / MAIL-FAIL）
+    - API系3件（#77、5xx≥3/5min / 4xx spike ≥20/5min+401+403≥5/5min / p99>3s 5min）
+  - セットアップ: `bash infra/setup-monitoring.sh`（冪等、7 policy全apply）
 - Budget Alert（#76）:
   - Calendar Hub Monthly: **¥10/月**（検知用の最小設定、50%/90%/100% threshold）
   - 通知先: `hy.unimail.11@gmail.com`（`disableDefaultIamRecipients=true` でチャネル指定のみ）
@@ -80,12 +84,11 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 ### P1（次週対応）
 
-| #                                                              | タイトル                                 |
-| -------------------------------------------------------------- | ---------------------------------------- |
-| [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト                |
-| [#77](https://github.com/yasushi-honda/Calendar-Hub/issues/77) | API エラー率・レイテンシ監視（sync以外） |
+| #                                                              | タイトル                  |
+| -------------------------------------------------------------- | ------------------------- |
+| [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト |
 
-（#76 は PR #90、#78 は PR #91 で完了）
+（#76 は PR #90、#77 は PR #94、#78 は PR #91 で完了）
 
 ### P2（中期対応）
 
@@ -95,17 +98,26 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 | [#80](https://github.com/yasushi-honda/Calendar-Hub/issues/80) | 依存ライブラリ脆弱性監視（Dependabot）          |
 | [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          |
 
-**本番運用の P0 はすべて解消済**（#72/#73/#74）。次は P1 群の対応を推奨。
+**本番運用の P0 はすべて解消済**（#72/#73/#74）。P1 も残り **#75** のみ。
 
 ## 次セッションの推奨アクション
 
-1. 残 P1: **#75 予約 E2E テスト** / **#77 sync 以外の API エラー率監視**
-2. P2 (任意): #79 TimeTree session 自動検知 / #80 Dependabot / #81 SLO
+1. 残 P1: **#75 公開予約ページ E2E テスト** （最後の P1）
+2. P2 群: #79 TimeTree session 自動検知 / #80 Dependabot / #81 SLO
 3. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
 4. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 5. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
+
+### API 健全性アラート: Cloud Run built-in metrics 活用（2026-04-15, #77 / PR #94）
+
+- **対象**: `run.googleapis.com/request_count` (labels: `response_code`/`response_code_class`/`route`) と `request_latencies`。アプリ側コード追加なしで Cloud Run 側が emit するためコスト ≒ 0。`metricDescriptors` REST API で実ラベル確認 (2026-04-15): `response_code_class` は `"4xx"` 等の文字列、`response_code` は `"401"` 等の整数文字列。
+- **閾値 deviation (絶対件数)**: spec 原文「5xx 率 5%」「4xx 前日比+300%」は低トラフィック単独開発で false-positive 多発（idle window で 1 件が 100% 化）。絶対件数 (5xx≥3/5min, 4xx≥20/5min, p99>3s 5min) に切替。ADR-006 §deviation に理由明記。
+- **4xx 2 条件 OR**: `400` 入力ノイズと `401/403` OAuth 失効が同じ 20 件閾値に埋もれる silent-failure を防ぐため、401/403 専用条件を `response_code="401" OR response_code="403"` で 5/5min に分離（`combiner: OR` で独立発火）。
+- **groupByFields は冗長**: filter 側で `service_name="calendar-hub-api"` を固定すると REDUCE_SUM は 1 時系列に集約されるため `groupByFields: [resource.label.service_name]` は no-op。3 YAML から削除（simplifier レビュー反映）。
+- **ADR-006 死角セクション訂正**: 初版の (b) 「public-booking の 200+error body」は実在しない（全 `c.json({error:...})` が 400/404/409）。削除。(a) を実在する `sendBookingNotificationsAsync` の fire-and-forget パターンに訂正（HTTP 201 後の非同期失敗、`[MAIL-FAIL]` で既カバー）。(c) OOM metric 名を `container/memory/utilizations` に訂正（`cpu/utilization` は誤り）、(d) startup probe を `container/startup_latencies` + Error Reporting に訂正。
+- **実機 E2E**: 404 を 3 回誘発 → 1 分以内に `response_code_class="4xx"` metric が 3 件 ingestion（2026-04-15 13:58:19Z、`timeSeries list` で確認）。`4xx spike` policy の `conditions.len()` = 2 で 2 条件 live 確認。
 
 ### Gmail 送信失敗の可視化（2026-04-15, #74 / PR #87）
 

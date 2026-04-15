@@ -147,14 +147,17 @@ bash infra/inject-test-alert-log.sh rrule-skip    # 最大1時間で発火
 ```
 
 **SYNC-GAP の持続注入**: `duration=900s` の設計により1回の注入では発火しない。
-20分間の持続信号を作るため5分間隔で4回注入:
+境界で逃さないために 3分間隔で6回注入（18分の sustained signal を生成）:
 
 ```bash
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5 6; do
   bash infra/inject-test-alert-log.sh sync-gap
-  [ $i -lt 4 ] && sleep 300
+  [ $i -lt 6 ] && sleep 180
 done
 ```
+
+実測: 5分間隔で4回注入は発火しないケースあり（アラート評価の境界条件）。
+3分間隔で6回注入は 2026-04-15 の E2E で確実に発火確認済み（下記の検証結果参照）。
 
 メトリクス集計確認:
 
@@ -191,9 +194,9 @@ https://console.cloud.google.com/monitoring/alerting?project=calendar-hub-prod
    log-based metric フィルタ `cloud_run_revision` と不一致）。再発防止のため
    `infra/inject-test-alert-log.sh` を追加した（REST API で cloud_run_revision を明示指定）。
 2. **SYNC-GAP は 1回注入では発火しない**（設計通り）。`duration=900s` の条件を満たすには
-   3分間隔で6回程度（18分の sustained signal）の注入が必要。4回注入（5分間隔）では
-   境界条件で発火を逃すケースがあり、実運用では連続3サイクル以上の持続欠落時のみ発火する
-   設計意図と整合する。
+   3分間隔で6回（18分の sustained signal）の注入が必要。4回注入（5分間隔）は境界条件で
+   発火を逃したケースがあり、実運用では連続3サイクル以上の持続欠落時のみ発火する設計意図
+   と整合する。
 
 ### 無効化（障害対応時）
 

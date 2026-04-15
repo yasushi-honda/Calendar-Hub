@@ -37,6 +37,11 @@ if [ -z "$REVISION" ]; then
   exit 1
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "ERROR: jq is required but not found in PATH" >&2
+  exit 1
+fi
+
 ACCESS_TOKEN=$(gcloud auth print-access-token)
 
 echo "Injecting with:"
@@ -46,49 +51,53 @@ echo "  revision = $REVISION"
 echo "  test_id  = $TEST_ID"
 echo ""
 
+# jq で JSON を構築することで、変数値に含まれる特殊文字による payload 破損を防ぐ。
 write_entry() {
-  local payload="$1"
+  local text_payload="$1"
+  local body
+  body=$(jq -nc \
+    --arg project "$PROJECT_ID" \
+    --arg service "$SERVICE_NAME" \
+    --arg revision "$REVISION" \
+    --arg region "$REGION" \
+    --arg text "$text_payload" \
+    '{
+      entries: [{
+        logName: ("projects/" + $project + "/logs/run.googleapis.com%2Fstderr"),
+        resource: {
+          type: "cloud_run_revision",
+          labels: {
+            project_id: $project,
+            service_name: $service,
+            revision_name: $revision,
+            location: $region,
+            configuration_name: $service
+          }
+        },
+        severity: "ERROR",
+        textPayload: $text
+      }]
+    }')
   curl -sSf -X POST \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Content-Type: application/json" \
     "https://logging.googleapis.com/v2/entries:write" \
-    -d "$(cat <<EOF
-{
-  "entries": [
-    {
-      "logName": "projects/${PROJECT_ID}/logs/run.googleapis.com%2Fstderr",
-      "resource": {
-        "type": "cloud_run_revision",
-        "labels": {
-          "project_id": "${PROJECT_ID}",
-          "service_name": "${SERVICE_NAME}",
-          "revision_name": "${REVISION}",
-          "location": "${REGION}",
-          "configuration_name": "${SERVICE_NAME}"
-        }
-      },
-      "severity": "ERROR",
-      "textPayload": ${payload}
-    }
-  ]
-}
-EOF
-)" > /dev/null
+    -d "$body" > /dev/null
 }
 
 inject_sync_gap() {
-  echo "-> [SYNC-GAP] (発火目安: 15-20分)"
-  write_entry "\"[SYNC-GAP] calendar=TEST-${TEST_ID} tt=99 taggedBefore=90 diff=9 created=0 deleted=0 skipped=0\""
+  echo "-> [SYNC-GAP] (sustained 18分+ が必要、次項参照)"
+  write_entry "[SYNC-GAP] calendar=TEST-${TEST_ID} tt=99 taggedBefore=90 diff=9 created=0 deleted=0 skipped=0"
 }
 
 inject_sync_failed() {
   echo "-> Sync failed (発火目安: 1-5分)"
-  write_entry "\"Sync failed for TEST-${TEST_ID}: injected for alert E2E verification\""
+  write_entry "Sync failed for TEST-${TEST_ID}: injected for alert E2E verification"
 }
 
 inject_rrule_skip() {
   echo "-> [RRULE-SKIP] (発火目安: 最大1時間)"
-  write_entry "\"[RRULE-SKIP] calendar=TEST-${TEST_ID} event=test-evt title=\\\"e2e verification\\\" recurrences=[FREQ=INVALID] err=injected for alert E2E verification\""
+  write_entry "[RRULE-SKIP] calendar=TEST-${TEST_ID} event=test-evt title=\"e2e verification\" recurrences=[FREQ=INVALID] err=injected for alert E2E verification"
 }
 
 case "$TARGET" in

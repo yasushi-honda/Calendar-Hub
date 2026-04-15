@@ -4,7 +4,7 @@
 
 | PR  | Issue | 内容                                                                                    |
 | --- | ----- | --------------------------------------------------------------------------------------- |
-| TBD | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
+| #87 | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                |
 | #85 | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007         |
 | #83 | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                      |
 | #70 | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                   |
@@ -70,7 +70,7 @@
 
 ### P0（早急対応）
 
-_すべて完了_（#72: PR #83 / #73: PR #85 / #74: 本PR）。
+_すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 ### P1（次週対応）
 

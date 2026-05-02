@@ -148,16 +148,189 @@ describe('expandRecurringEvent', () => {
     const result = expandRecurringEvent(recurrences, masterStart, masterEnd, timeMin, timeMax);
     expect(result).toEqual([]);
   });
+
+  // === JST 0:00 境界の繰り返しイベント（バグ #日曜→月曜ずれ の再現） ===
+  // ADR-008 参照: rrule は dtstart を UTC 基準で扱うため、JST 0:00 開始の予定は
+  // UTC 上で前日になり、BYDAY 判定が +1 日ずれる
+  describe('JST 0:00 境界の繰り返しイベント (ADR-008)', () => {
+    it('日曜 JST 0:00 全日 + BYDAY=SU は日曜に展開される', () => {
+      // TimeTree が「日曜 JST 0:00 開始」を保存する形: UTC では土曜 15:00
+      const masterStart = new Date('2026-05-02T15:00:00Z'); // 日曜 JST 0:00
+      const masterEnd = new Date('2026-05-03T15:00:00Z'); // 月曜 JST 0:00 (24h後)
+      const recurrences = ['RRULE:FREQ=WEEKLY;BYDAY=SU'];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-05-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      expect(result.length).toBeGreaterThanOrEqual(3);
+      for (const inst of result) {
+        // JST で日曜 0:00 (= UTC 土曜 15:00) であること
+        const jstDay = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Tokyo',
+          weekday: 'short',
+        }).format(inst.start);
+        expect(jstDay).toBe('Sun');
+        const jstHour = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Tokyo',
+          hour: '2-digit',
+          hour12: false,
+        }).format(inst.start);
+        expect(jstHour).toBe('00');
+      }
+    });
+
+    it('月曜 JST 0:30 通常イベント + BYDAY=MO は月曜に展開される', () => {
+      // 月曜 JST 0:30 = UTC 日曜 15:30（UTC では日曜）
+      const masterStart = new Date('2026-05-03T15:30:00Z');
+      const masterEnd = new Date('2026-05-03T16:30:00Z'); // 1時間
+      const recurrences = ['RRULE:FREQ=WEEKLY;BYDAY=MO'];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-05-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      expect(result.length).toBeGreaterThanOrEqual(3);
+      for (const inst of result) {
+        const jstDay = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Tokyo',
+          weekday: 'short',
+        }).format(inst.start);
+        expect(jstDay).toBe('Mon');
+      }
+    });
+
+    it('EXDATE は JST 日付ベースで除外される', () => {
+      // 日曜 JST 0:00 全日週次、JST 5/10 を除外
+      const masterStart = new Date('2026-05-02T15:00:00Z');
+      const masterEnd = new Date('2026-05-03T15:00:00Z');
+      const recurrences = [
+        'RRULE:FREQ=WEEKLY;BYDAY=SU',
+        'EXDATE:20260510', // JST 2026-05-10 (日曜) を除外したい
+      ];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-05-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      // 5/10 が除外されていること（JST 日付で判定）
+      const jstDates = result.map((r) =>
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(r.start),
+      );
+      expect(jstDates).not.toContain('2026-05-10');
+      // 他の日曜は含まれること
+      expect(jstDates).toContain('2026-05-03');
+      expect(jstDates).toContain('2026-05-17');
+    });
+
+    it('EXDATE の Z なし date-time は floating wall-clock として扱う', () => {
+      // 火曜 JST 09:00 = UTC 火曜 00:00 (UTC でも JST でも火曜)
+      const masterStart = new Date('2026-05-05T00:00:00Z');
+      const masterEnd = new Date('2026-05-05T01:00:00Z');
+      // Z なし date-time: 既に floating wall-clock として TimeTree が送ってくる場合の表現
+      // 「JST 火曜 09:00」を表す → floating: '2026-05-12T09:00:00Z'
+      const recurrences = ['RRULE:FREQ=WEEKLY;BYDAY=TU', 'EXDATE:20260512T090000'];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-05-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      // 5/12 (JST 火曜) が除外されていること
+      const jstDates = result.map((r) =>
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(r.start),
+      );
+      expect(jstDates).not.toContain('2026-05-12');
+      expect(jstDates).toContain('2026-05-05');
+      expect(jstDates).toContain('2026-05-19');
+    });
+
+    it('時間指定 RRULE + date-only EXDATE: JST 日付で除外される', () => {
+      // 火曜 JST 09:00 週次（時間指定） + JST 5/12 を date-only で除外
+      const masterStart = new Date('2026-05-05T00:00:00Z'); // 火曜 JST 09:00
+      const masterEnd = new Date('2026-05-05T01:00:00Z');
+      const recurrences = ['RRULE:FREQ=WEEKLY;BYDAY=TU', 'EXDATE:20260512'];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-05-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      // date-only EXDATE は floating の JST 0:00 を指すため、9:00 occurrence とは時刻が異なる。
+      // この組み合わせでは EXDATE は実際には除外しない（rrule の仕様: 厳密一致）。
+      // → 5/12 は含まれる
+      const jstDates = result.map((r) =>
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(r.start),
+      );
+      // 仕様: date-only EXDATE は時間指定 RRULE と組み合わせると除外不発（rrule の厳密一致仕様）
+      // TimeTree が time-specified RRULE で date-only EXDATE を送るケースは観測されていないが、
+      // 観測された場合の挙動として記録しておく
+      expect(jstDates).toContain('2026-05-12');
+      expect(jstDates).toContain('2026-05-05');
+    });
+
+    it('FREQ=WEEKLY;COUNT=N: 件数が正しく適用される', () => {
+      const masterStart = new Date('2026-05-02T15:00:00Z'); // 日曜 JST 0:00
+      const masterEnd = new Date('2026-05-03T15:00:00Z');
+      const recurrences = ['RRULE:FREQ=WEEKLY;BYDAY=SU;COUNT=3'];
+
+      const tMin = new Date('2026-05-01T00:00:00Z');
+      const tMax = new Date('2026-12-30T00:00:00Z');
+      const result = expandRecurringEvent(recurrences, masterStart, masterEnd, tMin, tMax);
+
+      expect(result.length).toBe(3);
+      const jstDates = result.map((r) =>
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(r.start),
+      );
+      expect(jstDates).toEqual(['2026-05-03', '2026-05-10', '2026-05-17']);
+    });
+  });
 });
 
 describe('instanceDateSuffix', () => {
-  it('全日イベント: _RYYYYMMDD形式', () => {
-    const date = new Date('2026-04-15T00:00:00Z');
+  it('全日イベント: _RYYYYMMDD形式 (JST date 基準)', () => {
+    // JST 2026-04-15 0:00 (= UTC 2026-04-14 15:00)
+    const date = new Date('2026-04-14T15:00:00Z');
     expect(instanceDateSuffix(date, true)).toBe('_R20260415');
   });
 
   it('時間指定イベント: _RYYYYMMDDTHHmmss形式', () => {
     const date = new Date('2026-04-15T07:30:00Z');
     expect(instanceDateSuffix(date, false)).toBe('_R20260415T073000');
+  });
+
+  // ADR-008: suffix を JST 基準にすることで、修正前後で suffix が一致し
+  // 既存タグ付き Google 予定との originalId 衝突を回避する
+  it('全日イベント: JST 0:00 境界 (UTC 前日) でも JST 日付を返す', () => {
+    // 日曜 JST 0:00 (= 土曜 UTC 15:00)
+    const date = new Date('2026-05-02T15:00:00Z');
+    expect(instanceDateSuffix(date, true)).toBe('_R20260503');
+  });
+
+  it('全日イベント: 旧 UTC 基準と新 JST 基準で suffix が一致する移行ケース', () => {
+    // バグ修正前は monday JST 0:00 = sunday UTC 15:00 = `2026-05-03T15:00:00Z` で生成され
+    // getUTCDate=3 で `_R20260503` となっていた。
+    // 修正後は sunday JST 0:00 = saturday UTC 15:00 = `2026-05-02T15:00:00Z` で生成され
+    // JST date=3 で `_R20260503` となる。
+    const newCorrectInstance = new Date('2026-05-02T15:00:00Z');
+    expect(instanceDateSuffix(newCorrectInstance, true)).toBe('_R20260503');
   });
 });

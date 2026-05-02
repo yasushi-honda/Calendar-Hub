@@ -1,9 +1,10 @@
-# Calendar Hub ハンドオフ (2026-04-16)
+# Calendar Hub ハンドオフ (2026-05-03)
 
 ## 最近の完了作業（直近1週間）
 
 | PR             | Issue | 内容                                                                                         |
 | -------------- | ----- | -------------------------------------------------------------------------------------------- |
+| #109           | -     | TimeTree 日曜→月曜ずれバグ修正 (ADR-008)。RRULE 展開を JST wall-clock 座標系に統一           |
 | #96/#97/#105   | -     | Dependabot security: nodemailer/hono-node-server/next 15.5.15/hono 4.12.14（9件脆弱性解消）  |
 | #101/#102/#103 | -     | GitHub Actions major bump: auth v3 / checkout v6 / setup-gcloud v3                           |
 | #100           | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化 |
@@ -57,9 +58,10 @@
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
 - Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: calendar-hub-api-00038-d6x（GitHub Actions自動デプロイ経由、2026-04-14）
+- API最新リビジョン: **calendar-hub-api-00062-s85**（PR #109 経由、2026-05-02、**手動 traffic 切替で稼働開始**）
 - Web最新リビジョン: calendar-hub-web-00013-crs
 - デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）
+- **⚠️ 既知の不具合**: deploy.yml で新 revision 作成は成功するが **trafficSplit が新 revision に昇格されない**（PR #109 で発覚、緊急対応として `gcloud run services update-traffic --to-latest` 手動実行で解決）。要修正（未起票）
 - Cloud Monitoring:
   - Log-based metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
   - Built-in metrics (Cloud Run): `request_count` / `request_latencies`（#77 で導入、policy 側で利用）
@@ -114,6 +116,28 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 6. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
 
 ## 技術メモ（今セッション）
+
+### TimeTree 日曜→月曜ずれバグ修正と CI/CD trafficSplit 昇格漏れ事故（2026-05-02, PR #109）
+
+**症状**: ユーザー報告「日曜の繰り返し予定が月曜に作られ、削除しても無限に復活する」。
+
+**根本原因 2 層**:
+
+1. **コードバグ（PR #109 で修正）**: `expandRecurringEvent` で rrule lib に実 UTC instant をそのまま渡していた。rrule は `tzid` 未指定時 `BYDAY` を UTC 基準で判定するため、JST 0:00-8:59 帯の予定は UTC 上で前日となり +1 日ずれる。`BYDAY=SU` の occurrence が UTC 日曜（= JST 月曜 0:00 以降）として展開されていた。
+
+2. **デプロイの trafficSplit 昇格漏れ（手動切替で対症療法）**: PR #109 マージで Deploy ジョブは success、新 revision `00062-s85` も Ready=True で作成されたが、Cloud Run の traffic は旧 revision `00050-hhh` に 100% のまま。新コードは一度も traffic を受けていなかった。
+
+**ADR-008** に座標系（実 UTC instant ↔ JST wall-clock floating Date）の方針と移行戦略を記録。`instanceDateSuffix` を JST 日付基準に変更したが、修正前の UTC 基準 suffix と全ケースで偶然一致する（全日イベント前提）ため tagMap マッチが維持され、移行は自動収束。時間指定 JST 0:00-8:59 帯のみ `toDelete + toCreate` 経路に寄る。
+
+**観測**: 手動 traffic 切替直後の初回 sync で **c=12 d=12**（過去にずれた 12 件を自動削除＋日曜の正しい位置に 12 件新規生成）。以降 c=0 d=0 で安定。ユーザーの「削除→復活」が完全停止。
+
+**Codex セカンドオピニオン活用**: 設計レビュー段階で `rrulestr({ tzid: 'Asia/Tokyo' })` 単独では効果なし（実測確認）→ floating wall-clock 化が必須と判明。PR レビュー段階で `parseExdateFloating` の Z なし date-time 二重補正バグを発見・修正。
+
+**今後の課題**:
+
+- **CI/CD の trafficSplit 昇格漏れ**: 次回デプロイで再発するリスクあり。`.github/workflows/deploy.yml` または `infra/deploy-api.sh` 側の `gcloud run deploy` で `--no-traffic` 相当の挙動になっている可能性。**起票必須レベル**（実害あり）。
+- `rruleSet.between(timeMin, timeMax, true)` の上限 inclusive による隣接同期窓重複可能性（既存挙動、PR #109 では悪化なし）。ADR-008 の「スコープ外」に記載。
+- 時間指定 RRULE + date-only EXDATE は rrule の厳密一致仕様で除外不発（TimeTree が当該パターンを送るかは未観測、テストに記録）。
 
 ### Dependabot security 運用の初期対応（2026-04-16, PR #96/#97/#101-#103/#105）
 

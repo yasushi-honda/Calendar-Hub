@@ -10,7 +10,7 @@
 
 ### 根本原因
 
-`packages/calendar-sdk/src/adapters/timetree-recurrence.ts:29` の RRULE 展開で `rrulestr(line, { dtstart: masterStart })` に `tzid` を渡していない。`rrule` ライブラリは `tzid` 未指定時、`BYDAY` を **UTC 基準**で判定する。
+`packages/calendar-sdk/src/adapters/timetree-recurrence.ts` の `expandRecurringEvent` 内 `rrulestr(line, { dtstart: masterStart })` 呼び出しで `tzid` を渡していない。`rrule` ライブラリは `tzid` 未指定時、`BYDAY` を **UTC 基準**で判定する。
 
 TimeTree の「日曜 0:00 JST」予定は内部的に `start_at = 2026-05-02T15:00:00Z`（UTC では土曜）として保存されるため、`BYDAY=SU` で展開すると次の「UTC 日曜」 = `2026-05-03T15:00:00Z` = **JST 月曜 0:00** が生成される。
 
@@ -27,41 +27,47 @@ Google Calendar への同期ではこの月曜配置の date がそのまま `{d
 
 `expandRecurringEvent` を以下の方針で書き換える:
 
-1. **入力変換**: 実 UTC instant の `masterStart` を「JST wall-clock を Z付き ISO で表現した floating Date」に変換  
-   例: `2026-05-02T15:00:00Z`（実）→ `2026-05-03T00:00:00Z`（floating, JST 0:00 を UTC 表記したもの）
+1. **入力変換**: 実 UTC instant の `masterStart` を「JST wall-clock を Z付き ISO で表現した floating Date」に変換（具体例は Context 参照）
 2. **rrule 展開**: floating Date を `dtstart` として `rrule` に渡す。`rrule` は内部で UTC 基準で曜日判定するが、入力が wall-clock 表現のため「JST の曜日」として正しく扱われる
-3. **EXDATE 変換**: `parseExdate` も同じ floating 座標系に変換するヘルパーを通す
+3. **EXDATE 変換**: `parseExdateFloating` で同じ floating 座標系に揃える。Z 付き UTC instant は `+9h` で変換、Z なし date-time は既に floating として扱う、date-only は JST 0:00 floating として扱う
 4. **出力変換**: rrule から得た occurrence（floating）を実 UTC instant に逆変換して呼び出し元に返す
 5. **`instanceDateSuffix`**: JST 日付ベースで `_RYYYYMMDD` を生成する（`getUTCFullYear/Month/Date` ではなく `Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' })` 経由）
 
 JST は DST なしのため、固定 +9 時間オフセットで安全に変換できる。
 
-## 移行戦略（重要な発見）
+## 移行戦略
 
-### `instanceDateSuffix` 変更による `originalId` 衝突は発生しない
+### 全日イベント: `instanceDateSuffix` 変更による `originalId` 衝突は発生しない
 
-T1.1 の数学的検証で、**修正前（バグあり）の UTC 日付 suffix と、修正後（JST 日付）suffix が全ケースで一致**することを確認:
+**全日イベントに限り**、修正前の UTC 日付ベース suffix と修正後の JST 日付ベース suffix が一致することを T1.1 で数学的に検証:
 
-| ケース              | 修正前 UTC suffix | 修正後 JST suffix |
-| ------------------- | ----------------- | ----------------- |
-| JST 日曜 0:00 開始  | `_R20260503`      | `_R20260503`      |
-| JST 火曜 16:00 開始 | `_R20260106`      | `_R20260106`      |
-| JST 月曜 8:30 開始  | `_R20260303`      | `_R20260303`      |
-| JST 金曜 23:30 開始 | `_R20260410`      | `_R20260410`      |
+| ケース              | 修正前 UTC suffix | 修正後 JST suffix | 一致理由                           |
+| ------------------- | ----------------- | ----------------- | ---------------------------------- |
+| JST 日曜 0:00 開始  | `_R20260503`      | `_R20260503`      | 境界帯（+24h と +1日シフトが相殺） |
+| JST 月曜 8:30 開始  | `_R20260303`      | `_R20260303`      | 境界帯（同上）                     |
+| JST 火曜 16:00 開始 | `_R20260106`      | `_R20260106`      | 同日帯（UTC でも JST でも同日）    |
+| JST 金曜 23:30 開始 | `_R20260410`      | `_R20260410`      | 同日帯（同上）                     |
 
-理由: 修正前 instance.start = 修正後 instance.start + 24h であり、UTC 日付の +1 シフトと、JST 0:00-8:59 帯の wall-clock +1 シフトが相殺するため。
+→ 全日イベントの一次 tagMap マッチは成功し、`needsContentUpdate` が date 差分を検知して `toUpdate` で正しい曜日に上書きされる。
 
-### 既存タグ付き Google 予定の自動修正
+### 時間指定イベント: 一部ケースで create/delete に寄る
 
-修正後の sync 実行で、既存の「月曜にずれた」タグ付き予定は:
+時間指定 suffix（`_RYYYYMMDDTHHmmss`）は本 PR で UTC ISO のまま据え置き。ただし `expandRecurringEvent` の出力 `instance.start` は修正前後で値が変わる（バグ修正により JST 0:00-8:59 帯では -24h シフト）ため:
 
-1. 一次 tagMap マッチ成功（suffix 一致のため）
-2. `needsContentUpdate` が start/end の date 差分を検知
-3. `toUpdate` に振られて Google 予定の date が日曜に書き換わる
+- **JST 9:00 以降**: 修正前後で `instance.start` 不変 → suffix も不変 → tagMap マッチ成功 → 一致
+- **JST 0:00-8:59 帯**: 修正前後で `instance.start` が -24h シフト → suffix が変わる → tagMap マッチ失敗 → fallback マッチも失敗（時刻一致せず）→ `toDelete`（旧）+ `toCreate`（新）経路で再生成
 
-ユーザーが既に削除した予定は、tagMap 不一致 → fallback 失敗 → `toCreate` で日曜に新規生成される。
+### 既存タグ付き Google 予定の挙動まとめ
 
-→ **手動クリーンアップ（一括削除等）は原則不要**。デプロイ後の初回 sync で自然に正しい曜日に収束する。
+| 種別 / 帯                 | デプロイ後の挙動                               |
+| ------------------------- | ---------------------------------------------- |
+| 全日（全帯）              | tagMap マッチ → toUpdate で date 上書き        |
+| 時間指定 JST 9:00 以降    | tagMap マッチ → 内容差分なし or 上書き         |
+| 時間指定 JST 0:00-8:59 帯 | toDelete（旧月曜）+ toCreate（新日曜）で再生成 |
+
+ユーザーが Google 側のみ削除済みの予定は、いずれの帯でも `toCreate` で正しい曜日に新規生成される。
+
+→ **手動クリーンアップは原則不要**。デプロイ後の初回 sync で自然に正しい曜日に収束する（時間指定 0:00-8:59 帯では一時的に delete+create が走る）。
 
 ## スコープ外
 
@@ -69,6 +75,8 @@ T1.1 の数学的検証で、**修正前（バグあり）の UTC 日付 suffix 
 
 - TimeTree all-day `end_at` の排他/包含解釈確認
 - 他タイムゾーン対応（現状は JST 固定が製品仕様）
+- `rruleSet.between(timeMin, timeMax, true)` の上限 inclusive 挙動による隣接同期窓の重複可能性（既存挙動、本 PR では悪化していない）。`between(..., false)` + 明示フィルタへの変更と境界テスト追加を別 Issue で扱う
+- 時間指定 RRULE + date-only EXDATE は rrule の厳密一致仕様で除外不発（TimeTree が当該パターンを送るかは未観測。observation のみ追加した状態でテストに記録済み）
 
 ## 将来拡張の余地
 

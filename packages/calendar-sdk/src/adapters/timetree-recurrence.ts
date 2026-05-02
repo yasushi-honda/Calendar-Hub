@@ -74,21 +74,30 @@ export function expandRecurringEvent(
 /**
  * EXDATE 文字列を floating JST wall-clock Date に変換。
  *
- * 形式:
- * - "20220503T070000Z": UTC instant として解釈 → JST wall-clock の floating 表現に変換
- * - "20220503": JST 日付として扱い、JST 0:00 の floating 表現（同じ Z 表記）を返す
+ * 形式（RFC 5545 + TimeTree 実観測）:
+ * - "20220503T070000Z": UTC instant として解釈 → JST wall-clock の floating 表現に +9h で変換
+ * - "20220503T070000":  Z なし date-time。既に floating wall-clock として扱い、変換しない
+ * - "20220503":         date-only。JST 日付として扱い、JST 0:00 の floating 表現を返す
+ *   （toFloatingJst を経由しないのは、入力が既に JST 日付（wall-clock）で時刻成分がないため）
  */
 function parseExdateFloating(dateStr: string): Date {
-  if (dateStr.includes('T')) {
-    const iso = dateStr.replace(
-      /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/,
-      '$1-$2-$3T$4:$5:$6Z',
-    );
-    return toFloatingJst(new Date(iso));
+  const dateTimeMatch = dateStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+  if (dateTimeMatch) {
+    const [, y, m, d, hh, mm, ss, z] = dateTimeMatch;
+    const iso = `${y}-${m}-${d}T${hh}:${mm}:${ss}Z`;
+    if (z === 'Z') {
+      // UTC instant: floating JST に +9h で変換
+      return toFloatingJst(new Date(iso));
+    }
+    // Z なし: 既に floating wall-clock 表現として扱う（二重補正を避ける）
+    return new Date(iso);
   }
-  // date-only: JST 日付として扱う（floating 表現の JST 0:00 = Z 表記の 0:00）
-  const iso = dateStr.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3T00:00:00Z');
-  return new Date(iso);
+  const dateOnlyMatch = dateStr.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, y, m, d] = dateOnlyMatch;
+    return new Date(`${y}-${m}-${d}T00:00:00Z`);
+  }
+  throw new Error(`Invalid EXDATE format: ${dateStr}`);
 }
 
 const JST_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
@@ -101,10 +110,13 @@ const JST_DATE_FMT = new Intl.DateTimeFormat('en-CA', {
 /**
  * 繰り返しインスタンスの日付サフィックスを生成（決定論的 ID 用）。
  * - 全日イベント: _RYYYYMMDD（JST 日付）
- * - 時間指定: _RYYYYMMDDTHHmmss（UTC ISO 表記）
+ * - 時間指定: _RYYYYMMDDTHHmmss（UTC ISO 表記、本 PR では非変更）
  *
- * ADR-008: 全日 suffix は JST 日付基準にすることで、修正前の UTC 基準 suffix と
- * 偶然一致するため、既存タグ付き Google 予定との originalId 衝突を回避できる。
+ * ADR-008: **全日イベントについて**、修正前の UTC 日付ベース suffix と修正後の JST 日付
+ * ベース suffix が、JST 0:00 開始ケースでも JST 9:00 以降ケースでも一致するため、
+ * 既存タグ付き Google 予定との originalId 衝突を回避できる。
+ * 時間指定イベントは UTC ISO のままなので、JST 0:00-8:59 帯の繰り返しでは旧 suffix と
+ * 新 suffix が異なり、tagMap マッチが外れて create/delete 経路に寄る点に注意。
  */
 export function instanceDateSuffix(date: Date, isAllDay: boolean): string {
   if (isAllDay) {

@@ -86,16 +86,26 @@ export class TimeTreeAdapter implements CalendarAdapter {
    */
   private async fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
     // session期限切れチェック
-    if (this.reLoginFn && Date.now() > this.expiresAt) {
-      await this.refreshSession();
+    if (Date.now() > this.expiresAt) {
+      console.warn(
+        `[TT-SESSION-EXPIRED] reason=expiresAt url=${url} expiresAt=${new Date(this.expiresAt).toISOString()} reLoginAvailable=${Boolean(this.reLoginFn)}`,
+      );
+      if (this.reLoginFn) {
+        await this.refreshSession();
+      }
     }
 
     const res = await fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
 
     // 401/403で再ログイン試行（1回のみ）
-    if ((res.status === 400 || res.status === 401 || res.status === 403) && this.reLoginFn) {
-      await this.refreshSession();
-      return fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      console.warn(
+        `[TT-SESSION-EXPIRED] reason=httpStatus url=${url} status=${res.status} reLoginAvailable=${Boolean(this.reLoginFn)}`,
+      );
+      if (this.reLoginFn) {
+        await this.refreshSession();
+        return fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
+      }
     }
 
     return res;
@@ -104,11 +114,19 @@ export class TimeTreeAdapter implements CalendarAdapter {
   private async refreshSession(): Promise<void> {
     if (!this.reLoginFn)
       throw new Error('TimeTree session expired and no re-login function provided');
-    const newSession = await this.reLoginFn();
-    this.sessionId = newSession.sessionId;
-    this.csrfToken = newSession.csrfToken;
-    this.expiresAt = newSession.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000;
-    this.headers = this.buildHeaders(newSession);
+    console.info('[TT-SESSION-RELOGIN-ATTEMPT]');
+    try {
+      const newSession = await this.reLoginFn();
+      this.sessionId = newSession.sessionId;
+      this.csrfToken = newSession.csrfToken;
+      this.expiresAt = newSession.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000;
+      this.headers = this.buildHeaders(newSession);
+      console.info(`[TT-SESSION-RELOGIN-OK] expiresAt=${new Date(this.expiresAt).toISOString()}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[TT-SESSION-RELOGIN-FAIL] error=${msg}`);
+      throw err;
+    }
   }
 
   /**

@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { TimeTreeAdapter, type TimeTreeSession } from '../adapters/timetree.js';
 
 // TimeTree内部APIのレスポンス型・パース検証（外部APIモック不要の単体テスト）
 
@@ -161,5 +162,146 @@ describe('TimeTree login body format', () => {
     expect(parsed.uid).toBe(email);
     expect(parsed.email).toBeUndefined();
     expect(parsed.password).toBe(password);
+  });
+});
+
+describe('TimeTreeAdapter session expiry observability', () => {
+  const validSession: TimeTreeSession = {
+    sessionId: 'sid',
+    csrfToken: 'csrf',
+    expiresAt: Date.now() + 60 * 60 * 1000, // 1時間後
+  };
+  const expiredSession: TimeTreeSession = {
+    sessionId: 'sid',
+    csrfToken: 'csrf',
+    expiresAt: Date.now() - 60 * 60 * 1000, // 1時間前
+  };
+
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockFetchOk(payload: unknown): ReturnType<typeof vi.fn> {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    } as Response);
+  }
+
+  function mockFetchSequence(responses: Array<{ status: number; payload?: unknown }>) {
+    const fn = vi.fn();
+    for (const r of responses) {
+      fn.mockResolvedValueOnce({
+        ok: r.status >= 200 && r.status < 300,
+        status: r.status,
+        json: async () => r.payload ?? {},
+      } as Response);
+    }
+    return fn;
+  }
+
+  it.each([400, 401, 403])(
+    'should log [TT-SESSION-EXPIRED] reason=httpStatus when %i received without reLoginFn',
+    async (status) => {
+      fetchSpy = mockFetchSequence([{ status }]);
+      vi.stubGlobal('fetch', fetchSpy);
+
+      const adapter = new TimeTreeAdapter(validSession);
+      await expect(adapter.listCalendars()).rejects.toThrow(
+        new RegExp(`TimeTree listCalendars failed: ${status}`),
+      );
+
+      const warned = warnSpy.mock.calls.flat().join(' ');
+      expect(warned).toContain('[TT-SESSION-EXPIRED]');
+      expect(warned).toContain('reason=httpStatus');
+      expect(warned).toContain(`status=${status}`);
+      expect(warned).toContain('reLoginAvailable=false');
+    },
+  );
+
+  it('should log [TT-SESSION-EXPIRED] reason=expiresAt when session is past expiresAt', async () => {
+    fetchSpy = mockFetchOk({ calendars: [] });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const adapter = new TimeTreeAdapter(expiredSession);
+    await adapter.listCalendars();
+
+    const warned = warnSpy.mock.calls.flat().join(' ');
+    expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain('reason=expiresAt');
+    expect(warned).toContain('reLoginAvailable=false');
+  });
+
+  it('should log RELOGIN-ATTEMPT and RELOGIN-OK when reLoginFn succeeds after 401', async () => {
+    fetchSpy = mockFetchSequence([{ status: 401 }, { status: 200, payload: { calendars: [] } }]);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const reLoginFn = vi.fn().mockResolvedValue({
+      sessionId: 'new-sid',
+      csrfToken: 'new-csrf',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+
+    const adapter = new TimeTreeAdapter(validSession, reLoginFn);
+    await adapter.listCalendars();
+
+    const warned = warnSpy.mock.calls.flat().join(' ');
+    const informed = infoSpy.mock.calls.flat().join(' ');
+    expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain('reLoginAvailable=true');
+    expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');
+    expect(informed).toContain('[TT-SESSION-RELOGIN-OK]');
+    expect(reLoginFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('should auto-refresh and retry when expiresAt has passed and reLoginFn is provided', async () => {
+    fetchSpy = mockFetchOk({ calendars: [] });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const reLoginFn = vi.fn().mockResolvedValue({
+      sessionId: 'new-sid',
+      csrfToken: 'new-csrf',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+
+    const adapter = new TimeTreeAdapter(expiredSession, reLoginFn);
+    await adapter.listCalendars();
+
+    const warned = warnSpy.mock.calls.flat().join(' ');
+    const informed = infoSpy.mock.calls.flat().join(' ');
+    expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain('reason=expiresAt');
+    expect(warned).toContain('reLoginAvailable=true');
+    expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');
+    expect(informed).toContain('[TT-SESSION-RELOGIN-OK]');
+    expect(reLoginFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should log RELOGIN-FAIL and rethrow when reLoginFn throws', async () => {
+    fetchSpy = mockFetchSequence([{ status: 401 }]);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const reLoginFn = vi.fn().mockRejectedValue(new Error('login server down'));
+
+    const adapter = new TimeTreeAdapter(validSession, reLoginFn);
+    await expect(adapter.listCalendars()).rejects.toThrow(/login server down/);
+
+    const errored = errorSpy.mock.calls.flat().join(' ');
+    expect(errored).toContain('[TT-SESSION-RELOGIN-FAIL]');
+    expect(errored).toContain('login server down');
   });
 });

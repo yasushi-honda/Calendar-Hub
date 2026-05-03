@@ -75,6 +75,14 @@ session 切れが検出された場合のユーザー対応フロー:
 - Web UI の連携アカウント設定画面で **session 残日数バッジ**表示（`expiresAt` を Firestore に保存して算出）
 - session 切れ通知メール（任意機能）
 
+### 既存ロジックの強化候補（本 ADR スコープ外、将来検討）
+
+PR #111 のレビューで silent-failure-hunter が指摘した既存実装の改善候補。本 ADR の観測点追加スコープでは触らないが、別 Issue 化候補として記録する。
+
+- **再ログイン後 fetch のステータスチェック追加**: `fetchWithRetry` の `return fetch(url, ...)`（再試行側）で `res.ok` を検証していない。reLogin 後も 401 等が返る場合、呼び出し側は成功扱いで JSON parse して別エラーになる。`[TT-SESSION-RELOGIN-INEFFECTIVE]` のようなログ + 例外化が望ましい
+- **400/401/403 のエラー分類精緻化**: 現状 3 値を一律 reLogin 試行している。本来 `400` は request malformed（permanent）、`403` は権限不足の可能性（permanent）で、reLogin は `401` 限定が `rules/error-handling.md §3` の transient/permanent 分類に整合する
+- **reLoginFn 不在時の 401 を明示 throw**: 現状は `res` をそのまま返却するため、上位で「session 失効」を識別できない。エラー ID 付きで throw すれば運用時の切り分けが容易になる
+
 ## 関連
 
 - Issue #79

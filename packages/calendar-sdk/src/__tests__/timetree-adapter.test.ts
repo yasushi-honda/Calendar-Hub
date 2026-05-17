@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TimeTreeAdapter, type TimeTreeSession } from '../adapters/timetree.js';
+import { TimeTreeAdapter, normalizeAllDayEnd, type TimeTreeSession } from '../adapters/timetree.js';
 
 // TimeTree内部APIのレスポンス型・パース検証（外部APIモック不要の単体テスト）
 
@@ -303,5 +303,194 @@ describe('TimeTreeAdapter session expiry observability', () => {
     const errored = errorSpy.mock.calls.flat().join(' ');
     expect(errored).toContain('[TT-SESSION-RELOGIN-FAIL]');
     expect(errored).toContain('login server down');
+  });
+});
+
+/**
+ * TimeTree all-day end_at の包含/排他解釈正規化 (ADR-008 スコープ外項目の解消)
+ *
+ * TimeTree raw event:
+ * - 単日終日 (1日のみ): end_at = start_at + 24h (= 翌日0時 JST = exclusive)
+ * - 複数日終日 (N日, N>=2): end_at = 最終日0時 JST (= inclusive、(N-1)*24h 後)
+ *
+ * Google Calendar の end.date は exclusive のため、複数日 inclusive をそのまま渡すと
+ * 1日不足する不具合が発生する。内部 CalendarEvent では exclusive (翌日0時) に統一する。
+ */
+describe('normalizeAllDayEnd: TimeTree all-day end_at 包含/排他解釈', () => {
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  // JST 2026-05-01 00:00 = UTC 2026-04-30 15:00
+  const may1JstUtc = new Date('2026-04-30T15:00:00Z').getTime();
+  const may2JstUtc = may1JstUtc + oneDayMs;
+  const may3JstUtc = may1JstUtc + 2 * oneDayMs;
+  const may4JstUtc = may1JstUtc + 3 * oneDayMs;
+
+  it('単日終日 (diff=24h): end は変更されない (既に exclusive 翌日0時)', () => {
+    // 5/1 単日終日: start = 5/1 0:00 JST, end = 5/2 0:00 JST
+    expect(normalizeAllDayEnd(may1JstUtc, may2JstUtc)).toBe(may2JstUtc);
+  });
+
+  it('2日間終日 (diff=48h): end は +24h 正規化される', () => {
+    // 5/1-5/2 終日: TimeTree end = 5/2 0:00 (inclusive) → 内部表現 5/3 0:00 (exclusive)
+    expect(normalizeAllDayEnd(may1JstUtc, may2JstUtc + oneDayMs)).toBe(may3JstUtc + oneDayMs);
+  });
+
+  it('3日間終日 (diff=72h): end は +24h 正規化される (ユーザー報告ケース 1日-3日)', () => {
+    // 5/1-5/3 終日: TimeTree end = 5/3 0:00 (inclusive) → 内部表現 5/4 0:00 (exclusive)
+    expect(normalizeAllDayEnd(may1JstUtc, may3JstUtc)).toBe(may4JstUtc);
+  });
+
+  it('時間指定 (diff=1h): end は変更されない', () => {
+    // normalizeAllDayEnd は呼び出し側 (isAllDay=true 時のみ) で使う前提だが、
+    // 防御的に「24h 未満」は touch しないこと
+    const oneHourMs = 60 * 60 * 1000;
+    expect(normalizeAllDayEnd(may1JstUtc, may1JstUtc + oneHourMs)).toBe(may1JstUtc + oneHourMs);
+  });
+
+  it('境界: start == end (異常入力) は変更されない', () => {
+    expect(normalizeAllDayEnd(may1JstUtc, may1JstUtc)).toBe(may1JstUtc);
+  });
+
+  it('境界: diff が 24h 刻みでない (例: 36h) は変更されない (TimeTree仕様外の入力を保守的に維持)', () => {
+    const halfDayMs = 12 * 60 * 60 * 1000;
+    const irregular = may1JstUtc + oneDayMs + halfDayMs; // 36h
+    expect(normalizeAllDayEnd(may1JstUtc, irregular)).toBe(irregular);
+  });
+});
+
+describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => {
+  const validSession: TimeTreeSession = {
+    sessionId: 'sid',
+    csrfToken: 'csrf',
+    expiresAt: Date.now() + 60 * 60 * 1000,
+  };
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  it('3日間終日イベント: 内部 CalendarEvent の end は +24h 正規化される (ユーザー報告ケース)', async () => {
+    // JST 5/1-5/3 終日: TimeTree raw は end_at = 5/3 0:00 JST (inclusive)
+    const may1JstMs = new Date('2026-04-30T15:00:00Z').getTime(); // 5/1 0:00 JST
+    const may3JstMs = may1JstMs + 2 * oneDayMs; // 5/3 0:00 JST (TimeTree end_at)
+    const may4JstMs = may1JstMs + 3 * oneDayMs; // 5/4 0:00 JST (期待される内部 end)
+
+    const rawEvent = {
+      id: 'tt-multiday-1',
+      title: '3日連続イベント',
+      start_at: may1JstMs,
+      end_at: may3JstMs,
+      all_day: true,
+      start_timezone: 'Asia/Tokyo',
+      end_timezone: 'Asia/Tokyo',
+      note: '',
+      location: '',
+      location_lat: '',
+      location_lon: '',
+      category: '',
+      calendar_id: 'cal-1',
+      updated_at: 0,
+      created_at: 0,
+      recurrences: [],
+    };
+
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ events: [rawEvent] }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const adapter = new TimeTreeAdapter(validSession);
+    const tMin = new Date('2026-04-01T00:00:00Z');
+    const tMax = new Date('2026-06-01T00:00:00Z');
+    const events = await adapter.listEvents('cal-1', tMin, tMax);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].isAllDay).toBe(true);
+    expect(events[0].start.getTime()).toBe(may1JstMs);
+    // 修正前は end = may3JstMs (= 5/3 0:00) で Google には 5/3 exclusive → 表示 1-2 日 (バグ)
+    // 修正後は end = may4JstMs (= 5/4 0:00) で Google には 5/4 exclusive → 表示 1-3 日 (正しい)
+    expect(events[0].end.getTime()).toBe(may4JstMs);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('単日終日イベント: 内部 end は raw end_at と同一 (既に exclusive)', async () => {
+    const may1JstMs = new Date('2026-04-30T15:00:00Z').getTime();
+    const may2JstMs = may1JstMs + oneDayMs;
+
+    const rawEvent = {
+      id: 'tt-singleday-1',
+      title: '単日イベント',
+      start_at: may1JstMs,
+      end_at: may2JstMs,
+      all_day: true,
+      start_timezone: 'Asia/Tokyo',
+      end_timezone: 'Asia/Tokyo',
+      note: '',
+      location: '',
+      location_lat: '',
+      location_lon: '',
+      category: '',
+      calendar_id: 'cal-1',
+      updated_at: 0,
+      created_at: 0,
+      recurrences: [],
+    };
+
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ events: [rawEvent] }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const adapter = new TimeTreeAdapter(validSession);
+    const tMin = new Date('2026-04-01T00:00:00Z');
+    const tMax = new Date('2026-06-01T00:00:00Z');
+    const events = await adapter.listEvents('cal-1', tMin, tMax);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].end.getTime()).toBe(may2JstMs);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('時間指定イベント: 内部 end は raw end_at と同一', async () => {
+    const start = new Date('2026-05-01T01:00:00Z').getTime();
+    const end = new Date('2026-05-01T02:00:00Z').getTime();
+
+    const rawEvent = {
+      id: 'tt-timed-1',
+      title: '時間指定イベント',
+      start_at: start,
+      end_at: end,
+      all_day: false,
+      start_timezone: 'Asia/Tokyo',
+      end_timezone: 'Asia/Tokyo',
+      note: '',
+      location: '',
+      location_lat: '',
+      location_lon: '',
+      category: '',
+      calendar_id: 'cal-1',
+      updated_at: 0,
+      created_at: 0,
+      recurrences: [],
+    };
+
+    const fetchSpy = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ events: [rawEvent] }),
+    } as Response);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const adapter = new TimeTreeAdapter(validSession);
+    const tMin = new Date('2026-04-01T00:00:00Z');
+    const tMax = new Date('2026-06-01T00:00:00Z');
+    const events = await adapter.listEvents('cal-1', tMin, tMax);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].end.getTime()).toBe(end);
+
+    vi.unstubAllGlobals();
   });
 });

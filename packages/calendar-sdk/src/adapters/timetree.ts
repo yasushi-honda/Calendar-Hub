@@ -242,8 +242,11 @@ export class TimeTreeAdapter implements CalendarAdapter {
 
       if (hasRecurrence) {
         // 繰り返しイベント: RRULE展開してインスタンスを生成
+        // 終日複数日マスターは end_at が inclusive 最終日0時のため、展開前に正規化して
+        // 各インスタンスの duration が正しく (= N*24h) になるようにする
+        const normalizedEndMs = ev.all_day ? normalizeAllDayEnd(ev.start_at, ev.end_at) : ev.end_at;
         const masterStart = new Date(ev.start_at);
-        const masterEnd = new Date(ev.end_at);
+        const masterEnd = new Date(normalizedEndMs);
         let instances: { start: Date; end: Date }[];
         try {
           instances = expandRecurringEvent(recurrences, masterStart, masterEnd, timeMin, timeMax);
@@ -352,6 +355,7 @@ export class TimeTreeAdapter implements CalendarAdapter {
   }
 
   private toCalendarEvent(raw: TimeTreeRawEvent, calendarId: string): CalendarEvent {
+    const endMs = raw.all_day ? normalizeAllDayEnd(raw.start_at, raw.end_at) : raw.end_at;
     return {
       id: `timetree_${raw.id}`,
       source: 'timetree',
@@ -360,10 +364,35 @@ export class TimeTreeAdapter implements CalendarAdapter {
       title: raw.title || '(無題)',
       description: raw.note || undefined,
       start: new Date(raw.start_at),
-      end: new Date(raw.end_at),
+      end: new Date(endMs),
       isAllDay: raw.all_day,
       status: 'confirmed',
       location: raw.location || undefined,
     };
   }
+}
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * TimeTree all-day `end_at` の包含/排他解釈を内部表現 (exclusive 翌日0時) に正規化する。
+ *
+ * TimeTree 実観測:
+ * - 単日終日: `end_at = start_at + 24h` (翌日0時 JST = exclusive、Google と整合)
+ * - 複数日終日 (N>=2): `end_at = 最終日0時 JST` (inclusive、(N-1)*24h 後)
+ *
+ * Google Calendar の `end.date` は exclusive のため、複数日 inclusive をそのまま渡すと
+ * 1日不足する不具合 (ユーザー報告: 1-3日終日 → Google 1-2日表示) が発生する。
+ * ADR-008 で「スコープ外」として残されていた懸念事項を解消する。
+ *
+ * 判定ロジック (副作用最小化):
+ * - 48h 未満は単日 (24h) or 異常入力 → 触らない
+ * - 24h 刻みでない (時間指定や TimeTree 仕様外) → 触らない
+ * - 48h 以上かつ 24h 刻み → inclusive 最終日0時とみなし +24h 加算
+ */
+export function normalizeAllDayEnd(startMs: number, endMs: number): number {
+  const diff = endMs - startMs;
+  if (diff < 2 * ONE_DAY_MS) return endMs;
+  if (diff % ONE_DAY_MS !== 0) return endMs;
+  return endMs + ONE_DAY_MS;
 }

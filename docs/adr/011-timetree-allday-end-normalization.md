@@ -51,13 +51,24 @@ export function normalizeAllDayEnd(startMs: number, endMs: number): number {
 2. `TimeTreeAdapter.listEvents` 内の **通常イベント分岐の時間範囲フィルタ**（raw end_at で判定すると終端日に取得した複数日終日が欠落するため、正規化後 end で判定）
 3. `TimeTreeAdapter.listEvents` 内の RRULE 展開時（`masterEnd` を正規化してから `expandRecurringEvent` に渡す。durationMs が `N*24h` となり、各インスタンスの end も自動的に exclusive 表現）
 
-### 既知の制限: 2日間終日は本修正の範囲外
+### 既知の制限: 2日間終日は判別不能 (確定)
 
 2日間終日 (raw diff=24h) は **単日終日 (raw diff=24h) と raw 値が同一**のため、`normalizeAllDayEnd` では判別不能。結果として 2日間終日は Google で 1日不足（最終日のみ表示）となる挙動が継続する。
 
-- 別 Issue で実機観測タスクとして起票する想定。観測項目: `start_timezone` / `end_timezone` / その他追加フィールドで判別可能か
-- ユーザー報告ケース（1〜3日終日）は N=3 のため本 PR で解消される
-- 暫定: 「TimeTree で 2日間終日を作る場合は、Google 側で末日のみ手動延長」をワークアラウンドとして案内する選択肢あり
+**Issue #118 (2026-05-18) で実機観測検討の結論**:
+
+- TimeTree 公式 API は 2023-12-22 に**完全シャットダウン済み** (developers.timetreeapp.com 廃止)、ドキュメント確認手段なし
+- リバースエンジニアリングの本家 [`eoleedi/TimeTree-Exporter`](https://github.com/eoleedi/TimeTree-Exporter) の `formatter.py:get_datetime` 実装も **all_day=true なら end_at を常に +1 日**しており、単日と多日を区別していない (Calendar Hub と逆方向の誤り = 単日終日を 2 日表示にする側に倒している)。本家が「区別不能」を前提に設計している事実は、internal API の raw レスポンスに判別フィールドが**存在しない**ことの強力な傍証
+- TimeTree-Exporter の `TimeTreeEvent` には Calendar Hub 型定義に欠落しているフィールド (`uuid` / `event_type` / `parent_id` / `label_id` / `alerts` / `url`) が含まれるが、本家実装でもこれらは all_day 判別に使われておらず、観測コストに見合うリターンが薄い
+- ユーザー報告ベースの実害ケースは **3 日以上** (PR #117 で解消済み) のみ。2 日間ケースは理論的に発生し得るが報告未確認
+
+**判断**: 実機観測タスクは**打ち切り**、2 日間終日は既知の制限として確定する。
+
+### ワークアラウンド (2 日間終日が必要なユーザー向け)
+
+- **推奨**: TimeTree 側で 2 日間ではなく 1 日 + 1 日の 2 件、または 3 日以上として作成する
+- **代替**: Google カレンダー側で同期後に末日を手動延長する
+- 反対方向の自動補正 (TimeTree-Exporter 方式) は単日終日が 2 日表示になる regression を生むため採用しない
 
 ### 副作用最小化の根拠
 
@@ -110,7 +121,7 @@ export function normalizeAllDayEnd(startMs: number, endMs: number): number {
 
 ## スコープ外
 
-- **2日間終日の判別**: raw 値が単日と同一のため、追加観測なしには対応不可。別 Issue で起票
+- **2日間終日の判別**: Issue #118 (2026-05-18) で実機観測検討した結果、リバースエンジニアリングの本家も区別していないため判別不能と確定 → §既知の制限 参照
 - **TimeTree への書込み (Google → TimeTree 逆同期)**: 現状の sync は単方向のため未対応。将来追加時に逆正規化が必要
 - **他タイムゾーン対応**: 現状は JST 固定。`ONE_DAY_MS = 24h` 固定は DST なしの JST に依存
 - **ユーザーが TimeTree 側で「終日」を解除した場合の整合**: 既存挙動を踏襲

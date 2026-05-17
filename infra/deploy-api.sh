@@ -46,25 +46,9 @@ gcloud run deploy "$SERVICE_NAME" \
   --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,FRONTEND_URL=$WEB_URL" \
   --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
 
-# Cloud Run のトラフィックが過去のピン留めで固定されていると
-# `gcloud run deploy` でも自動昇格されない。明示的に LATEST に切り替え (Issue #119)
-echo "Promoting traffic to latest revision..."
-gcloud run services update-traffic "$SERVICE_NAME" \
-  --project="$PROJECT_ID" \
-  --region="$REGION" \
-  --to-latest
-
-# トラフィックが latest revision に 100% 昇格されたことを検証 (Issue #119)
-LATEST_PERCENT=$(gcloud run services describe "$SERVICE_NAME" \
-  --project="$PROJECT_ID" --region="$REGION" \
-  --format="value(status.traffic[?latestRevision=true].percent)")
-if [ "$LATEST_PERCENT" != "100" ]; then
-  echo "ERROR: traffic not promoted to latest revision (got: ${LATEST_PERCENT:-none})" >&2
-  gcloud run services describe "$SERVICE_NAME" \
-    --project="$PROJECT_ID" --region="$REGION" \
-    --format="value(status.traffic)" >&2
-  exit 1
-fi
+# Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
+PROJECT_ID="$PROJECT_ID" REGION="$REGION" \
+  bash "$(dirname "$0")/promote-traffic.sh" "$SERVICE_NAME"
 
 echo "=== API Deploy Complete ==="
 gcloud run services describe "$SERVICE_NAME" \

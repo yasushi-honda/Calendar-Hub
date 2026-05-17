@@ -50,7 +50,7 @@
 
 - テスト: 320件全PASS（最終確認: 2026-05-17、#117 で +21 件: `timetree-adapter.test.ts` normalizeAllDayEnd 単体 10 + listEvents 統合 5 + 既存改修 6）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main 73441b0 / 2026-04-14）
+- CI: GitHub Actions グリーン（最新: main 6caf4d8 / 2026-05-17、PR #120 マージ後）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境

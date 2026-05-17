@@ -1,28 +1,32 @@
-# Calendar Hub ハンドオフ (2026-05-03)
+# Calendar Hub ハンドオフ (2026-05-17)
 
 ## 最近の完了作業（直近1週間）
 
-| PR             | Issue | 内容                                                                                                 |
-| -------------- | ----- | ---------------------------------------------------------------------------------------------------- |
-| #112           | #81   | ADR-010 SLO 定義とログ保持ポリシー（設計フェーズ）。実装は別 PR、ユーザー認可必須                    |
-| #111           | #79   | TimeTree session 可視化ログ + ADR-009（Phase A）。alert policy 実装は Phase B 別 PR                  |
-| #110           | -     | docs(handoff): 2026-05-03 セッション 1（PR #109 trafficSplit 事故記録）                              |
-| #108/#107      | -     | Dependabot GA bump: pnpm/action-setup v6 / actions/setup-node v6（cache: pnpm 明示で breaking 回避） |
-| #109           | -     | TimeTree 日曜→月曜ずれバグ修正 (ADR-008)。RRULE 展開を JST wall-clock 座標系に統一                   |
-| #96/#97/#105   | -     | Dependabot security: nodemailer/hono-node-server/next 15.5.15/hono 4.12.14（9件脆弱性解消）          |
-| #101/#102/#103 | -     | GitHub Actions major bump: auth v3 / checkout v6 / setup-gcloud v3                                   |
-| #100           | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化         |
-| #94            | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新             |
-| #91            | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                            |
-| #90            | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                                    |
-| #87            | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                             |
-| #85            | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007                      |
-| #83            | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                                   |
-| #70            | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                                |
-| #68            | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                             |
-| #64            | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）              |
-| #63            | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                               |
-| #61            | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                           |
+| PR             | Issue | 内容                                                                                                        |
+| -------------- | ----- | ----------------------------------------------------------------------------------------------------------- |
+| #120           | -     | Dependabot security: uuid 8.3.2 → 11.1.1（GHSA-w5hq-g745-h8pq backport patch）transitive 依存のみで影響ゼロ |
+| #116           | -     | Dependabot security: next 15.5.15 → 15.5.18（DoS / SSRF / Middleware bypass / XSS 等多数の脆弱性解消）      |
+| #115           | -     | Dependabot security: hono 4.12.14 → 4.12.18（Cache leak / CSS injection / JWT validation 脆弱性解消）       |
+| #117           | -     | TimeTree → Google: 複数日終日 (N≥3) の最終日1日不足修正 + ADR-011。Codex no-go 指摘の全件対応               |
+| #112           | #81   | ADR-010 SLO 定義とログ保持ポリシー（設計フェーズ）。実装は別 PR、ユーザー認可必須                           |
+| #111           | #79   | TimeTree session 可視化ログ + ADR-009（Phase A）。alert policy 実装は Phase B 別 PR                         |
+| #110           | -     | docs(handoff): 2026-05-03 セッション 1（PR #109 trafficSplit 事故記録）                                     |
+| #108/#107      | -     | Dependabot GA bump: pnpm/action-setup v6 / actions/setup-node v6（cache: pnpm 明示で breaking 回避）        |
+| #109           | -     | TimeTree 日曜→月曜ずれバグ修正 (ADR-008)。RRULE 展開を JST wall-clock 座標系に統一                          |
+| #96/#97/#105   | -     | Dependabot security: nodemailer/hono-node-server/next 15.5.15/hono 4.12.14（9件脆弱性解消）                 |
+| #101/#102/#103 | -     | GitHub Actions major bump: auth v3 / checkout v6 / setup-gcloud v3                                          |
+| #100           | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化                |
+| #94            | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新                    |
+| #91            | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                                   |
+| #90            | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                                           |
+| #87            | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                                    |
+| #85            | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007                             |
+| #83            | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                                          |
+| #70            | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                                       |
+| #68            | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                                    |
+| #64            | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）                     |
+| #63            | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                                      |
+| #61            | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                                  |
 
 （それ以前の詳細は `docs/handoff/archive/` を参照）
 
@@ -44,9 +48,9 @@
 
 ## 品質状態
 
-- テスト: 260件全PASS（最終確認: 2026-04-15、#74 で +22 件: `mail-fail.test.ts` 19 + `email-send.test.ts` 3）
+- テスト: 320件全PASS（最終確認: 2026-05-17、#117 で +21 件: `timetree-adapter.test.ts` normalizeAllDayEnd 単体 10 + listEvents 統合 5 + 既存改修 6）
 - ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main 73441b0 / 2026-04-14）
+- CI: GitHub Actions グリーン（最新: main 6caf4d8 / 2026-05-17、PR #120 マージ後）
 - PRテンプレート: Quality Gateチェックリスト強制
 
 ## 本番環境
@@ -65,7 +69,7 @@
 - API最新リビジョン: **calendar-hub-api-00062-s85**（PR #109 経由、2026-05-02、**手動 traffic 切替で稼働開始**）
 - Web最新リビジョン: calendar-hub-web-00013-crs
 - デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）
-- **⚠️ 既知の不具合**: deploy.yml で新 revision 作成は成功するが **trafficSplit が新 revision に昇格されない**（PR #109 で発覚、緊急対応として `gcloud run services update-traffic --to-latest` 手動実行で解決）。要修正（未起票）
+- **⚠️ 既知の不具合**: deploy.yml で新 revision 作成は成功するが **trafficSplit が新 revision に昇格されない**（PR #109 で発覚、緊急対応として `gcloud run services update-traffic --to-latest` 手動実行で解決）。**Issue #119 で起票済み（P1 / bug）**
 - Cloud Monitoring:
   - Log-based metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
   - Built-in metrics (Cloud Run): `request_count` / `request_latencies`（#77 で導入、policy 側で利用）
@@ -101,40 +105,80 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 ### P2（中期対応）
 
-| #                                                              | タイトル                                        | 状態                                                    |
-| -------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
-| [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79) | TimeTree session 切れの自動検知と再ログイン手順 | Phase A 完了（PR #111: 検知ログ + ADR-009）/ Phase B 残 |
-| [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          | 設計フェーズ完了（PR #112: ADR-010）/ 実装フェーズ残    |
+| #                                                                | タイトル                                              | 状態                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79)   | TimeTree session 切れの自動検知と再ログイン手順       | Phase A 完了（PR #111: 検知ログ + ADR-009）/ Phase B 残                          |
+| [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81)   | ログ保持期間・SLO 定義                                | 設計フェーズ完了（PR #112: ADR-010）/ 実装フェーズ残                             |
+| [#118](https://github.com/yasushi-honda/Calendar-Hub/issues/118) | TimeTree 2日間終日予定の Google 同期で最終日が1日不足 | ADR-011 §既知の制限。実機観測タスク（dev デプロイ + raw event 全フィールド比較） |
+
+### P1 追加（2026-05-17 起票）
+
+| #                                                                | タイトル                                                       | 状態                                                                       |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [#119](https://github.com/yasushi-honda/Calendar-Hub/issues/119) | CI/CD: deploy.yml で trafficSplit が新 revision に昇格されない | bug / P1。次回デプロイ再発リスク継続。`gcloud run deploy` フラグ調査が必要 |
 
 （#80 は PR #100 で完了）
 
-**本番運用の P0 はすべて解消済**（#72/#73/#74）。P1 #75 は postponed。P2 は両方とも設計フェーズ完了で実装残。
+**本番運用の P0 はすべて解消済**（#72/#73/#74）。P1 #75 は postponed、P1 #119 は新規起票。P2 は両方とも設計フェーズ完了で実装残 + #118 は既知制限の観測タスク。
 
 ## 次セッションの推奨アクション
 
-1. **#79 Phase B**: ログベースメトリクス（`calendar_hub_timetree_session_expired`）+ アラートポリシー追加。`infra/setup-monitoring.sh` パターン踏襲、ADR-009 の Future Work 参照
-2. **#81 実装フェーズ**: 5 サブタスク（バケット作成 / SLI/SLO 設定 / ダッシュボード / Budget アラート / PII 検知）。ADR-010「実装フェーズ」セクション参照、本番 GCP 認可必須
-3. **uuid GHSA-w5hq-g745-h8pq**: alert #32 を `tolerable_risk` で dismiss 済（2026-05-03）。間接依存のみで攻撃面ゼロのため上流（firebase-admin 等）の uuid@14 対応待ち。**四半期ごとに再評価**
-4. **CI/CD trafficSplit 昇格漏れ**（前セッション PR #109 で発覚、未起票）: 次回デプロイで再発リスクあり。`.github/workflows/deploy.yml` または `infra/deploy-api.sh` の `gcloud run deploy` 設定を要調査。**起票必須レベル（実害あり）**
-5. 残 15 件の transitive 脆弱性（lodash / node-forge / vite 等）は個人利用では受容
-6. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
-7. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
+1. **Issue #119 (P1) trafficSplit 昇格漏れ**: `.github/workflows/deploy.yml` または `infra/deploy-api.sh` の `gcloud run deploy` フラグ調査。新 revision 作成は成功するが traffic が昇格されない既存不具合。次回デプロイで再発リスク継続中
+2. **#79 Phase B**: ログベースメトリクス（`calendar_hub_timetree_session_expired`）+ アラートポリシー追加。`infra/setup-monitoring.sh` パターン踏襲、ADR-009 の Future Work 参照
+3. **#81 実装フェーズ**: 5 サブタスク（バケット作成 / SLI/SLO 設定 / ダッシュボード / Budget アラート / PII 検知）。ADR-010「実装フェーズ」セクション参照、本番 GCP 認可必須
+4. **Issue #118 (P2) TimeTree 2日間終日**: dev 環境で raw event 全フィールド観測 → `start_timezone` / `end_timezone` 等で単日と判別可能か確認。判別可能なら ADR-011 §既知の制限を解消する PR を作成
+5. **Dependabot 残 PR**: #121 protobufjs / #122 @protobufjs/utf8 / #123 fast-xml-builder（いずれも transitive 依存と推測、一括判断推奨）
+6. **uuid GHSA-w5hq-g745-h8pq**: PR #120 マージで解消済（2026-05-17、上流 backport patch リリース、前倒し対応）
+7. 残 transitive 脆弱性（lodash / node-forge / vite 等）は個人利用では受容
+8. fetchOwnerEvents / getGmailAuthForUser の3ファイル横断共通化
+9. Node.js 20 → Node.js 24 移行（2026-09-16 まで）
 
-### 今セッションの操作記録（2026-05-03 PM、Auto モード）
+### 今セッションの操作記録（2026-05-17、Auto モード）
 
-| アクション                            | 結果                                                      |
-| ------------------------------------- | --------------------------------------------------------- |
-| PR #110 (handoff PM #1) マージ        | ✅ Deploy success                                         |
-| PR #108 (pnpm/action-setup v6) マージ | ✅ Deploy success（cache: pnpm 明示で breaking 回避確認） |
-| PR #107 (setup-node v6) マージ        | ✅ Deploy success                                         |
-| Issue #75 postponed 化                | ✅ ラベル + 保留コメント、`postponed` ラベル新規作成      |
-| Dependabot alert #32 (uuid) dismiss   | ✅ tolerable_risk、再評価四半期ごと                       |
-| PR #111 (#79 Phase A) マージ          | ✅ 6 エージェントレビュー後 minor fix → Deploy success    |
-| PR #112 (#81 設計フェーズ) マージ     | ✅ 2 エージェントレビュー後 minor fix → Deploy 進行中     |
+| アクション                                    | 結果                                                                                               |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| PR #117 (TimeTree 複数日終日 N≥3 修正) マージ | ✅ Codex no-go → 仮説モデル統一 + 範囲フィルタ + silent failure ガード + RRULE テスト追加 → merged |
+| ADR-011 作成                                  | ✅ TimeTree all-day end_at の包含/排他解釈正規化。2日間ケースは「既知の制限」明記                  |
+| Issue #118 起票（bug / P2）                   | ✅ 2日間終日ケース（raw 値判別不能）の実機観測タスク                                               |
+| Issue #119 起票（bug / P1）                   | ✅ trafficSplit 昇格漏れ（PR #109 から持ち越しの未起票実害）                                       |
+| Dependabot CI 失敗の原因特定                  | ✅ #115 / #116 の open 重複が `pull_request_exists_for_security_update` を引き起こしていた         |
+| PR #115 (hono 4.12.18) マージ                 | ✅ `@dependabot rebase` 後 squash merge                                                            |
+| PR #116 (next 15.5.18) マージ                 | ✅ DIRTY 4 時間継続 → `@dependabot recreate` で再生成 → merge                                      |
+| PR #120 (uuid 11.1.1) マージ                  | ✅ 表記は patch だが実態 8.3.2→11.1.1 の major bump、ただし transitive のみで影響ゼロ              |
 
-6. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別Issue化検討）
+`[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別 Issue 化検討）は持ち越し。
 
 ## 技術メモ（今セッション）
+
+### TimeTree 複数日終日の Google 最終日1日不足修正（2026-05-17, PR #117 / ADR-011）
+
+**症状**: ユーザー報告「TimeTree で 1日〜3日の終日設定が、Google カレンダーには 1日〜2日として反映される（最終日が抜ける）」。
+
+**根本原因**: TimeTree 内部 API は終日 `end_at` を以下のように返す（実観測モデル）。
+
+| ケース     | raw `end_at`    | `diff` | 解釈                        |
+| ---------- | --------------- | ------ | --------------------------- |
+| 単日終日   | 翌日 0:00 JST   | 24h    | exclusive（正常）           |
+| 2日間終日  | 最終日 0:00 JST | 24h    | inclusive（単日と区別不能） |
+| N≥3 日終日 | 最終日 0:00 JST | ≥48h   | inclusive                   |
+
+一方 Google `end.date` は exclusive。N≥3 で 1 日不足。ADR-008 で「スコープ外」として別 Issue 化されていた懸念を本 PR で N≥3 範囲で解消。
+
+**修正方針**: `normalizeAllDayEnd(startMs, endMs)` を追加し、`raw.all_day=true` かつ `diff >= 48h` かつ `diff % 24h == 0` の場合のみ `+24h` で exclusive 表現に正規化。`toCalendarEvent` / `listEvents` 通常イベント範囲フィルタ / RRULE 展開 の 3 経路で適用。`Number.isFinite` ガードで NaN/Infinity の silent normalization も防止。
+
+**レビュー指摘対応**: 初版で Codex `no-go` 判定 → ADR とテストの仮説モデル不整合 / listEvents 範囲フィルタ漏れ / silent failure ガード / RRULE 経路テスト不足の 4 件を全件対応。最終 320 テスト PASS。
+
+**既知の制限（Issue #118 として起票）**: 2日間終日は raw 値だけでは単日と区別不能。`start_timezone` / `end_timezone` 等の追加フィールドで判別可能か実機観測タスクが残る。
+
+### Dependabot CI 失敗の根本原因と解消（2026-05-17）
+
+**症状**: 2026-05-13 以降、Dependabot Updates ジョブが連続失敗（`pull_request_exists_for_security_update` エラー）。
+
+**根本原因**: PR #115 (hono) と PR #116 (next) が 2026-05-09 / 5-12 から open のまま放置されており、新規 Dependabot job が「同じセキュリティ対象 PR が既存」エラーで終了していた。
+
+**解消**: 両 PR をマージ（#116 は `recreate` で再生成。lockfile conflict で `rebase` が機能しなかった）+ PR #120 (uuid backport patch) もマージ。次回 Dependabot ジョブで正常終了する見込み（マージ直後の fast-xml-builder ジョブは `in_progress`）。
+
+**教訓**: Dependabot の open PR を放置すると後続ジョブが全滅する。weekly メンテとして dependabot PR の triage を定常化すべき。
 
 ### TimeTree 日曜→月曜ずれバグ修正と CI/CD trafficSplit 昇格漏れ事故（2026-05-02, PR #109）
 

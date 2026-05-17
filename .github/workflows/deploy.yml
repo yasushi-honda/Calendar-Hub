@@ -114,6 +114,9 @@ jobs:
             --max-instances=3 \
             --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},FRONTEND_URL=${WEB_URL}" \
             --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
+          # Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
+          PROJECT_ID="$GCP_PROJECT_ID" REGION="$GCP_REGION" \
+            bash infra/promote-traffic.sh calendar-hub-api
           URL=$(gcloud run services describe calendar-hub-api \
             --project="$GCP_PROJECT_ID" \
             --region="$GCP_REGION" \
@@ -180,3 +183,6 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --set-env-vars="NEXT_PUBLIC_API_URL=${API_URL},NEXT_PUBLIC_FIREBASE_PROJECT_ID=${GCP_PROJECT_ID}"
+          # Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
+          PROJECT_ID="$GCP_PROJECT_ID" REGION="$GCP_REGION" \
+            bash infra/promote-traffic.sh calendar-hub-web

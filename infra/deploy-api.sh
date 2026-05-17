@@ -46,6 +46,10 @@ gcloud run deploy "$SERVICE_NAME" \
   --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,FRONTEND_URL=$WEB_URL" \
   --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
 
+# Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
+PROJECT_ID="$PROJECT_ID" REGION="$REGION" \
+  bash "$(dirname "$0")/promote-traffic.sh" "$SERVICE_NAME"
+
 echo "=== API Deploy Complete ==="
 gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" --region="$REGION" \

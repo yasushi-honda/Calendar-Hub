@@ -38,6 +38,10 @@ gcloud run deploy "$SERVICE_NAME" \
   --max-instances=3 \
   --set-env-vars="NEXT_PUBLIC_API_URL=$API_URL,NEXT_PUBLIC_FIREBASE_PROJECT_ID=$PROJECT_ID"
 
+# Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
+PROJECT_ID="$PROJECT_ID" REGION="$REGION" \
+  bash "$(dirname "$0")/promote-traffic.sh" "$SERVICE_NAME"
+
 echo "=== Web Deploy Complete ==="
 gcloud run services describe "$SERVICE_NAME" \
   --project="$PROJECT_ID" --region="$REGION" \

@@ -70,10 +70,10 @@
 - OAuth redirect URI: 設定済み
 - CORS: localhost + Cloud Run Web URL
 - Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: 本セッション中の連続デプロイにより新 revision に自動 100% 昇格（PR #126 の `infra/promote-traffic.sh` 効果。`gcloud run services describe calendar-hub-api --format=json(status.traffic)` で `latestRevision=true / percent=100` 確認済）
-- Web最新リビジョン: 本セッション開始時点で `latestCreatedRevisionName=00048-wdv` だが `latestReadyRevisionName=00024-thk` のずれ（Issue #119 被害）を観測。本 PR マージ後の次回 web デプロイで自動解消する設計
+- API最新リビジョン: `calendar-hub-api-00080-hjc` で `100% LATEST` 昇格済（2026-05-18 PR #132 マージ後デプロイの Deploy log で実機確認、`OK: traffic promoted to latest revision (100%)`、PR #126 の `infra/promote-traffic.sh` 効果）
+- Web最新リビジョン: `calendar-hub-web-00055-ndn` で `100% LATEST` 昇格済（同上 Deploy log で実機確認）。前セッション開始時点の `00048-wdv` 作成 / `00024-thk` traffic 固定のずれは本デプロイで解消
 - デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）→ `promote-traffic.sh` で LATEST 昇格 + jq 検証
-- **✅ Issue #119 (trafficSplit 昇格漏れ) 解消**: PR #126 で `infra/promote-traffic.sh` ヘルパ抽出 + `--to-latest` 明示 + `status.traffic[?].percent` を jq で集計検証。今後のデプロイで自動冪等化
+- **✅ Issue #119 (trafficSplit 昇格漏れ) 解消・実機確認済**: PR #126 で `infra/promote-traffic.sh` ヘルパ抽出 + `--to-latest` 明示 + `status.traffic[?].percent` を jq で集計検証。2026-05-18 PR #132 マージ後デプロイで API/Web 両方が新 revision に 100% 昇格することを Deploy log で確認 (`OK: <service> traffic promoted to latest revision (100%)`)。今後のデプロイで自動冪等化
 - Cloud Monitoring:
   - Log-based metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
   - Built-in metrics (Cloud Run): `request_count` / `request_latencies`（#77 で導入、policy 側で利用）
@@ -122,11 +122,9 @@ _すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
 
 1. **#79 Phase B (decision-maker)**: ログベースメトリクス（`calendar_hub_timetree_session_expired`）+ アラートポリシー追加。`infra/setup-monitoring.sh` パターン踏襲、ADR-009 の Future Work 参照
 2. **#81 実装フェーズ (decision-maker)**: 5 サブタスク（バケット作成 / SLI/SLO 設定 / ダッシュボード / Budget アラート / PII 検知）。ADR-010「実装フェーズ」セクション参照、本番 GCP 認可必須
-3. **web デプロイで Issue #119 修正効果確認**: 次回 web 関連 PR マージ時、`promote-traffic.sh` が `00048-wdv` (現 latestCreated) → 最新へ 100% 昇格することを実機確認。本セッション時点で web traffic は古い `00024-thk` に固定中
-4. **fetchOwnerEvents / getGmailAuthForUser の 3 ファイル横断共通化**（前回からの持ち越し）
-5. **Node.js 20 → Node.js 24 移行**（2026-09-16 まで）
-6. 残 transitive 脆弱性（vite 8.0.1 peer dep warning）は個人利用では受容、`overrides` で yaml/picomatch 等は強制 bump 済
-7. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別 Issue 化検討）は前回からの持ち越し
+3. **Node.js 20 → Node.js 24 移行**（2026-09-16 まで）
+4. 残 transitive 脆弱性（vite 8.0.1 peer dep warning）は個人利用では受容、`overrides` で yaml/picomatch 等は強制 bump 済
+5. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別 Issue 化検討）は前回からの持ち越し
 
 ### 今セッションの操作記録（2026-05-18、Auto モード）
 

@@ -20,7 +20,7 @@
     "googleapis": "^171.4.0",
     "hono": "^4.12.18",
     "nanoid": "^5.1.7",
-    "nodemailer": "^8.0.5"
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildSuggestionEmailHtml, buildTestEmailHtml, buildMimeMessage } from '../lib/email.js';
+import {
+  buildSuggestionEmailHtml,
+  buildTestEmailHtml,
+  buildMimeMessage,
+  buildBookingNotificationHtml,
+  buildBookingConfirmationHtml,
+  formatJstDateTime,
+  formatJstTime,
+} from '../lib/email.js';
 
 describe('buildSuggestionEmailHtml', () => {
   it('should generate HTML with suggestion details', () => {
@@ -192,5 +200,100 @@ describe('buildMimeMessage (Gmail API への RFC 2822 メッセージ構築)', (
     const closeCount = (msg.match(new RegExp(`^--${boundary}--$`, 'gm')) ?? []).length;
     expect(openCount).toBe(2);
     expect(closeCount).toBe(1);
+  });
+});
+
+describe('formatJstDateTime', () => {
+  it('JST 12:00 (UTC 03:00) を秒なしで整形する', () => {
+    // 2026-06-28T03:00:00Z = JST 2026-06-28 12:00
+    const d = new Date('2026-06-28T03:00:00Z');
+    expect(formatJstDateTime(d)).toBe('2026/6/28 12:00');
+  });
+
+  it('UTC が日付境界をまたいでも JST に変換される', () => {
+    // UTC 2026-06-27T15:30:00Z = JST 2026-06-28 00:30
+    const d = new Date('2026-06-27T15:30:00Z');
+    expect(formatJstDateTime(d)).toBe('2026/6/28 00:30');
+  });
+
+  it('秒の情報は出力に含まれない (本田様報告 12:00:00 → 12:00 の修正)', () => {
+    const d = new Date('2026-06-28T03:00:42Z');
+    const out = formatJstDateTime(d);
+    expect(out).not.toMatch(/:\d{2}:\d{2}/); // HH:MM:SS パターンが残らない
+    expect(out).toMatch(/\d+:\d{2}$/); // 末尾は HH:MM
+  });
+});
+
+describe('formatJstTime', () => {
+  it('時分のみを返す (時間レンジの終端用)', () => {
+    const d = new Date('2026-06-28T04:00:00Z'); // JST 13:00
+    expect(formatJstTime(d)).toBe('13:00');
+  });
+
+  it('秒は含まれない', () => {
+    const d = new Date('2026-06-28T04:00:55Z');
+    expect(formatJstTime(d)).toBe('13:00');
+  });
+});
+
+describe('buildBookingNotificationHtml (オーナー向け)', () => {
+  it('日時表記が "YYYY/M/D HH:MM 〜 HH:MM" 形式 (秒なし)', () => {
+    const html = buildBookingNotificationHtml({
+      linkTitle: '【本田】予約スケジュール',
+      guestName: '山田 太郎',
+      slotStart: new Date('2026-06-28T03:00:00Z'), // JST 12:00
+      slotEnd: new Date('2026-06-28T04:00:00Z'), // JST 13:00
+    });
+    expect(html).toContain('2026/6/28 12:00 〜 13:00');
+    expect(html).not.toContain('12:00:00'); // 本田様報告のリグレッション防止
+  });
+
+  it('guestEmail があれば mailto リンクが含まれる', () => {
+    const html = buildBookingNotificationHtml({
+      linkTitle: 'タイトル',
+      guestName: 'ゲスト',
+      guestEmail: 'guest@example.com',
+      slotStart: new Date('2026-06-28T03:00:00Z'),
+      slotEnd: new Date('2026-06-28T04:00:00Z'),
+    });
+    expect(html).toContain('mailto:guest@example.com');
+  });
+
+  it('guestMessage を含む', () => {
+    const html = buildBookingNotificationHtml({
+      linkTitle: 't',
+      guestName: 'g',
+      guestMessage: '備考メモ',
+      slotStart: new Date('2026-06-28T03:00:00Z'),
+      slotEnd: new Date('2026-06-28T04:00:00Z'),
+    });
+    expect(html).toContain('備考メモ');
+  });
+});
+
+describe('buildBookingConfirmationHtml (ゲスト向け)', () => {
+  it('日時表記が "YYYY/M/D HH:MM 〜 HH:MM" 形式 (秒なし)', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: 't',
+      ownerDisplayName: '本田',
+      guestName: '山田',
+      slotStart: new Date('2026-06-28T03:00:00Z'),
+      slotEnd: new Date('2026-06-28T04:00:00Z'),
+      durationMinutes: 60,
+    });
+    expect(html).toContain('2026/6/28 12:00 〜 13:00');
+    expect(html).not.toContain('12:00:00');
+  });
+
+  it('所要時間 (分) が含まれる', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: 't',
+      ownerDisplayName: '本田',
+      guestName: '山田',
+      slotStart: new Date('2026-06-28T03:00:00Z'),
+      slotEnd: new Date('2026-06-28T04:00:00Z'),
+      durationMinutes: 60,
+    });
+    expect(html).toContain('60分');
   });
 });

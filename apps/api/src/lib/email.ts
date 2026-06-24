@@ -118,6 +118,33 @@ export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Pro
 }
 
 /**
+ * 予約通知メールで使う JST 日時フォーマット (秒なし)。
+ * 例: `2026/6/28 12:00`
+ */
+export function formatJstDateTime(date: Date): string {
+  return date.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * 同上、時分のみ (時間レンジの終端表記用)。
+ * 例: `13:00`
+ */
+export function formatJstTime(date: Date): string {
+  return date.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
  * AI提案通知メールのHTML生成
  */
 export function buildSuggestionEmailHtml(
@@ -190,12 +217,8 @@ export function buildBookingNotificationHtml(params: {
   slotEnd: Date;
 }): string {
   const { linkTitle, guestName, guestEmail, guestMessage, slotStart, slotEnd } = params;
-  const startStr = slotStart.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-  const endStr = slotEnd.toLocaleString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const startStr = formatJstDateTime(slotStart);
+  const endStr = formatJstTime(slotEnd);
 
   const guestEmailHtml = guestEmail
     ? `<p style="margin:4px 0;font-size:14px;">メール: <a href="mailto:${escapeHtml(guestEmail)}">${escapeHtml(guestEmail)}</a></p>`
@@ -236,12 +259,8 @@ export function buildBookingConfirmationHtml(params: {
   durationMinutes: number;
 }): string {
   const { linkTitle, ownerDisplayName, guestName, slotStart, slotEnd, durationMinutes } = params;
-  const startStr = slotStart.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-  const endStr = slotEnd.toLocaleString('ja-JP', {
-    timeZone: 'Asia/Tokyo',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const startStr = formatJstDateTime(slotStart);
+  const endStr = formatJstTime(slotEnd);
 
   return `
 <!DOCTYPE html>

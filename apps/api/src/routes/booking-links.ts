@@ -12,6 +12,7 @@ import {
 } from '@calendar-hub/shared';
 import {
   buildBookingLinkFromFirestoreData,
+  buildBookingLinkPatchUpdate,
   validateBookingLinkInvariant,
 } from '../lib/booking-link-utils.js';
 
@@ -180,25 +181,10 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     return c.json({ error: patchInvariant.error }, 400);
   }
 
-  const update: Record<string, unknown> = {
+  const update = {
     updatedAt: FieldValue.serverTimestamp(),
+    ...buildBookingLinkPatchUpdate(body),
   };
-
-  if (body.title !== undefined) update.title = body.title;
-  if (body.description !== undefined) update.description = body.description ?? null;
-  if (body.status !== undefined) update.status = body.status;
-  if (body.availableDays !== undefined) update.availableDays = body.availableDays;
-  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
-  if (body.bufferMinutes !== undefined) update.bufferMinutes = body.bufferMinutes;
-  if (body.freeTimeOptions !== undefined) update.freeTimeOptions = body.freeTimeOptions;
-  if (body.expiresAt !== undefined)
-    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
-  if (body.autoCreateCalendarEvent !== undefined)
-    update.autoCreateCalendarEvent = body.autoCreateCalendarEvent;
-  if (body.calendarIdsForAvailability !== undefined)
-    update.calendarIdsForAvailability = body.calendarIdsForAvailability;
-  if (body.calendarIdForEvent !== undefined) update.calendarIdForEvent = body.calendarIdForEvent;
-  if (body.accountIdForEvent !== undefined) update.accountIdForEvent = body.accountIdForEvent;
 
   await ref.update(update);
 

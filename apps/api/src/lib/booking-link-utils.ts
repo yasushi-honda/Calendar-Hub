@@ -61,6 +61,45 @@ export function filterCalendarsByIds<T extends { id: string }>(
 }
 
 /**
+ * PATCH リクエスト body から Firestore update object を構築する (Partial Update)。
+ *
+ * undefined フィールドは update に含めず、Firestore 側で既存値を保持させる。
+ * `updatedAt` 等の serverTimestamp は呼出側で別途追加すること。
+ */
+export function buildBookingLinkPatchUpdate(body: {
+  title?: string;
+  description?: string | null;
+  status?: string;
+  availableDays?: number[];
+  rangeDays?: number;
+  bufferMinutes?: number;
+  freeTimeOptions?: { dayStartHour: number; dayEndHour: number };
+  expiresAt?: string | null;
+  autoCreateCalendarEvent?: boolean;
+  calendarIdsForAvailability?: string[] | null;
+  calendarIdForEvent?: string | null;
+  accountIdForEvent?: string | null;
+}): Record<string, unknown> {
+  const update: Record<string, unknown> = {};
+  if (body.title !== undefined) update.title = body.title;
+  if (body.description !== undefined) update.description = body.description ?? null;
+  if (body.status !== undefined) update.status = body.status;
+  if (body.availableDays !== undefined) update.availableDays = body.availableDays;
+  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
+  if (body.bufferMinutes !== undefined) update.bufferMinutes = body.bufferMinutes;
+  if (body.freeTimeOptions !== undefined) update.freeTimeOptions = body.freeTimeOptions;
+  if (body.expiresAt !== undefined)
+    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  if (body.autoCreateCalendarEvent !== undefined)
+    update.autoCreateCalendarEvent = body.autoCreateCalendarEvent;
+  if (body.calendarIdsForAvailability !== undefined)
+    update.calendarIdsForAvailability = body.calendarIdsForAvailability;
+  if (body.calendarIdForEvent !== undefined) update.calendarIdForEvent = body.calendarIdForEvent;
+  if (body.accountIdForEvent !== undefined) update.accountIdForEvent = body.accountIdForEvent;
+  return update;
+}
+
+/**
  * BookingLink 作成/更新入力の不変条件をチェック。
  *
  * `autoCreateCalendarEvent === true` (default) のときは

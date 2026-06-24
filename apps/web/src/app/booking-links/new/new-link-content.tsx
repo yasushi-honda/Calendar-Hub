@@ -99,6 +99,12 @@ export function NewLinkContent() {
       setError('予約イベント作成先のカレンダーを設定してください');
       return;
     }
+    if (useSpecificAvailabilityCalendars && selectedAvailabilityCalendarIds.length === 0) {
+      setError(
+        '「特定のカレンダーのみで空き時間を判定する」を有効にした場合は、対象カレンダーを 1 つ以上選択してください',
+      );
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {

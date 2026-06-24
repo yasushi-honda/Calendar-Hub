@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { BookingLink } from '@calendar-hub/shared';
 import {
   applyBookingLinkDefaults,
+  buildBookingLinkPatchUpdate,
   shouldCreateCalendarEvent,
   filterCalendarsByIds,
   validateBookingLinkInvariant,
@@ -141,6 +142,74 @@ describe('filterCalendarsByIds', () => {
   it('filter に存在しない ID が含まれていても無視される', () => {
     const result = filterCalendarsByIds(calendars, ['cal2', 'nonexistent']);
     expect(result).toEqual([{ id: 'cal2', name: 'B' }]);
+  });
+});
+
+describe('buildBookingLinkPatchUpdate (Partial Update: 更新対象外フィールドは含めない)', () => {
+  it('title のみ指定 → update に title のみ含まれる', () => {
+    const update = buildBookingLinkPatchUpdate({ title: 'new' });
+    expect(Object.keys(update)).toEqual(['title']);
+    expect(update.title).toBe('new');
+  });
+
+  it('autoCreateCalendarEvent のみ指定 → 他フィールドは update に含まれない', () => {
+    const update = buildBookingLinkPatchUpdate({ autoCreateCalendarEvent: false });
+    expect(Object.keys(update)).toEqual(['autoCreateCalendarEvent']);
+    expect(update.autoCreateCalendarEvent).toBe(false);
+    expect(update.title).toBeUndefined();
+    expect(update.calendarIdsForAvailability).toBeUndefined();
+    expect(update.bufferMinutes).toBeUndefined();
+    expect(update.calendarIdForEvent).toBeUndefined();
+  });
+
+  it('calendarIdsForAvailability のみ指定 → 他フィールドは update に含まれない', () => {
+    const update = buildBookingLinkPatchUpdate({
+      calendarIdsForAvailability: ['x@example.com'],
+    });
+    expect(Object.keys(update)).toEqual(['calendarIdsForAvailability']);
+    expect(update.calendarIdsForAvailability).toEqual(['x@example.com']);
+  });
+
+  it('calendarIdsForAvailability を null に明示指定 → null が含まれる', () => {
+    const update = buildBookingLinkPatchUpdate({ calendarIdsForAvailability: null });
+    expect(Object.keys(update)).toEqual(['calendarIdsForAvailability']);
+    expect(update.calendarIdsForAvailability).toBeNull();
+  });
+
+  it('description が null なら null として保存', () => {
+    const update = buildBookingLinkPatchUpdate({ description: null });
+    expect(update.description).toBeNull();
+  });
+
+  it('expiresAt 文字列 → Date に変換', () => {
+    const update = buildBookingLinkPatchUpdate({ expiresAt: '2026-12-31T23:59:59Z' });
+    expect(update.expiresAt).toBeInstanceOf(Date);
+  });
+
+  it('expiresAt が null なら null', () => {
+    const update = buildBookingLinkPatchUpdate({ expiresAt: null });
+    expect(update.expiresAt).toBeNull();
+  });
+
+  it('全フィールド未指定なら空オブジェクト', () => {
+    const update = buildBookingLinkPatchUpdate({});
+    expect(update).toEqual({});
+  });
+
+  it('autoCreate=false + calendarId=null を同時指定 → 両方含まれる (read-only ミラー化の典型ケース)', () => {
+    const update = buildBookingLinkPatchUpdate({
+      autoCreateCalendarEvent: false,
+      calendarIdForEvent: null,
+      accountIdForEvent: null,
+    });
+    expect(Object.keys(update).sort()).toEqual([
+      'accountIdForEvent',
+      'autoCreateCalendarEvent',
+      'calendarIdForEvent',
+    ]);
+    expect(update.autoCreateCalendarEvent).toBe(false);
+    expect(update.calendarIdForEvent).toBeNull();
+    expect(update.accountIdForEvent).toBeNull();
   });
 });
 

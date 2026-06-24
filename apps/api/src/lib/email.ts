@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 import { logMailFailure } from './mail-fail.js';
 
 interface SendEmailOptions {
@@ -21,30 +21,93 @@ interface GmailAuth {
 }
 
 /**
- * Gmail OAuth2経由でメール送信
- * access_tokenはrefreshAccessToken()で事前に取得しておく
+ * RFC 2822 形式の MIME message を構築する pure 関数。
+ * 件名・本文は日本語を扱うため UTF-8 + base64 で encode する。
+ *
+ * - 件名: RFC 2047 encoded-word (`=?UTF-8?B?<base64>?=`)
+ * - 本文: `Content-Transfer-Encoding: base64`
+ * - text/html 両方ある場合は multipart/alternative
+ */
+export function buildMimeMessage(opts: {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}): string {
+  const subjectEncoded = `=?UTF-8?B?${Buffer.from(opts.subject, 'utf8').toString('base64')}?=`;
+  const fromHeader = `Calendar Hub <${opts.from}>`;
+
+  if (opts.text && opts.html) {
+    const boundary = `boundary_${Buffer.from(opts.subject + opts.to)
+      .toString('base64')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 24)}`;
+    return [
+      `From: ${fromHeader}`,
+      `To: ${opts.to}`,
+      `Subject: ${subjectEncoded}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from(opts.text, 'utf8').toString('base64'),
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from(opts.html, 'utf8').toString('base64'),
+      '',
+      `--${boundary}--`,
+    ].join('\r\n');
+  }
+
+  return [
+    `From: ${fromHeader}`,
+    `To: ${opts.to}`,
+    `Subject: ${subjectEncoded}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from(opts.html, 'utf8').toString('base64'),
+  ].join('\r\n');
+}
+
+/**
+ * Gmail API (users.messages.send) でメール送信。
+ * OAuth scope は `https://www.googleapis.com/auth/gmail.send` のみで動作する。
+ * (旧実装の nodemailer SMTP は `https://mail.google.com/` scope が必要だったため
+ *  535 認証エラーが発生していた。)
  */
 export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Promise<void> {
   try {
-    // createTransport も try 内に含める: OAuth2 config 検証等で synchronous に
-    // 例外が出るケースも `[MAIL-FAIL]` で捕捉するため。
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        type: 'OAuth2',
-        user: auth.email,
-        accessToken: auth.accessToken,
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      },
-    });
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: auth.accessToken });
 
-    await transporter.sendMail({
-      from: `Calendar Hub <${auth.email}>`,
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    const message = buildMimeMessage({
+      from: auth.email,
       to: options.to,
       subject: options.subject,
       html: options.html,
       text: options.text,
+    });
+
+    const encodedMessage = Buffer.from(message, 'utf8')
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw: encodedMessage },
     });
   } catch (err) {
     if (options.context) {

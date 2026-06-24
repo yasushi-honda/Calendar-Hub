@@ -140,6 +140,42 @@ describe('logMailFailure', () => {
     expect(reasonPart.length).toBeLessThanOrEqual(203);
   });
 
+  it('classifies Gaxios-style { response: { status: 401 } } as AUTH (Gmail API)', () => {
+    const err = Object.assign(new Error('Request had invalid authentication credentials.'), {
+      response: { status: 401, data: {} },
+    });
+    expect(classifyMailError(err).kind).toBe('AUTH');
+    expect(classifyMailError(err).reason).toBe('http=401');
+  });
+
+  it('classifies Gaxios-style { response: { status: 403 } } as AUTH', () => {
+    const err = Object.assign(new Error('Insufficient permissions'), {
+      response: { status: 403, data: {} },
+    });
+    expect(classifyMailError(err).kind).toBe('AUTH');
+  });
+
+  it('classifies Gaxios-style { response: { status: 429 } } as TRANSIENT', () => {
+    const err = Object.assign(new Error('Rate limit exceeded'), {
+      response: { status: 429, data: {} },
+    });
+    expect(classifyMailError(err).kind).toBe('TRANSIENT');
+    expect(classifyMailError(err).reason).toBe('http=429');
+  });
+
+  it('classifies "invalid authentication credentials" message as AUTH (Gmail API)', () => {
+    const err = new Error(
+      'Request had invalid authentication credentials. Expected OAuth 2 access token.',
+    );
+    expect(classifyMailError(err).kind).toBe('AUTH');
+    expect(classifyMailError(err).reason).toBe('gmail_api_auth_rejected');
+  });
+
+  it('classifies "insufficient scope" message as AUTH (Gmail API)', () => {
+    const err = new Error('Request had insufficient authentication scopes.');
+    expect(classifyMailError(err).kind).toBe('AUTH');
+  });
+
   it('classifies synthetic Errors from booking-auth flow as UNKNOWN with useful reason', () => {
     const err1 = new Error('no_refresh_token_stored');
     logMailFailure({ context: 'booking-auth', recipient: 'o@example.com' }, err1);

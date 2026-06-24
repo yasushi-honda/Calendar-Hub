@@ -19,6 +19,11 @@ import type {
   PublicBookingLinkInfo,
   CreateBookingInput,
 } from '@calendar-hub/shared';
+import {
+  buildBookingLinkFromFirestoreData,
+  filterCalendarsByIds,
+  shouldCreateCalendarEvent,
+} from '../lib/booking-link-utils.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -37,7 +42,7 @@ async function getActiveBookingLink(linkId: string): Promise<LinkResult> {
   }
 
   const data = doc.data()!;
-  const link = toBookingLink(data);
+  const link = buildBookingLinkFromFirestoreData(data);
 
   if (link.status !== 'active') {
     return { link: null, error: 'This booking link is currently paused', statusCode: 400 };
@@ -50,15 +55,6 @@ async function getActiveBookingLink(linkId: string): Promise<LinkResult> {
   return { link, error: null, statusCode: null };
 }
 
-function toBookingLink(data: FirebaseFirestore.DocumentData): BookingLink {
-  return {
-    ...data,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-  } as BookingLink;
-}
-
 async function getOwnerDisplayName(ownerUid: string): Promise<string> {
   const db = getDb();
   const doc = await db.collection('users').doc(ownerUid).get();
@@ -69,6 +65,7 @@ async function getOwnerDisplayName(ownerUid: string): Promise<string> {
 async function fetchOwnerEvents(
   ownerUid: string,
   accountIds: string[],
+  calendarIdsFilter: string[] | null,
   timeMin: Date,
   timeMax: Date,
 ): Promise<CalendarEvent[]> {
@@ -76,8 +73,9 @@ async function fetchOwnerEvents(
     accountIds.map(async (accountId) => {
       const adapter = await createAdapter(ownerUid, accountId);
       const calendars = await adapter.listCalendars();
+      const targets = filterCalendarsByIds(calendars, calendarIdsFilter);
       const allEvents = await Promise.all(
-        calendars.map((cal) => adapter.listEvents(cal.id, timeMin, timeMax)),
+        targets.map((cal) => adapter.listEvents(cal.id, timeMin, timeMax)),
       );
       return allEvents.flat();
     }),
@@ -171,7 +169,13 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
   if (rangeStart < now) rangeStart = now;
 
   const [calendarEvents, bookingEvents] = await Promise.all([
-    fetchOwnerEvents(link.ownerUid, link.accountIds, rangeStart, rangeEnd),
+    fetchOwnerEvents(
+      link.ownerUid,
+      link.accountIds,
+      link.calendarIdsForAvailability,
+      rangeStart,
+      rangeEnd,
+    ),
     getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
 
@@ -304,7 +308,16 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
   const ownerDisplayName = await getOwnerDisplayName(link.ownerUid);
 
   // 非同期処理（失敗してもbookingは確定済み）
-  createCalendarEventAsync(link, bookingId, body.guestName, body.guestMessage, slotStart, slotEnd);
+  if (shouldCreateCalendarEvent(link)) {
+    createCalendarEventAsync(
+      link,
+      bookingId,
+      body.guestName,
+      body.guestMessage,
+      slotStart,
+      slotEnd,
+    );
+  }
   sendBookingNotificationsAsync(
     link,
     bookingId,
@@ -342,6 +355,13 @@ function createCalendarEventAsync(
   slotEnd: Date,
 ) {
   (async () => {
+    // 呼出側 (POST /:linkId/book) で null チェック済だが、型 narrowing のため再確認
+    if (!link.accountIdForEvent || !link.calendarIdForEvent) {
+      console.error(
+        `createCalendarEventAsync called with null IDs for booking ${bookingId} (link ${link.id})`,
+      );
+      return;
+    }
     try {
       const adapter = await createAdapter(link.ownerUid, link.accountIdForEvent);
       const event = await adapter.createEvent(link.calendarIdForEvent, {

@@ -1,3 +1,4 @@
+import type { DocumentData } from 'firebase-admin/firestore';
 import type { BookingLink } from '@calendar-hub/shared';
 
 /**
@@ -22,6 +23,20 @@ export function applyBookingLinkDefaults(
     calendarIdsForAvailability:
       (data.calendarIdsForAvailability as string[] | null | undefined) ?? null,
   };
+}
+
+/**
+ * Firestore document data から BookingLink を構築する。
+ * Timestamp → Date 変換 + 新フィールドの default 補完を一括で行う。
+ */
+export function buildBookingLinkFromFirestoreData(data: DocumentData): BookingLink {
+  return {
+    ...data,
+    createdAt: data.createdAt?.toDate?.() ?? new Date(),
+    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+    expiresAt: data.expiresAt?.toDate?.() ?? null,
+    ...applyBookingLinkDefaults(data),
+  } as BookingLink;
 }
 
 /**

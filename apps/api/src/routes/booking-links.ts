@@ -10,20 +10,10 @@ import {
   type BookingLink,
   type CreateBookingLinkInput,
 } from '@calendar-hub/shared';
-import { validateBookingLinkInvariant } from '../lib/booking-link-utils.js';
-
-function toBookingLink(data: FirebaseFirestore.DocumentData): BookingLink {
-  return {
-    ...data,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-    calendarIdForEvent: data.calendarIdForEvent ?? null,
-    accountIdForEvent: data.accountIdForEvent ?? null,
-    autoCreateCalendarEvent: data.autoCreateCalendarEvent ?? true,
-    calendarIdsForAvailability: data.calendarIdsForAvailability ?? null,
-  } as BookingLink;
-}
+import {
+  buildBookingLinkFromFirestoreData,
+  validateBookingLinkInvariant,
+} from '../lib/booking-link-utils.js';
 
 export const bookingLinkRoutes = new Hono<AppEnv>();
 
@@ -112,7 +102,7 @@ bookingLinkRoutes.get('/', requireAuth, async (c) => {
     .orderBy('createdAt', 'desc')
     .get();
 
-  const links = snap.docs.map((doc) => toBookingLink(doc.data()));
+  const links = snap.docs.map((doc) => buildBookingLinkFromFirestoreData(doc.data()));
   return c.json({ links });
 });
 
@@ -129,7 +119,7 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  const existingLink = toBookingLink(doc.data()!);
+  const existingLink = buildBookingLinkFromFirestoreData(doc.data()!);
 
   if (
     body.status !== undefined &&
@@ -213,7 +203,7 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
   await ref.update(update);
 
   const updated = await ref.get();
-  return c.json({ link: toBookingLink(updated.data()!) });
+  return c.json({ link: buildBookingLinkFromFirestoreData(updated.data()!) });
 });
 
 bookingLinkRoutes.delete('/:linkId', requireAuth, async (c) => {

@@ -19,7 +19,11 @@ import type {
   PublicBookingLinkInfo,
   CreateBookingInput,
 } from '@calendar-hub/shared';
-import { filterCalendarsByIds, shouldCreateCalendarEvent } from '../lib/booking-link-utils.js';
+import {
+  buildBookingLinkFromFirestoreData,
+  filterCalendarsByIds,
+  shouldCreateCalendarEvent,
+} from '../lib/booking-link-utils.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -38,7 +42,7 @@ async function getActiveBookingLink(linkId: string): Promise<LinkResult> {
   }
 
   const data = doc.data()!;
-  const link = toBookingLink(data);
+  const link = buildBookingLinkFromFirestoreData(data);
 
   if (link.status !== 'active') {
     return { link: null, error: 'This booking link is currently paused', statusCode: 400 };
@@ -49,19 +53,6 @@ async function getActiveBookingLink(linkId: string): Promise<LinkResult> {
   }
 
   return { link, error: null, statusCode: null };
-}
-
-function toBookingLink(data: FirebaseFirestore.DocumentData): BookingLink {
-  return {
-    ...data,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-    calendarIdForEvent: data.calendarIdForEvent ?? null,
-    accountIdForEvent: data.accountIdForEvent ?? null,
-    autoCreateCalendarEvent: data.autoCreateCalendarEvent ?? true,
-    calendarIdsForAvailability: data.calendarIdsForAvailability ?? null,
-  } as BookingLink;
 }
 
 async function getOwnerDisplayName(ownerUid: string): Promise<string> {

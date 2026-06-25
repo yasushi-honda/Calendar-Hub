@@ -1,0 +1,211 @@
+displayName: 'Calendar Hub - SLI/SLO Dashboard'
+labels:
+  managed_by: setup-dashboard-sh
+  issue: '81'
+  adr: '010'
+mosaicLayout:
+  columns: 12
+  tiles:
+    # --- Row 1: API/Web 5xx rate (Availability SLI) ---
+    - xPos: 0
+      yPos: 0
+      width: 6
+      height: 4
+      widget:
+        title: 'API 5xx rate (SLO target: <= 0.5% / 99.5% availability)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          timeshiftDuration: 0s
+          yAxis:
+            label: 'Requests / minute'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_AREA
+              targetAxis: Y1
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="run.googleapis.com/request_count" resource.type="cloud_run_revision" resource.labels.service_name="calendar-hub-api"'
+                  aggregation:
+                    alignmentPeriod: 60s
+                    perSeriesAligner: ALIGN_RATE
+                    crossSeriesReducer: REDUCE_SUM
+                    groupByFields:
+                      - metric.labels.response_code_class
+    - xPos: 6
+      yPos: 0
+      width: 6
+      height: 4
+      widget:
+        title: 'Web 5xx rate (SLO target: <= 0.5% / 99.5% availability)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          timeshiftDuration: 0s
+          yAxis:
+            label: 'Requests / minute'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_AREA
+              targetAxis: Y1
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="run.googleapis.com/request_count" resource.type="cloud_run_revision" resource.labels.service_name="calendar-hub-web"'
+                  aggregation:
+                    alignmentPeriod: 60s
+                    perSeriesAligner: ALIGN_RATE
+                    crossSeriesReducer: REDUCE_SUM
+                    groupByFields:
+                      - metric.labels.response_code_class
+    # --- Row 2: API latency (Latency SLI) ---
+    - xPos: 0
+      yPos: 4
+      width: 12
+      height: 4
+      widget:
+        title: 'API request latency p50/p95/p99 (SLO target: p95 <= 1s)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: 'Latency (ms)'
+            scale: LINEAR
+          thresholds:
+            - value: 1000
+              color: YELLOW
+              direction: ABOVE
+              label: 'SLO p95 target (1000ms)'
+          dataSets:
+            - plotType: LINE
+              targetAxis: Y1
+              legendTemplate: 'p50'
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="run.googleapis.com/request_latencies" resource.type="cloud_run_revision" resource.labels.service_name="calendar-hub-api"'
+                  aggregation:
+                    alignmentPeriod: 60s
+                    perSeriesAligner: ALIGN_PERCENTILE_50
+                    crossSeriesReducer: REDUCE_MEAN
+            - plotType: LINE
+              targetAxis: Y1
+              legendTemplate: 'p95'
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="run.googleapis.com/request_latencies" resource.type="cloud_run_revision" resource.labels.service_name="calendar-hub-api"'
+                  aggregation:
+                    alignmentPeriod: 60s
+                    perSeriesAligner: ALIGN_PERCENTILE_95
+                    crossSeriesReducer: REDUCE_MEAN
+            - plotType: LINE
+              targetAxis: Y1
+              legendTemplate: 'p99'
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="run.googleapis.com/request_latencies" resource.type="cloud_run_revision" resource.labels.service_name="calendar-hub-api"'
+                  aggregation:
+                    alignmentPeriod: 60s
+                    perSeriesAligner: ALIGN_PERCENTILE_99
+                    crossSeriesReducer: REDUCE_MEAN
+    # --- Row 3: Sync health (Sync SLI) ---
+    - xPos: 0
+      yPos: 8
+      width: 6
+      height: 4
+      widget:
+        title: 'Sync failures (SLO target: 0 / hour for 99% of windows)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: 'Events / hour'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_BAR
+              targetAxis: Y1
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="logging.googleapis.com/user/calendar_hub_sync_failed" resource.type="cloud_run_revision"'
+                  aggregation:
+                    alignmentPeriod: 3600s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+    - xPos: 6
+      yPos: 8
+      width: 6
+      height: 4
+      widget:
+        title: 'Sync gaps and RRULE skips'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: 'Events / hour'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_BAR
+              targetAxis: Y1
+              legendTemplate: 'SYNC-GAP'
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="logging.googleapis.com/user/calendar_hub_sync_gap" resource.type="cloud_run_revision"'
+                  aggregation:
+                    alignmentPeriod: 3600s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+            - plotType: STACKED_BAR
+              targetAxis: Y1
+              legendTemplate: 'RRULE-SKIP'
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="logging.googleapis.com/user/calendar_hub_rrule_skip" resource.type="cloud_run_revision"'
+                  aggregation:
+                    alignmentPeriod: 3600s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+    # --- Row 4: External integration health ---
+    - xPos: 0
+      yPos: 12
+      width: 6
+      height: 4
+      widget:
+        title: 'TimeTree session expirations (per accountId, 24h)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: 'Events / hour'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_BAR
+              targetAxis: Y1
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="logging.googleapis.com/user/calendar_hub_tt_session_expired" resource.type="cloud_run_revision"'
+                  aggregation:
+                    alignmentPeriod: 3600s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM
+                    groupByFields:
+                      - metric.labels.accountId
+    - xPos: 6
+      yPos: 12
+      width: 6
+      height: 4
+      widget:
+        title: 'Mail send failures (Gmail OAuth2)'
+        xyChart:
+          chartOptions:
+            mode: COLOR
+          yAxis:
+            label: 'Events / hour'
+            scale: LINEAR
+          dataSets:
+            - plotType: STACKED_BAR
+              targetAxis: Y1
+              timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: 'metric.type="logging.googleapis.com/user/calendar_hub_mail_fail" resource.type="cloud_run_revision"'
+                  aggregation:
+                    alignmentPeriod: 3600s
+                    perSeriesAligner: ALIGN_SUM
+                    crossSeriesReducer: REDUCE_SUM

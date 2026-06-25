@@ -7,13 +7,33 @@ import {
   seedStandardLinkAndOwner,
 } from '../fixtures/seed';
 
+const isCI = !!process.env.CI;
+
 test.describe('AC-E2E-1: 予約成功パス', () => {
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
     await clearAllCollections();
+    // Issue #145 診断: CI ではブラウザ console/network エラーをログ出力
+    if (isCI) {
+      page.on('console', (msg) => {
+        console.log(`[browser console] [${msg.type()}] ${msg.text()}`);
+      });
+      page.on('pageerror', (err) => {
+        console.log(`[browser pageerror] ${err.message}`);
+      });
+      page.on('requestfailed', (req) => {
+        console.log(
+          `[browser requestfailed] ${req.method()} ${req.url()} - ${req.failure()?.errorText}`,
+        );
+      });
+      page.on('response', (res) => {
+        if (res.url().includes('/api/')) {
+          console.log(`[browser response] ${res.status()} ${res.url()}`);
+        }
+      });
+    }
   });
 
   test('公開ページから予約 → Firestore 永続化 + mock mail 2 件', async ({ page }) => {
-    test.skip(!!process.env.CI, 'CI flaky: /slots fetch がブラウザ JS に届かない (Issue #145)');
     const { linkId, ownerUid } = await seedStandardLinkAndOwner('success');
 
     // 翌日 14:00 JST を狙う (確実に未来 + 営業時間内 8-23)

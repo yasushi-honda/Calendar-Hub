@@ -4,12 +4,17 @@ set -euo pipefail
 # Calendar Hub SLI/SLO Dashboard setup (Issue #81 c, ADR-010 §実装フェーズ 3)
 #
 # 冪等: 既存ダッシュボードは update、無ければ create。
-# 前提: gcloud 認証済み + monitoring.googleapis.com 有効化済み (PR #155 で実施)。
+# 前提:
+#   1. gcloud 認証済み + monitoring.googleapis.com 有効化済み
+#      (infra/setup-slo.sh 実行時に有効化)
+#   2. log-based metrics 作成済み (infra/setup-monitoring.sh 実行時)
+#      未実行環境で本スクリプトを走らせると dashboard 作成自体は成功するが
+#      widget は "No data" 永久表示になる (silent UX 劣化)
 #
 # 設計根拠 (docs/adr/010-slo-and-log-retention.md §実装フェーズ 3):
 # - SLI 4 種 + 関連メトリクスを 1 ダッシュボードに集約
-# - API/Web 5xx rate (availability) / API latency p50-95-99 / Sync failures /
-#   Sync gap / TT session expired (per accountId) / Mail send failures
+# - API/Web requests by response class (5xx rate SLI) / API latency p50-95-99 /
+#   Sync failures / Sync gap / TT session expired (per accountId) / Mail send failures
 # - SLO target 1000ms (p95) は threshold line で可視化
 
 PROJECT_ID="${GCP_PROJECT_ID:-calendar-hub-prod}"

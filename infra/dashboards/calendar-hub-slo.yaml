@@ -12,13 +12,12 @@ mosaicLayout:
       width: 6
       height: 4
       widget:
-        title: 'API 5xx rate (SLO target: <= 0.5% / 99.5% availability)'
+        title: 'API requests by response class (SLO: 5xx rate <= 0.5% / availability 99.5%)'
         xyChart:
           chartOptions:
             mode: COLOR
-          timeshiftDuration: 0s
           yAxis:
-            label: 'Requests / minute'
+            label: 'Requests / second'
             scale: LINEAR
           dataSets:
             - plotType: STACKED_AREA
@@ -37,13 +36,12 @@ mosaicLayout:
       width: 6
       height: 4
       widget:
-        title: 'Web 5xx rate (SLO target: <= 0.5% / 99.5% availability)'
+        title: 'Web requests by response class (SLO: 5xx rate <= 0.5% / availability 99.5%)'
         xyChart:
           chartOptions:
             mode: COLOR
-          timeshiftDuration: 0s
           yAxis:
-            label: 'Requests / minute'
+            label: 'Requests / second'
             scale: LINEAR
           dataSets:
             - plotType: STACKED_AREA
@@ -72,8 +70,6 @@ mosaicLayout:
             scale: LINEAR
           thresholds:
             - value: 1000
-              color: YELLOW
-              direction: ABOVE
               label: 'SLO p95 target (1000ms)'
           dataSets:
             - plotType: LINE

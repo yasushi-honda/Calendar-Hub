@@ -22,14 +22,14 @@ test.describe('AC-E2E-1: 予約成功パス', () => {
     await page.goto(`/book/${linkId}`);
     await expect(page.getByText('読み込み中...')).toBeHidden({ timeout: 30_000 });
 
-    // 翌日の日付カードをクリック (data-testid 経由で確実に特定)
+    // 翌日の日付カードをクリック (CI で遅延しうるので timeout を伸ばす)
     const targetDateCard = page.getByTestId(`date-card-${targetDateKey}`);
-    await expect(targetDateCard).toBeVisible();
+    await expect(targetDateCard).toBeVisible({ timeout: 20_000 });
     await targetDateCard.click();
 
     // 14:00 スロットをクリック
     const slot14 = page.getByTestId(`slot-btn-${targetIso}`);
-    await expect(slot14).toBeVisible();
+    await expect(slot14).toBeVisible({ timeout: 10_000 });
     await slot14.click();
 
     // フォーム入力

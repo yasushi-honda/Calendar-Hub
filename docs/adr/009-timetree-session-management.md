@@ -71,16 +71,22 @@ session 切れが検出された場合のユーザー対応フロー:
 ## 実装済み (本 ADR の後続作業)
 
 - ✅ ログベースメトリクス `calendar_hub_tt_session_expired` 作成 (PR #150、`infra/setup-monitoring.sh`)
-- ✅ アラートポリシー `[Calendar Hub] TimeTree session expired (24h ≥ 3)` (`infra/alert-policies/tt-session-expired.yaml`)
-  - **スコープ調整**: プロジェクト全体で 24h 内 3 件以上で発報。ADR 当初案の「単一ユーザー」識別は現状ログ (`timetree.ts:91/103`) に userId/accountId が含まれないため将来課題 (下記 Future Work)
+- ✅ アラートポリシー (`infra/alert-policies/tt-session-expired.yaml`)
+  - 初期実装 (PR #150): プロジェクト全体集計、24h 内 3 件以上で発報、displayName `(24h ≥ 3)`
+  - **per-account 化 (本 ADR Future Work 実装、後続 PR)**: ログに `accountId=...` を追加し、`metric.label.accountId` で groupBy。閾値を 1+/24h、displayName `(per account, 24h)` に変更
+- ✅ `TimeTreeAdapter` constructor の options object 化 (`{ accountId: string; reLoginFn?: TimeTreeReLoginFn }`)
+  - 設計判断: required `accountId` を後付けする際、第3引数に required を置くと TypeScript で `(s, reLoginFn?, accountId)` が型として破綻するため options object を採用。将来 `userId` / `logger` 追加時の拡張性も確保 (Codex review 指摘)
+- ✅ log-based metric への label extractor 後付け
+  - `labelExtractors.accountId: REGEXP_EXTRACT(textPayload, "accountId=([^ ]+)")` で抽出
+  - GCP 仕様: 既存ラベルは追加可能・削除/変更不可。本実装は新規ラベル追加のみで非破壊更新
+  - `setup-monitoring.sh` の `create_or_update_metric` を 4 引数化 (第4引数 `labels_yaml` で labelExtractors + metricDescriptor.labels を `--config-from-file` 経由で適用)
+- ✅ 旧 alert policy の冪等 cleanup
+  - displayName 変更を伴うため、`setup-monitoring.sh` に `cleanup_legacy_policy` 関数を追加。1 回目で旧 displayName `(24h ≥ 3)` を削除、2 回目以降は no-op
 
 ## Future Work
 
-- 単一ユーザー (accountId) 単位の `[TT-SESSION-EXPIRED]` グループ化 alert
-  - 前提: ログに `accountId=...` を追加 (`TimeTreeAdapter` constructor で accountId を受け取り、ログ出力に含める)
-  - 別 Issue 化候補 (本 ADR スコープ外、ログ schema 変更が必要)
 - Web UI の連携アカウント設定画面で **session 残日数バッジ**表示 (`expiresAt` を Firestore に保存して算出)
-- session 切れ通知メール (任意機能)
+- session 切れ通知メール (任意機能、admin 宛 alert からエンドユーザー直接通知への展開)
 
 ### 既存ロジックの強化候補（本 ADR スコープ外、将来検討）
 

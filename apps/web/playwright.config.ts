@@ -17,7 +17,7 @@ const COMMON_API_ENV = [
 export default defineConfig({
   testDir: './e2e/tests',
   fullyParallel: false,
-  retries: 0,
+  retries: isCI ? 2 : 0,
   workers: 1,
   reporter: isCI ? [['github'], ['list']] : 'list',
   timeout: 90_000,

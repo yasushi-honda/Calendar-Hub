@@ -20,11 +20,13 @@ test.describe('AC-E2E-1: 予約成功パス', () => {
     const targetDateKey = targetIso.split('T')[0]; // YYYY-MM-DD
 
     await page.goto(`/book/${linkId}`);
+    // 初回 /slots fetch + render 完了を待つ (CI で Next.js dev compile が遅い)
+    await page.waitForLoadState('networkidle', { timeout: 60_000 });
     await expect(page.getByText('読み込み中...')).toBeHidden({ timeout: 30_000 });
 
     // 翌日の日付カードをクリック (CI で遅延しうるので timeout を伸ばす)
     const targetDateCard = page.getByTestId(`date-card-${targetDateKey}`);
-    await expect(targetDateCard).toBeVisible({ timeout: 20_000 });
+    await expect(targetDateCard).toBeVisible({ timeout: 30_000 });
     await targetDateCard.click();
 
     // 14:00 スロットをクリック

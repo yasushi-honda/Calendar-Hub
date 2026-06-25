@@ -282,6 +282,7 @@ export function BookContent() {
                       {availableDates.map((date) => (
                         <button
                           key={date}
+                          data-testid={`date-card-${date}`}
                           onClick={() => {
                             setSelectedDate(date);
                             setSelectedSlot(null);
@@ -321,6 +322,7 @@ export function BookContent() {
                         {slotsForSelectedDate.map((slot) => (
                           <button
                             key={slot.start}
+                            data-testid={`slot-btn-${slot.start}`}
                             onClick={() => handleSelectSlot(slot)}
                             className="slot-btn"
                             style={s.slotBtn}
@@ -386,6 +388,7 @@ export function BookContent() {
               <button
                 onClick={handleSubmit}
                 disabled={!guestName.trim() || submitting}
+                data-testid="submit-btn"
                 className="submit-btn"
                 style={{
                   ...s.submitBtn,

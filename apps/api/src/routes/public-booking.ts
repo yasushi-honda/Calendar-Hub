@@ -24,6 +24,7 @@ import {
   filterCalendarsByIds,
   shouldCreateCalendarEvent,
 } from '../lib/booking-link-utils.js';
+import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -267,13 +268,16 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
   const bookingId = nanoid(12);
 
   try {
+    const overlapQuery = db
+      .collection('bookings')
+      .where('ownerUid', '==', link.ownerUid)
+      .where('status', '==', 'confirmed')
+      .where('slotStart', '<', slotEnd);
+
     await db.runTransaction(async (tx) => {
-      const existingBookings = await db
-        .collection('bookings')
-        .where('ownerUid', '==', link.ownerUid)
-        .where('status', '==', 'confirmed')
-        .where('slotStart', '<', slotEnd)
-        .get();
+      // tx.get で query を実行することで Firestore の serializable isolation を効かせ、
+      // 並列リクエスト下でも optimistic locking で二重予約を防ぐ。
+      const existingBookings = await tx.get(overlapQuery);
 
       const hasOverlap = existingBookings.docs.some((doc) => {
         const existingEnd = doc.data().slotEnd.toDate();
@@ -400,28 +404,34 @@ function sendBookingNotificationsAsync(
     }
 
     let auth: { email: string; accessToken: string };
-    try {
-      const refreshToken = await getRefreshToken(link.ownerUid, googleAccount.id);
-      if (!refreshToken) {
-        // refresh_token が Firestore に残っていないケース。再ログインが必要。
-        logMailFailure(
-          { context: 'booking-auth', recipient: googleAccount.email },
-          new Error('no_refresh_token_stored'),
-        );
+    if (process.env.E2E_MAIL_MOCK === '1') {
+      assertE2EMockSafe('E2E_MAIL_MOCK');
+      // E2E: sendEmail 側で Firestore に書き込むだけなので access_token は使われない
+      auth = { email: googleAccount.email, accessToken: 'e2e-mock-token' };
+    } else {
+      try {
+        const refreshToken = await getRefreshToken(link.ownerUid, googleAccount.id);
+        if (!refreshToken) {
+          // refresh_token が Firestore に残っていないケース。再ログインが必要。
+          logMailFailure(
+            { context: 'booking-auth', recipient: googleAccount.email },
+            new Error('no_refresh_token_stored'),
+          );
+          return;
+        }
+        const tokens = await refreshAccessToken(refreshToken);
+        if (!tokens.access_token) {
+          logMailFailure(
+            { context: 'booking-auth', recipient: googleAccount.email },
+            new Error('empty_access_token'),
+          );
+          return;
+        }
+        auth = { email: googleAccount.email, accessToken: tokens.access_token };
+      } catch (err) {
+        logMailFailure({ context: 'booking-auth', recipient: googleAccount.email }, err);
         return;
       }
-      const tokens = await refreshAccessToken(refreshToken);
-      if (!tokens.access_token) {
-        logMailFailure(
-          { context: 'booking-auth', recipient: googleAccount.email },
-          new Error('empty_access_token'),
-        );
-        return;
-      }
-      auth = { email: googleAccount.email, accessToken: tokens.access_token };
-    } catch (err) {
-      logMailFailure({ context: 'booking-auth', recipient: googleAccount.email }, err);
-      return;
     }
 
     // オーナーへ通知（独立try-catch: error-handling.mdルール遵守）

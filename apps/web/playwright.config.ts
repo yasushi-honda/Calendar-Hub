@@ -25,7 +25,10 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: 'http://localhost:3010',
-    trace: 'retain-on-failure',
+    // Issue #145 診断中: 仮説実証のため一時的に trace/video/screenshot を強化。Phase D で retain-on-failure に戻す。
+    trace: 'on',
+    video: 'on',
+    screenshot: 'only-on-failure',
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
   },

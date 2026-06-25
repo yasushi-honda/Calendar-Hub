@@ -7,13 +7,35 @@ import {
   seedStandardLinkAndOwner,
 } from '../fixtures/seed';
 
+const isCI = !!process.env.CI;
+
 test.describe('AC-E2E-4 / AC-E2E-5: ポーリング + キャンセル後の枠復活', () => {
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ page }) => {
     await clearAllCollections();
+    // Issue #145 診断: CI ではブラウザ console/network エラーをログ出力
+    if (isCI) {
+      page.on('console', (msg) => {
+        console.log(`[browser console] [${msg.type()}] ${msg.text()}`);
+      });
+      page.on('pageerror', (err) => {
+        console.log(`[browser pageerror] ${err.message}`);
+      });
+      page.on('requestfailed', (req) => {
+        console.log(
+          `[browser requestfailed] ${req.method()} ${req.url()} - ${req.failure()?.errorText}`,
+        );
+      });
+      page.on('response', (res) => {
+        if (res.url().includes('/api/')) {
+          console.log(`[browser response] ${res.status()} ${res.url()}`);
+        }
+      });
+    }
   });
 
   test('60s ごとに /slots 再取得、フォーム遷移で停止', async ({ page }) => {
-    test.skip(!!process.env.CI, 'CI flaky: /slots fetch がブラウザ JS に届かない (Issue #145)');
+    // Issue #145 診断中: skip を一時解除して CI で再現させる。Phase D で根本修正後、本行を削除。
+    // test.skip(!!process.env.CI, 'CI flaky: /slots fetch がブラウザ JS に届かない (Issue #145)');
     test.setTimeout(180_000); // ポーリング検証のため 3 分
 
     const { linkId } = await seedStandardLinkAndOwner('polling');

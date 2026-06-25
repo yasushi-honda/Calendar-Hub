@@ -54,10 +54,14 @@ create_or_update_metric() {
   local tmpfile
   tmpfile=$(mktemp)
   trap "rm -f '$tmpfile'" RETURN
+  # description は literal block scalar (|-) で記述し、YAML plain scalar の
+  # コメント解釈 (`,  #79` → comment) や flow indicator 誤解釈を回避。
+  # 既存ラベルは追加可・削除不可 (GCP 仕様、#79 Future Work 実装時に確認済み)。
   cat > "$tmpfile" <<EOF
 name: ${name}
-description: ${description}
-filter: |
+description: |-
+  ${description}
+filter: |-
   ${filter}
 ${labels_yaml}
 EOF

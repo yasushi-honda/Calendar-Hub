@@ -167,6 +167,17 @@ describe('TimeTree login body format', () => {
   });
 });
 
+describe('TimeTreeAdapter constructor guard', () => {
+  it('should throw when options.accountId is empty string', () => {
+    const session: TimeTreeSession = {
+      sessionId: 'sid',
+      csrfToken: 'csrf',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    };
+    expect(() => new TimeTreeAdapter(session, { accountId: '' })).toThrow(/accountId is required/);
+  });
+});
+
 describe('TimeTreeAdapter session expiry observability', () => {
   const validSession: TimeTreeSession = {
     sessionId: 'sid',
@@ -264,6 +275,7 @@ describe('TimeTreeAdapter session expiry observability', () => {
     const warned = warnSpy.mock.calls.flat().join(' ');
     const informed = infoSpy.mock.calls.flat().join(' ');
     expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
     expect(warned).toContain('reLoginAvailable=true');
     expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');
     expect(informed).toContain('[TT-SESSION-RELOGIN-OK]');
@@ -287,6 +299,7 @@ describe('TimeTreeAdapter session expiry observability', () => {
     const warned = warnSpy.mock.calls.flat().join(' ');
     const informed = infoSpy.mock.calls.flat().join(' ');
     expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
     expect(warned).toContain('reason=expiresAt');
     expect(warned).toContain('reLoginAvailable=true');
     expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');

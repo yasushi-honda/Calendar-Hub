@@ -50,13 +50,12 @@ create_or_update_metric() {
   fi
 
   # Advanced mode: labelExtractors + custom labels via config file.
-  # GCP 仕様: 既存ラベルは削除/変更不可だが、追加は可能 (#79 Future Work 実装時に確認済み)。
-  local tmpfile
+  # description / filter は literal block scalar (|-) で記述し、YAML plain scalar の
+  # コメント解釈 (`, #79` → comment) や flow indicator 誤解釈を回避。
+  # GCP 仕様: 既存ラベルは削除/変更不可だが、追加は可能 (Issue #79 Future Work 実装時に確認済み)。
+  local tmpfile rc
   tmpfile=$(mktemp)
-  trap "rm -f '$tmpfile'" RETURN
-  # description は literal block scalar (|-) で記述し、YAML plain scalar の
-  # コメント解釈 (`,  #79` → comment) や flow indicator 誤解釈を回避。
-  # 既存ラベルは追加可・削除不可 (GCP 仕様、#79 Future Work 実装時に確認済み)。
+  # trap RETURN は global 状態で他関数の return にも fire するため使わず、明示 cleanup する。
   cat > "$tmpfile" <<EOF
 name: ${name}
 description: |-
@@ -71,12 +70,16 @@ EOF
     gcloud logging metrics update "$name" \
       --project="$PROJECT_ID" \
       --config-from-file="$tmpfile" --quiet
+    rc=$?
   else
     echo "Creating log metric (with labels): $name"
     gcloud logging metrics create "$name" \
       --project="$PROJECT_ID" \
       --config-from-file="$tmpfile"
+    rc=$?
   fi
+  rm -f "$tmpfile"
+  return $rc
 }
 
 BASE_FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE_NAME}\""
@@ -239,14 +242,18 @@ apply_policy() {
 
 # 旧 displayName で残っているポリシーがあれば削除 (ADR-009 Future Work の rename 移行用、冪等)。
 # 1 回目の実行で旧ポリシーを掃除、2 回目以降は no-op (旧 displayName 不在で skip)。
+# list 失敗時は fail-hard: silent skip すると旧 policy + 新 policy が並存して
+# session 切れ 1 件で「全体集計 alert (3+ 旧)」と「per-account alert (1+ 新)」が
+# 二重発火するため。
 cleanup_legacy_policy() {
   local legacy_name="$1"
   local policies_out
   if ! policies_out=$(gcloud alpha monitoring policies list \
     --project="$PROJECT_ID" \
     --format="csv[no-heading](name,displayName)" 2>&1); then
-    echo "WARN: failed to list policies for legacy cleanup; skipping: $legacy_name" >&2
-    return 0
+    echo "ERROR: failed to list policies for legacy cleanup ($legacy_name):" >&2
+    echo "$policies_out" >&2
+    exit 1
   fi
   local legacy_id
   legacy_id=$(echo "$policies_out" \

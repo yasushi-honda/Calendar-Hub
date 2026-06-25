@@ -14,7 +14,7 @@ documentation:
     - 短時間に 3 件以上の accountId で本 alert が発火 → API 仕様変更チェック
     - 単一 accountId 単発なら通常の cookie 失効 (14 日経過)
 
-    補足: 本 alert は ADR-009 Future Work の per-account grouping 実装 (PR #79 後続)。
+    補足: 本 alert は ADR-009 Future Work の per-account grouping 実装 (Issue #79、PR #150 後続)。
     旧「プロジェクト全体集計 alert」は本 alert で置換済み。
   mimeType: text/markdown
 combiner: OR

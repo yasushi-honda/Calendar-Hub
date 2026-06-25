@@ -72,6 +72,11 @@ export class TimeTreeAdapter implements CalendarAdapter {
   private accountId: string;
 
   constructor(session: TimeTreeSession, options: TimeTreeAdapterOptions) {
+    // 空文字 accountId は alert grouping を破壊するため early reject。
+    // 型は `string` で required だが、TS は空文字を弾けないため runtime guard が必要。
+    if (!options.accountId) {
+      throw new Error('TimeTreeAdapter: options.accountId is required (cannot be empty)');
+    }
     this.sessionId = session.sessionId;
     this.csrfToken = session.csrfToken;
     this.expiresAt = session.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000; // default 14 days
@@ -216,7 +221,7 @@ export class TimeTreeAdapter implements CalendarAdapter {
         name: cal.name,
         description: cal.purpose || undefined,
         provider: 'timetree' as const,
-        accountId: '',
+        accountId: this.accountId,
       }));
   }
 

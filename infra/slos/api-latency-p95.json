@@ -1,0 +1,19 @@
+{
+  "displayName": "API latency: 95% of requests <= 1s (1 month rolling)",
+  "goal": 0.95,
+  "rollingPeriod": "2592000s",
+  "serviceLevelIndicator": {
+    "requestBased": {
+      "distributionCut": {
+        "distributionFilter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\"",
+        "range": {
+          "max": 1000
+        }
+      }
+    }
+  },
+  "userLabels": {
+    "managed_by": "setup-slo-sh",
+    "issue": "81"
+  }
+}

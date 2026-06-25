@@ -1,0 +1,17 @@
+{
+  "displayName": "API availability: 99.5%/month (5xx rate <= 0.5%)",
+  "goal": 0.995,
+  "rollingPeriod": "2592000s",
+  "serviceLevelIndicator": {
+    "requestBased": {
+      "goodTotalRatio": {
+        "totalServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\"",
+        "badServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\" metric.labels.\"response_code_class\"=\"5xx\""
+      }
+    }
+  },
+  "userLabels": {
+    "managed_by": "setup-slo-sh",
+    "issue": "81"
+  }
+}

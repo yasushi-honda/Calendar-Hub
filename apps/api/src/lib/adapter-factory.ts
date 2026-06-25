@@ -40,7 +40,7 @@ export async function createAdapter(userId: string, accountId: string): Promise<
     if (!session.sessionId || !session.csrfToken) {
       throw new Error(`Incomplete TimeTree session for account: ${accountId}`);
     }
-    return new TimeTreeAdapter(session);
+    return new TimeTreeAdapter(session, { accountId });
   }
 
   throw new Error(`Unknown provider: ${provider}`);

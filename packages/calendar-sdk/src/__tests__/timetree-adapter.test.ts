@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TimeTreeAdapter, normalizeAllDayEnd, type TimeTreeSession } from '../adapters/timetree.js';
 
+const TEST_ACCOUNT_ID = 'timetree_test_acc_001';
+
 // TimeTree内部APIのレスポンス型・パース検証（外部APIモック不要の単体テスト）
 
 describe('TimeTree response parsing', () => {
@@ -165,6 +167,17 @@ describe('TimeTree login body format', () => {
   });
 });
 
+describe('TimeTreeAdapter constructor guard', () => {
+  it('should throw when options.accountId is empty string', () => {
+    const session: TimeTreeSession = {
+      sessionId: 'sid',
+      csrfToken: 'csrf',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    };
+    expect(() => new TimeTreeAdapter(session, { accountId: '' })).toThrow(/accountId is required/);
+  });
+});
+
 describe('TimeTreeAdapter session expiry observability', () => {
   const validSession: TimeTreeSession = {
     sessionId: 'sid',
@@ -218,13 +231,14 @@ describe('TimeTreeAdapter session expiry observability', () => {
       fetchSpy = mockFetchSequence([{ status }]);
       vi.stubGlobal('fetch', fetchSpy);
 
-      const adapter = new TimeTreeAdapter(validSession);
+      const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
       await expect(adapter.listCalendars()).rejects.toThrow(
         new RegExp(`TimeTree listCalendars failed: ${status}`),
       );
 
       const warned = warnSpy.mock.calls.flat().join(' ');
       expect(warned).toContain('[TT-SESSION-EXPIRED]');
+      expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
       expect(warned).toContain('reason=httpStatus');
       expect(warned).toContain(`status=${status}`);
       expect(warned).toContain('reLoginAvailable=false');
@@ -235,11 +249,12 @@ describe('TimeTreeAdapter session expiry observability', () => {
     fetchSpy = mockFetchOk({ calendars: [] });
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(expiredSession);
+    const adapter = new TimeTreeAdapter(expiredSession, { accountId: TEST_ACCOUNT_ID });
     await adapter.listCalendars();
 
     const warned = warnSpy.mock.calls.flat().join(' ');
     expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
     expect(warned).toContain('reason=expiresAt');
     expect(warned).toContain('reLoginAvailable=false');
   });
@@ -254,12 +269,13 @@ describe('TimeTreeAdapter session expiry observability', () => {
       expiresAt: Date.now() + 60 * 60 * 1000,
     });
 
-    const adapter = new TimeTreeAdapter(validSession, reLoginFn);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID, reLoginFn });
     await adapter.listCalendars();
 
     const warned = warnSpy.mock.calls.flat().join(' ');
     const informed = infoSpy.mock.calls.flat().join(' ');
     expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
     expect(warned).toContain('reLoginAvailable=true');
     expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');
     expect(informed).toContain('[TT-SESSION-RELOGIN-OK]');
@@ -277,12 +293,13 @@ describe('TimeTreeAdapter session expiry observability', () => {
       expiresAt: Date.now() + 60 * 60 * 1000,
     });
 
-    const adapter = new TimeTreeAdapter(expiredSession, reLoginFn);
+    const adapter = new TimeTreeAdapter(expiredSession, { accountId: TEST_ACCOUNT_ID, reLoginFn });
     await adapter.listCalendars();
 
     const warned = warnSpy.mock.calls.flat().join(' ');
     const informed = infoSpy.mock.calls.flat().join(' ');
     expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
     expect(warned).toContain('reason=expiresAt');
     expect(warned).toContain('reLoginAvailable=true');
     expect(informed).toContain('[TT-SESSION-RELOGIN-ATTEMPT]');
@@ -297,7 +314,7 @@ describe('TimeTreeAdapter session expiry observability', () => {
 
     const reLoginFn = vi.fn().mockRejectedValue(new Error('login server down'));
 
-    const adapter = new TimeTreeAdapter(validSession, reLoginFn);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID, reLoginFn });
     await expect(adapter.listCalendars()).rejects.toThrow(/login server down/);
 
     const errored = errorSpy.mock.calls.flat().join(' ');
@@ -419,7 +436,7 @@ describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => 
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(validSession);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
     const tMin = new Date('2026-04-01T00:00:00Z');
     const tMax = new Date('2026-06-01T00:00:00Z');
     const events = await adapter.listEvents('cal-1', tMin, tMax);
@@ -464,7 +481,7 @@ describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => 
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(validSession);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
     const tMin = new Date('2026-04-01T00:00:00Z');
     const tMax = new Date('2026-06-01T00:00:00Z');
     const events = await adapter.listEvents('cal-1', tMin, tMax);
@@ -505,7 +522,7 @@ describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => 
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(validSession);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
     const tMin = new Date('2026-04-01T00:00:00Z');
     const tMax = new Date('2026-06-01T00:00:00Z');
     const events = await adapter.listEvents('cal-1', tMin, tMax);
@@ -549,7 +566,7 @@ describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => 
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(validSession);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
     // 修正前は raw end (= may3JstMs) > timeMin (= may3JstMs) が false で欠落していたケース
     const tMin = new Date(may3JstMs);
     const tMax = new Date('2026-06-01T00:00:00Z');
@@ -592,7 +609,7 @@ describe('TimeTreeAdapter.listEvents - 複数日終日の end 正規化', () => 
     } as Response);
     vi.stubGlobal('fetch', fetchSpy);
 
-    const adapter = new TimeTreeAdapter(validSession);
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
     const tMin = new Date('2026-04-01T00:00:00Z');
     const tMax = new Date('2026-06-01T00:00:00Z');
     const events = await adapter.listEvents('cal-1', tMin, tMax);

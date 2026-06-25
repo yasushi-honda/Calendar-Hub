@@ -1,28 +1,36 @@
-displayName: '[Calendar Hub] TimeTree session expired (24h ≥ 3)'
+displayName: '[Calendar Hub] TimeTree session expired (per account, 24h)'
 documentation:
   content: |
-    TimeTree session (cookie) 切れが 24 時間以内に 3 件以上発生した。
+    特定の TimeTree 連携アカウントで session (cookie) 切れが 24 時間以内に 1 件以上発生した。
 
     対応:
-    1. Cloud Logging で `textPayload:"[TT-SESSION-EXPIRED]"` を検索し、reason (expiresAt/httpStatus) と URL を確認
-    2. ユーザーが Web アプリ「連携アカウント設定」画面で TimeTree を再連携する必要あり (ADR-009 §2 参照)
-    3. 連続発生がプロジェクト全体で複数アカウント横断なら、TimeTree 側 API 仕様変更の可能性も視野
+    1. アラート本文の `metric.label.accountId` (= `timetree_<id>`) で対象アカウントを特定
+    2. Cloud Logging で
+       `textPayload:"[TT-SESSION-EXPIRED]" AND textPayload:"accountId=<id>"`
+       を検索し、reason (expiresAt/httpStatus) と URL を確認
+    3. 当該ユーザーが Web アプリ「連携アカウント設定」画面で TimeTree を再連携する必要あり (ADR-009 §2 参照)
 
-    補足: 個別ユーザー識別は現状ログに含まれていないため、本 alert はプロジェクト全体集計。
-    ユーザー単位の identification は ADR-009 Future Work の「session 残日数バッジ」実装と合わせて将来検討。
+    複数 accountId で同時発火した場合は TimeTree 側 API 仕様変更を疑う:
+    - 短時間に 3 件以上の accountId で本 alert が発火 → API 仕様変更チェック
+    - 単一 accountId 単発なら通常の cookie 失効 (14 日経過)
+
+    補足: 本 alert は ADR-009 Future Work の per-account grouping 実装 (Issue #79、PR #150 後続)。
+    旧「プロジェクト全体集計 alert」は本 alert で置換済み。
   mimeType: text/markdown
 combiner: OR
 conditions:
-  - displayName: 'tt_session_expired >= 3 in 24h'
+  - displayName: 'tt_session_expired per account >= 1 in 24h'
     conditionThreshold:
       filter: 'metric.type="logging.googleapis.com/user/calendar_hub_tt_session_expired" AND resource.type="cloud_run_revision"'
       comparison: COMPARISON_GT
-      thresholdValue: 2
+      thresholdValue: 0
       duration: 0s
       aggregations:
         - alignmentPeriod: 86400s
           perSeriesAligner: ALIGN_SUM
           crossSeriesReducer: REDUCE_SUM
+          groupByFields:
+            - metric.label.accountId
 alertStrategy:
   autoClose: 86400s
 enabled: true

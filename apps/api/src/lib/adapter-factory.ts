@@ -3,12 +3,14 @@ import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
 import { getRefreshToken } from './token-store.js';
 import { refreshAccessToken } from './google-oauth.js';
 import { MockCalendarAdapter } from './mock-calendar-adapter.js';
+import { assertE2EMockSafe } from './e2e-guard.js';
 
 /**
  * 連携アカウントIDからCalendarAdapterを生成
  */
 export async function createAdapter(userId: string, accountId: string): Promise<CalendarAdapter> {
   if (process.env.E2E_CALENDAR_MOCK === '1') {
+    assertE2EMockSafe('E2E_CALENDAR_MOCK');
     return new MockCalendarAdapter();
   }
 

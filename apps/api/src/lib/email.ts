@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { logMailFailure } from './mail-fail.js';
 import { getDb } from './firebase-admin.js';
 import { FieldValue } from 'firebase-admin/firestore';
+import { assertE2EMockSafe } from './e2e-guard.js';
 
 interface SendEmailOptions {
   to: string;
@@ -88,6 +89,7 @@ export function buildMimeMessage(opts: {
  */
 export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Promise<void> {
   if (process.env.E2E_MAIL_MOCK === '1') {
+    assertE2EMockSafe('E2E_MAIL_MOCK');
     await getDb()
       .collection('_e2eMail')
       .add({

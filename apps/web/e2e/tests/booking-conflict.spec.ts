@@ -12,10 +12,7 @@ test.describe('AC-E2E-2: 二重予約防止 (409 SLOT_TAKEN)', () => {
     await clearAllCollections();
   });
 
-  // FIXME: public-booking.ts の runTransaction 内で `tx.get()` ではなく `db.collection().get()` を
-  // 使用しているため、Firestore の optimistic locking が効かず並列予約で両方 201 が返る。
-  // 別 Issue で実装修正後、test.fixme を test に戻して有効化する。
-  test.fixme('同一 slotStart で並列 2 リクエスト → 片方 201、片方 409', async ({ request }) => {
+  test('同一 slotStart で並列 2 リクエスト → 片方 201、片方 409', async ({ request }) => {
     const { linkId, ownerUid } = await seedStandardLinkAndOwner('conflict');
     const slotStart = nextDay14JST().toISOString();
 

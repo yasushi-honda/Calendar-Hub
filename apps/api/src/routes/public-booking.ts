@@ -24,6 +24,7 @@ import {
   filterCalendarsByIds,
   shouldCreateCalendarEvent,
 } from '../lib/booking-link-utils.js';
+import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -267,13 +268,16 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
   const bookingId = nanoid(12);
 
   try {
+    const overlapQuery = db
+      .collection('bookings')
+      .where('ownerUid', '==', link.ownerUid)
+      .where('status', '==', 'confirmed')
+      .where('slotStart', '<', slotEnd);
+
     await db.runTransaction(async (tx) => {
-      const existingBookings = await db
-        .collection('bookings')
-        .where('ownerUid', '==', link.ownerUid)
-        .where('status', '==', 'confirmed')
-        .where('slotStart', '<', slotEnd)
-        .get();
+      // tx.get で query を実行することで Firestore の serializable isolation を効かせ、
+      // 並列リクエスト下でも optimistic locking で二重予約を防ぐ。
+      const existingBookings = await tx.get(overlapQuery);
 
       const hasOverlap = existingBookings.docs.some((doc) => {
         const existingEnd = doc.data().slotEnd.toDate();
@@ -401,6 +405,7 @@ function sendBookingNotificationsAsync(
 
     let auth: { email: string; accessToken: string };
     if (process.env.E2E_MAIL_MOCK === '1') {
+      assertE2EMockSafe('E2E_MAIL_MOCK');
       // E2E: sendEmail 側で Firestore に書き込むだけなので access_token は使われない
       auth = { email: googleAccount.email, accessToken: 'e2e-mock-token' };
     } else {

@@ -34,8 +34,6 @@ test.describe('AC-E2E-1: 予約成功パス', () => {
   });
 
   test('公開ページから予約 → Firestore 永続化 + mock mail 2 件', async ({ page }) => {
-    // Issue #145 診断中: skip を一時解除して CI で再現させる。Phase D で根本修正後、本行を削除。
-    // test.skip(!!process.env.CI, 'CI flaky: /slots fetch がブラウザ JS に届かない (Issue #145)');
     const { linkId, ownerUid } = await seedStandardLinkAndOwner('success');
 
     // 翌日 14:00 JST を狙う (確実に未来 + 営業時間内 8-23)

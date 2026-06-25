@@ -25,10 +25,7 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: 'http://localhost:3010',
-    // Issue #145 診断中: 仮説実証のため一時的に trace/video/screenshot を強化。Phase D で retain-on-failure に戻す。
-    trace: 'on',
-    video: 'on',
-    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
   },
@@ -43,8 +40,18 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command:
-        'NEXT_PUBLIC_API_URL=http://localhost:8088 pnpm --filter @calendar-hub/web exec next dev --port 3010',
+      // Issue #145: NEXT_PUBLIC_FIREBASE_* を未設定にすると firebase.ts:19 が auth={} を返し、
+      // AuthProvider の onAuthStateChanged(auth, ...) が CI で throw する (ローカルは .env.local で迂回されていた)。
+      // 公開予約ページは Firebase Auth を実際には使わないので dummy key で AuthProvider を初期化させる。
+      command: [
+        'NEXT_PUBLIC_API_URL=http://localhost:8088',
+        'NEXT_PUBLIC_FIREBASE_API_KEY=fake-e2e-api-key',
+        'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-calendar-hub-e2e.firebaseapp.com',
+        'NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-calendar-hub-e2e',
+        'NEXT_PUBLIC_FIREBASE_APP_ID=1:000000000000:web:0000000000000000000000',
+        'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=000000000000',
+        'pnpm --filter @calendar-hub/web exec next dev --port 3010',
+      ].join(' '),
       url: 'http://localhost:3010',
       reuseExistingServer: !isCI,
       timeout: 240_000,

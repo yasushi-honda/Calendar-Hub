@@ -16,6 +16,14 @@ export interface TimeTreeSession {
 /** Session期限切れ時に再ログインするためのコールバック */
 export type TimeTreeReLoginFn = () => Promise<TimeTreeSession>;
 
+/** TimeTreeAdapter constructor options */
+export interface TimeTreeAdapterOptions {
+  /** 連携アカウントID (例: timetree_xxx)。session expired ログ出力時のグルーピングキー */
+  accountId: string;
+  /** Session期限切れ時に再ログインするためのコールバック */
+  reLoginFn?: TimeTreeReLoginFn;
+}
+
 interface TimeTreeRawEvent {
   id: string;
   title: string;
@@ -61,12 +69,14 @@ export class TimeTreeAdapter implements CalendarAdapter {
   private expiresAt: number;
   private headers: Record<string, string>;
   private reLoginFn?: TimeTreeReLoginFn;
+  private accountId: string;
 
-  constructor(session: TimeTreeSession, reLoginFn?: TimeTreeReLoginFn) {
+  constructor(session: TimeTreeSession, options: TimeTreeAdapterOptions) {
     this.sessionId = session.sessionId;
     this.csrfToken = session.csrfToken;
     this.expiresAt = session.expiresAt ?? Date.now() + 14 * 24 * 60 * 60 * 1000; // default 14 days
-    this.reLoginFn = reLoginFn;
+    this.reLoginFn = options.reLoginFn;
+    this.accountId = options.accountId;
     this.headers = this.buildHeaders(session);
   }
 
@@ -88,7 +98,7 @@ export class TimeTreeAdapter implements CalendarAdapter {
     // session期限切れチェック
     if (Date.now() > this.expiresAt) {
       console.warn(
-        `[TT-SESSION-EXPIRED] reason=expiresAt url=${url} expiresAt=${new Date(this.expiresAt).toISOString()} reLoginAvailable=${Boolean(this.reLoginFn)}`,
+        `[TT-SESSION-EXPIRED] accountId=${this.accountId} reason=expiresAt url=${url} expiresAt=${new Date(this.expiresAt).toISOString()} reLoginAvailable=${Boolean(this.reLoginFn)}`,
       );
       if (this.reLoginFn) {
         await this.refreshSession();
@@ -100,7 +110,7 @@ export class TimeTreeAdapter implements CalendarAdapter {
     // 401/403で再ログイン試行（1回のみ）
     if (res.status === 400 || res.status === 401 || res.status === 403) {
       console.warn(
-        `[TT-SESSION-EXPIRED] reason=httpStatus url=${url} status=${res.status} reLoginAvailable=${Boolean(this.reLoginFn)}`,
+        `[TT-SESSION-EXPIRED] accountId=${this.accountId} reason=httpStatus url=${url} status=${res.status} reLoginAvailable=${Boolean(this.reLoginFn)}`,
       );
       if (this.reLoginFn) {
         await this.refreshSession();

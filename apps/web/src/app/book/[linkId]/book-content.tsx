@@ -68,6 +68,55 @@ export function BookContent() {
     })();
   }, [linkId]);
 
+  // 空き枠ポーリング: 選択画面で開きっぱなしの間、最新化する
+  const refreshSlots = useCallback(async () => {
+    if (!linkId) return;
+    try {
+      const slotsRes = await publicGet<SlotsResponse>(`/api/public/booking/${linkId}/slots`);
+      setSlots(slotsRes.slots);
+    } catch {
+      // ポーリングは silent（次回再試行で復旧）
+    }
+  }, [linkId]);
+
+  useEffect(() => {
+    if (step !== 'select' || !linkId) return;
+
+    const POLL_INTERVAL_MS = 60_000;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (intervalId !== null) return;
+      intervalId = setInterval(refreshSlots, POLL_INTERVAL_MS);
+    };
+    const stop = () => {
+      if (intervalId === null) return;
+      clearInterval(intervalId);
+      intervalId = null;
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSlots();
+        start();
+      } else {
+        stop();
+      }
+    };
+    const handleFocus = () => {
+      refreshSlots();
+    };
+
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [step, linkId, refreshSlots]);
+
   // 日付別グルーピング
   const dateGroups = useMemo(() => {
     const groups: Record<string, BookingSlot[]> = {};
@@ -233,6 +282,7 @@ export function BookContent() {
                       {availableDates.map((date) => (
                         <button
                           key={date}
+                          data-testid={`date-card-${date}`}
                           onClick={() => {
                             setSelectedDate(date);
                             setSelectedSlot(null);
@@ -272,6 +322,7 @@ export function BookContent() {
                         {slotsForSelectedDate.map((slot) => (
                           <button
                             key={slot.start}
+                            data-testid={`slot-btn-${slot.start}`}
                             onClick={() => handleSelectSlot(slot)}
                             className="slot-btn"
                             style={s.slotBtn}
@@ -337,6 +388,7 @@ export function BookContent() {
               <button
                 onClick={handleSubmit}
                 disabled={!guestName.trim() || submitting}
+                data-testid="submit-btn"
                 className="submit-btn"
                 style={{
                   ...s.submitBtn,

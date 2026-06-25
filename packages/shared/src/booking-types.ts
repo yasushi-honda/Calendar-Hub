@@ -21,8 +21,8 @@ export interface BookingLink {
   description?: string;
   durationMinutes: DurationOption;
   accountIds: string[];
-  calendarIdForEvent: string;
-  accountIdForEvent: string;
+  calendarIdForEvent: string | null;
+  accountIdForEvent: string | null;
   freeTimeOptions: BookingLinkFreeTimeOptions;
   availableDays: number[];
   rangeDays: number;
@@ -31,6 +31,8 @@ export interface BookingLink {
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  autoCreateCalendarEvent: boolean;
+  calendarIdsForAvailability: string[] | null;
 }
 
 /** Public-safe subset — no ownerUid, accountIds, calendarId */
@@ -81,13 +83,15 @@ export interface CreateBookingLinkInput {
   description?: string;
   durationMinutes: DurationOption;
   accountIds: string[];
-  calendarIdForEvent: string;
-  accountIdForEvent: string;
+  calendarIdForEvent?: string | null;
+  accountIdForEvent?: string | null;
   freeTimeOptions?: Partial<BookingLinkFreeTimeOptions>;
   availableDays?: number[];
   rangeDays?: number;
   bufferMinutes?: number;
   expiresAt?: string | null;
+  autoCreateCalendarEvent?: boolean;
+  calendarIdsForAvailability?: string[] | null;
 }
 
 export interface CreateBookingInput {

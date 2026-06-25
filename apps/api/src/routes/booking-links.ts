@@ -10,15 +10,11 @@ import {
   type BookingLink,
   type CreateBookingLinkInput,
 } from '@calendar-hub/shared';
-
-function toBookingLink(data: FirebaseFirestore.DocumentData): BookingLink {
-  return {
-    ...data,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-  } as BookingLink;
-}
+import {
+  buildBookingLinkFromFirestoreData,
+  buildBookingLinkPatchUpdate,
+  validateBookingLinkInvariant,
+} from '../lib/booking-link-utils.js';
 
 export const bookingLinkRoutes = new Hono<AppEnv>();
 
@@ -34,8 +30,25 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
     return c.json({ error: `durationMinutes must be one of: ${DURATION_OPTIONS.join(', ')}` }, 400);
   }
 
-  if (!body.calendarIdForEvent || !body.accountIdForEvent) {
-    return c.json({ error: 'calendarIdForEvent and accountIdForEvent are required' }, 400);
+  const autoCreateCalendarEvent = body.autoCreateCalendarEvent ?? true;
+  const calendarIdsForAvailability = body.calendarIdsForAvailability ?? null;
+
+  const invariant = validateBookingLinkInvariant({
+    autoCreateCalendarEvent,
+    calendarIdForEvent: body.calendarIdForEvent,
+    accountIdForEvent: body.accountIdForEvent,
+  });
+  if (!invariant.ok) {
+    return c.json({ error: invariant.error }, 400);
+  }
+
+  if (calendarIdsForAvailability !== null) {
+    if (
+      !Array.isArray(calendarIdsForAvailability) ||
+      calendarIdsForAvailability.some((s) => typeof s !== 'string')
+    ) {
+      return c.json({ error: 'calendarIdsForAvailability must be array of strings or null' }, 400);
+    }
   }
 
   const id = nanoid(12);
@@ -48,8 +61,8 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
     description: body.description ?? undefined,
     durationMinutes: body.durationMinutes,
     accountIds: body.accountIds,
-    calendarIdForEvent: body.calendarIdForEvent,
-    accountIdForEvent: body.accountIdForEvent,
+    calendarIdForEvent: body.calendarIdForEvent ?? null,
+    accountIdForEvent: body.accountIdForEvent ?? null,
     freeTimeOptions: {
       dayStartHour: body.freeTimeOptions?.dayStartHour ?? 9,
       dayEndHour: body.freeTimeOptions?.dayEndHour ?? 18,
@@ -61,6 +74,8 @@ bookingLinkRoutes.post('/', requireAuth, async (c) => {
     expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     createdAt: now,
     updatedAt: now,
+    autoCreateCalendarEvent,
+    calendarIdsForAvailability,
   };
 
   const db = getDb();
@@ -88,7 +103,7 @@ bookingLinkRoutes.get('/', requireAuth, async (c) => {
     .orderBy('createdAt', 'desc')
     .get();
 
-  const links = snap.docs.map((doc) => toBookingLink(doc.data()));
+  const links = snap.docs.map((doc) => buildBookingLinkFromFirestoreData(doc.data()));
   return c.json({ links });
 });
 
@@ -104,6 +119,8 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
   if (!doc.exists || doc.data()?.ownerUid !== user.uid) {
     return c.json({ error: 'Not found' }, 404);
   }
+
+  const existingLink = buildBookingLinkFromFirestoreData(doc.data()!);
 
   if (
     body.status !== undefined &&
@@ -128,25 +145,51 @@ bookingLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
       return c.json({ error: 'dayStartHour must be less than dayEndHour' }, 400);
     }
   }
+  if (
+    body.autoCreateCalendarEvent !== undefined &&
+    typeof body.autoCreateCalendarEvent !== 'boolean'
+  ) {
+    return c.json({ error: 'autoCreateCalendarEvent must be boolean' }, 400);
+  }
+  if (body.calendarIdsForAvailability !== undefined && body.calendarIdsForAvailability !== null) {
+    if (
+      !Array.isArray(body.calendarIdsForAvailability) ||
+      body.calendarIdsForAvailability.some((s: unknown) => typeof s !== 'string')
+    ) {
+      return c.json({ error: 'calendarIdsForAvailability must be array of strings or null' }, 400);
+    }
+  }
 
-  const update: Record<string, unknown> = {
+  // 不変条件: マージ後の autoCreate=true なら calendarIdForEvent/accountIdForEvent が non-null
+  const newAutoCreate =
+    body.autoCreateCalendarEvent !== undefined
+      ? body.autoCreateCalendarEvent
+      : existingLink.autoCreateCalendarEvent;
+  const newCalendarIdForEvent =
+    body.calendarIdForEvent !== undefined
+      ? body.calendarIdForEvent
+      : existingLink.calendarIdForEvent;
+  const newAccountIdForEvent =
+    body.accountIdForEvent !== undefined ? body.accountIdForEvent : existingLink.accountIdForEvent;
+
+  const patchInvariant = validateBookingLinkInvariant({
+    autoCreateCalendarEvent: newAutoCreate,
+    calendarIdForEvent: newCalendarIdForEvent,
+    accountIdForEvent: newAccountIdForEvent,
+  });
+  if (!patchInvariant.ok) {
+    return c.json({ error: patchInvariant.error }, 400);
+  }
+
+  const update = {
     updatedAt: FieldValue.serverTimestamp(),
+    ...buildBookingLinkPatchUpdate(body),
   };
-
-  if (body.title !== undefined) update.title = body.title;
-  if (body.description !== undefined) update.description = body.description ?? null;
-  if (body.status !== undefined) update.status = body.status;
-  if (body.availableDays !== undefined) update.availableDays = body.availableDays;
-  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
-  if (body.bufferMinutes !== undefined) update.bufferMinutes = body.bufferMinutes;
-  if (body.freeTimeOptions !== undefined) update.freeTimeOptions = body.freeTimeOptions;
-  if (body.expiresAt !== undefined)
-    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
 
   await ref.update(update);
 
   const updated = await ref.get();
-  return c.json({ link: toBookingLink(updated.data()!) });
+  return c.json({ link: buildBookingLinkFromFirestoreData(updated.data()!) });
 });
 
 bookingLinkRoutes.delete('/:linkId', requireAuth, async (c) => {

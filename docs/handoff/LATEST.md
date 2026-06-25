@@ -1,61 +1,65 @@
-# Calendar Hub ハンドオフ (2026-05-18)
+# Calendar Hub ハンドオフ (2026-06-25)
 
-## 最近の完了作業（直近1週間）
+## 2026-06-25 セッション総括: Google 予約スケジュール read-only ミラー化
 
-| PR                       | Issue | 内容                                                                                                                                               |
-| ------------------------ | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #126                     | #119  | CI/CD: Cloud Run trafficSplit を新 revision に明示昇格（`infra/promote-traffic.sh` helper 抽出 + jq 検証）                                         |
-| #127                     | #118  | docs(adr-011): TimeTree 2日間終日を「判別不能の既知制限」として確定。reverse-engineering 本家調査結果反映                                          |
-| #121/#123/#128/#130/#124 | -     | Dependabot security 一括対応: protobufjs / fast-xml-builder / lodash-es / brace-expansion / postcss (audit fix で 14 脆弱性一括解消、critical 1→0) |
-| #120                     | -     | Dependabot security: uuid 8.3.2 → 11.1.1（GHSA-w5hq-g745-h8pq backport patch）transitive 依存のみで影響ゼロ                                        |
-| #116                     | -     | Dependabot security: next 15.5.15 → 15.5.18（DoS / SSRF / Middleware bypass / XSS 等多数の脆弱性解消）                                             |
-| #115                     | -     | Dependabot security: hono 4.12.14 → 4.12.18（Cache leak / CSS injection / JWT validation 脆弱性解消）                                              |
-| #117                     | -     | TimeTree → Google: 複数日終日 (N≥3) の最終日1日不足修正 + ADR-011。Codex no-go 指摘の全件対応                                                      |
-| #112                     | #81   | ADR-010 SLO 定義とログ保持ポリシー（設計フェーズ）。実装は別 PR、ユーザー認可必須                                                                  |
-| #111                     | #79   | TimeTree session 可視化ログ + ADR-009（Phase A）。alert policy 実装は Phase B 別 PR                                                                |
-| #110                     | -     | docs(handoff): 2026-05-03 セッション 1（PR #109 trafficSplit 事故記録）                                                                            |
-| #108/#107                | -     | Dependabot GA bump: pnpm/action-setup v6 / actions/setup-node v6（cache: pnpm 明示で breaking 回避）                                               |
-| #109                     | -     | TimeTree 日曜→月曜ずれバグ修正 (ADR-008)。RRULE 展開を JST wall-clock 座標系に統一                                                                 |
-| #96/#97/#105             | -     | Dependabot security: nodemailer/hono-node-server/next 15.5.15/hono 4.12.14（9件脆弱性解消）                                                        |
-| #101/#102/#103           | -     | GitHub Actions major bump: auth v3 / checkout v6 / setup-gcloud v3                                                                                 |
-| #100                     | #80   | Dependabot 最小構成（security-only）+ vulnerability alerts / automated security fixes 有効化                                                       |
-| #94                      | #77   | API健全性アラート（5xx/4xx spike/p99 latency、Cloud Run built-in metrics）+ ADR-006 更新                                                           |
-| #91                      | #78   | ロールバック実地検証 + `infra/rollback.sh` + ADR-005 更新                                                                                          |
-| #90                      | #76   | GCP 予算アラート（¥10/月、50%/90%/100%）+ `infra/setup-budget.sh`                                                                                  |
-| #87                      | #74   | `[MAIL-FAIL]` プレフィックスログ + `calendar_hub_mail_fail` metric/alert                                                                           |
-| #85                      | #73   | Firestore PITR + 日次バックアップ + `infra/setup-firestore-backup.sh` + ADR-007                                                                    |
-| #83                      | #72   | アラート3種の E2E 発火検証 + `infra/inject-test-alert-log.sh` 追加                                                                                 |
-| #70                      | #65   | 同期ヘルスチェック自動アラート（RRULE-SKIP / Sync failed / SYNC-GAP）                                                                              |
-| #68                      | #66   | CI/CD自動デプロイ化（GitHub Actions + WIF、main push→Cloud Run自動反映）                                                                           |
-| #64                      | -     | TimeTreeカンマ区切りEXDATE対応（`【専門学校】専攻生` 等が静かに未同期だった不具合修正）                                                            |
-| #63                      | -     | PR #61の本番再デプロイ + `[SYNC-STATS]` 観測ログ追加（revision 00035）                                                                             |
-| #61                      | -     | TimeTree繰り返しイベント（RRULE）のGoogle Calendar同期対応                                                                                         |
+`https://calendar.app.google/qyKq3kU2sX9e2vid7` (本田様の Google Appointment Schedule) を Calendar Hub の **read-only ミラー** として本田様用に提供する機能を、PR #138 / #139 / #140 の 3 連続 PR で実装・本番化。
 
-（それ以前の詳細は `docs/handoff/archive/` を参照）
+| PR   | 内容                                                                                 | 規模               | 結果              |
+| ---- | ------------------------------------------------------------------------------------ | ------------------ | ----------------- |
+| #138 | Read-only ミラー機能 (`autoCreateCalendarEvent` / `calendarIdsForAvailability` 追加) | 7 files / +852/-59 | ✅ merge + deploy |
+| #139 | nodemailer SMTP → Gmail API 移行 (535 認証エラー解消)                                | 7 files / +296/-57 | ✅ merge + deploy |
+| #140 | 予約通知メール日時表記 12:00:00 → 12:00                                              | 2 files / +135/-13 | ✅ merge + deploy |
 
-## MVP実装状況
+**副次効果**: PR #139 の nodemailer 依存削除により、Dependabot CI failure 1 件 (nodemailer) が自動解消。
 
-| 機能                               | 状態               |
-| ---------------------------------- | ------------------ |
-| Firebase Auth + Google OAuth       | ✅ 完了            |
-| Google Calendar / TimeTree 統合    | ✅ 完了            |
-| 統合カレンダーUI                   | ✅ 完了            |
-| Vertex AI 提案（Gemini 2.5 Flash） | ✅ 完了            |
-| メール通知（Gmail OAuth2）         | ✅ 完了            |
-| 公開予約リンク（Calendlyライク）   | ✅ 完了            |
-| カレンダー同期（extendedProps）    | ✅ 完了            |
-| 全日イベント同期（TZ対応）         | ✅ 完了（#58/#59） |
-| syncIntervalMinutes スケジューラ   | ✅ 完了（#53）     |
-| timeMax 月末バグ                   | ✅ 完了（dd241df） |
-| 繰り返しイベント同期（RRULE展開）  | ✅ 完了（#61/#64） |
+### 本田様用予約リンク (本セッション内で本番に作成)
+
+| 項目     | 値                                                                                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 公開 URL | https://calendar-hub-web-cu7tz7flqq-an.a.run.app/book/24Q1g69sDJi2                                                                |
+| linkId   | `24Q1g69sDJi2`                                                                                                                    |
+| 主な設定 | 60 分 / `autoCreateCalendarEvent=false` / `calendarIdsForAvailability=["yasushi.honda@aozora-cg.com"]` / 8-23 時 / 全曜日 / 30 日 |
+
+### 実機検証結果
+
+| AC                                                  | 状態             | 確認方法                                                                                        |
+| --------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------- |
+| AC-6 (空き時間表示)                                 | ✅ PASS          | Playwright で複数日付の枠表示確認                                                               |
+| AC-7 (オーナー通知メール `hy.unimail.11@gmail.com`) | ✅ PASS          | 本田様 Gmail スクショで 3 件届いた                                                              |
+| 日時表記 fix (12:00:00 → 12:00)                     | ✅ PASS          | 本田様 Gmail スクショで「2026/6/29 14:00 〜 15:00」確認                                         |
+| AC-8 (Google Calendar に event 追加なし)            | ⏸ 本田様目視待ち | `yasushi.honda@aozora-cg.com` の Google Calendar で 6/27 10:00 / 6/28 12:00 / 6/29 14:00 を目視 |
+
+テスト予約 3 件 (`VOpHhLeg-XI7` 6/27 10:00 / 6/28 12:00 / 6/29 14:00) が本番 Firestore に残存。予約管理 UI が無いためキャンセル不能 (要別 PR)。
+
+### 同根再発スキャン (§ 4.6)
+
+- PR #139 と PR #140 は同じファイル `apps/api/src/lib/email.ts` を触ったが root cause は別:
+  - #139: OAuth scope (`gmail.send`) と nodemailer SMTP (`mail.google.com/` 必要) の不一致
+  - #140: `toLocaleString` のオプション未指定で秒まで展開
+- 過去 7 日 handoff archive に email/smtp 関連の同根候補なし
+- **同根再発なし** ✅
+
+### 対症療法判定 (§ 4.7)
+
+- PR #139: 構造的修正 (nodemailer SMTP → Gmail API への実装方式切替)。retry/fallback ではない。対症療法ではない ✅
+- PR #140: cosmetic fix だが root cause (`toLocaleString` のオプション未指定) を直接修正。対症療法ではない ✅
+
+## 最近の完了作業（直近 1 週間）
+
+| PR   | Issue | 内容                                                  |
+| ---- | ----- | ----------------------------------------------------- |
+| #140 | -     | 予約通知メール日時表記 12:00:00 → 12:00               |
+| #139 | -     | nodemailer SMTP → Gmail API 移行 (535 認証エラー解消) |
+| #138 | -     | Read-only ミラー機能                                  |
+
+それ以前は前 LATEST.md (2026-05-18 セッション) の「最近の完了作業」テーブル参照。本セッションのコミット範囲外。
 
 ## 品質状態
 
-- テスト: 320件全PASS（最終確認: 2026-05-18、#124 マージ後の overrides 確認時に再実行）
-- ビルド: 全5パッケージ成功
-- CI: GitHub Actions グリーン（最新: main ac969b9 / 2026-05-18、PR #124 マージ後）
-- PRテンプレート: Quality Gateチェックリスト強制
-- セキュリティ: vulnerabilities **27 → 14** (本セッション、critical 1→0 / high 13→7 / moderate 12→6 / low 1→1)
+- テスト: **305 件 PASS** (今セッション +35 件追加: AC-1〜AC-5 + `buildMimeMessage` + `formatJst*` + Booking builders + Partial Update + Gaxios エラー分類)
+- ビルド: 全 5 パッケージ成功
+- CI: GitHub Actions グリーン (最新: `2943b9e` / 2026-06-25)
+- main HEAD: `2943b9e fix(email): 予約通知メールの日時表記から秒を削除 (#140)`
 
 ## 本番環境
 
@@ -64,254 +68,127 @@
 | Web      | https://calendar-hub-web-cu7tz7flqq-an.a.run.app |
 | API      | https://calendar-hub-api-cu7tz7flqq-an.a.run.app |
 
-- GCP: calendar-hub-prod / asia-northeast1
-- Secret Manager: google-client-id, google-client-secret, token-encryption-key, timetree-password
-- Firebase Auth承認済みドメイン: 設定済み
-- OAuth redirect URI: 設定済み
-- CORS: localhost + Cloud Run Web URL
-- Firestoreインデックス: bookingLinks, bookings 各種 READY
-- API最新リビジョン: `calendar-hub-api-00080-hjc` で `100% LATEST` 昇格済（2026-05-18 PR #132 マージ後デプロイの Deploy log で実機確認、`OK: traffic promoted to latest revision (100%)`、PR #126 の `infra/promote-traffic.sh` 効果）
-- Web最新リビジョン: `calendar-hub-web-00055-ndn` で `100% LATEST` 昇格済（同上 Deploy log で実機確認）。前セッション開始時点の `00048-wdv` 作成 / `00024-thk` traffic 固定のずれは本デプロイで解消
-- デプロイ経路: main push → `.github/workflows/deploy.yml` → quality → deploy-api → deploy-web（完全自動）→ `promote-traffic.sh` で LATEST 昇格 + jq 検証
-- **✅ Issue #119 (trafficSplit 昇格漏れ) 解消・実機確認済**: PR #126 で `infra/promote-traffic.sh` ヘルパ抽出 + `--to-latest` 明示 + `status.traffic[?].percent` を jq で集計検証。2026-05-18 PR #132 マージ後デプロイで API/Web 両方が新 revision に 100% 昇格することを Deploy log で確認 (`OK: <service> traffic promoted to latest revision (100%)`)。今後のデプロイで自動冪等化
-- Cloud Monitoring:
-  - Log-based metrics: `calendar_hub_rrule_skip` / `calendar_hub_sync_failed` / `calendar_hub_sync_gap` / `calendar_hub_mail_fail`
-  - Built-in metrics (Cloud Run): `request_count` / `request_latencies`（#77 で導入、policy 側で利用）
-  - Alert policies（**7件**）→ Email 通知 `hy.unimail.11@gmail.com`
-    - sync系4件（RRULE-SKIP / Sync failed / SYNC-GAP / MAIL-FAIL）
-    - API系3件（#77、5xx≥3/5min / 4xx spike ≥20/5min+401+403≥5/5min / p99>3s 5min）
-  - セットアップ: `bash infra/setup-monitoring.sh`（冪等、7 policy全apply）
-- Budget Alert（#76）:
-  - Calendar Hub Monthly: **¥10/月**（検知用の最小設定、50%/90%/100% threshold）
-  - 通知先: `hy.unimail.11@gmail.com`（`disableDefaultIamRecipients=true` でチャネル指定のみ）
-  - セットアップ: `bash infra/setup-budget.sh`（冪等、REST API 直接呼び出し）
-- Firestore Backup（ADR-007, #73）:
-  - PITR 有効（7日 `versionRetentionPeriod=604800s`）
-  - 日次バックアップスケジュール（30日保持）
-  - GCS: `gs://calendar-hub-prod-firestore-backup`（30日 lifecycle delete）
-  - セットアップ: `bash infra/setup-firestore-backup.sh`（冪等）
+- GCP: `calendar-hub-prod` / asia-northeast1
+- 本セッション内 Deploy run: 3 回成功 (PR #138 / #139 / #140 マージ各タイミング)
+- メール送信: Gmail API (`gmail.users.messages.send`) 経由。OAuth scope は既存の `gmail.send` のまま動作 (PR #139 以降)
 
-## オープンIssue
+## オープン Issue
 
-本番運用棚卸しで判明した残リスクを Issue 化（2026-04-14）。
+### Active
 
-### P0（早急対応）
+- [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79) [P2] TimeTree session 切れの自動検知と再ログイン手順整備 (Phase A 完了)
+- [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) [P2] ログ保持期間・SLO 定義 (設計フェーズ完了)
 
-_すべて完了_（#72: PR #83 / #73: PR #85 / #74: PR #87）。
+### Postponed
 
-### P1（次週対応）
+- [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) [P1] 公開予約ページ E2E テスト (decision-maker 判断で保留継続)
 
-| #                                                              | タイトル                  | 状態                                                    |
-| -------------------------------------------------------------- | ------------------------- | ------------------------------------------------------- |
-| [#75](https://github.com/yasushi-honda/Calendar-Hub/issues/75) | 公開予約ページ E2E テスト | **postponed**（予約ページシステム全体保留、2026-05-03） |
+**本セッションで Issue 起票・close なし** (Issue Net: 0)。
 
-（#76 は PR #90、#77 は PR #94、#78 は PR #91 で完了）
+## 本セッション中に判明した残課題
 
-### P2（中期対応）
+| 課題                                               | A/B/C      | 着手条件                                                 |
+| -------------------------------------------------- | ---------- | -------------------------------------------------------- |
+| AC-8 verify (Google Calendar に event 追加なし)    | A 確認     | 本田様の目視確認のみ                                     |
+| **予約管理 UI 追加** (テスト予約 3 件のキャンセル) | C 起点待ち | decision-maker の明示指示                                |
+| `ownerDisplayName` 空文字 bug                      | C 起点待ち | decision-maker の明示指示 (実害低)                       |
+| vitest が `dist/` を拾う問題                       | C 起点待ち | decision-maker の明示指示 (`dist/` 削除で回避可)         |
+| Dependabot ws CI failure                           | C 起点待ち | decision-maker の明示指示 (overrides 等の手動介入が必要) |
 
-| #                                                              | タイトル                                        | 状態                                                    |
-| -------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
-| [#79](https://github.com/yasushi-honda/Calendar-Hub/issues/79) | TimeTree session 切れの自動検知と再ログイン手順 | Phase A 完了（PR #111: 検知ログ + ADR-009）/ Phase B 残 |
-| [#81](https://github.com/yasushi-honda/Calendar-Hub/issues/81) | ログ保持期間・SLO 定義                          | 設計フェーズ完了（PR #112: ADR-010）/ 実装フェーズ残    |
+## 次セッションのアクション (§ 2.5 3 分割構造)
 
-（#80 は PR #100、#118 は PR #127、#119 は PR #126 で完了）
+### 即着手タスク
 
-**本番運用の P0 はすべて解消済**（#72/#73/#74）。本セッションで P1 #119 と P2 #118 を解消。残 active は P2 #79 / #81 のみ（両方 decision-maker 領分）。P1 #75 は postponed 継続。
+**なし** — 本セッション内で executor 領分の作業はすべて完了。
 
-## 次セッションの推奨アクション
+### 条件待ち (明示 trigger 付き)
 
-1. **#79 Phase B (decision-maker)**: ログベースメトリクス（`calendar_hub_timetree_session_expired`）+ アラートポリシー追加。`infra/setup-monitoring.sh` パターン踏襲、ADR-009 の Future Work 参照
-2. **#81 実装フェーズ (decision-maker)**: 5 サブタスク（バケット作成 / SLI/SLO 設定 / ダッシュボード / Budget アラート / PII 検知）。ADR-010「実装フェーズ」セクション参照、本番 GCP 認可必須
-3. **Node.js 20 → Node.js 24 移行**（2026-09-16 まで）
-4. 残 transitive 脆弱性（vite 8.0.1 peer dep warning）は個人利用では受容、`overrides` で yaml/picomatch 等は強制 bump 済
-5. `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格（#74 の追加課題、別 Issue 化検討）は前回からの持ち越し
+| #   | 項目                           | trigger                                                                                                                          | 充足時のタスク                                                                                                     |
+| --- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1   | AC-8 verify                    | 本田様の `yasushi.honda@aozora-cg.com` Google Calendar で 6/27 10:00 / 6/28 12:00 / 6/29 14:00 に event が**ない**ことを目視確認 | 結果報告 → セッション完全終了宣言                                                                                  |
+| 2   | テスト予約 3 件のキャンセル    | 予約管理 UI 実装後 (#3 によって解消されてから)                                                                                   | 管理画面から手動キャンセル                                                                                         |
+| 3   | Issue #79 Phase B 着手指示     | decision-maker からの「Phase B 進めて」明示指示                                                                                  | log-based metric `calendar_hub_timetree_session_expired` + alert policy 追加。ADR-009 Future Work 参照             |
+| 4   | Issue #81 実装フェーズ着手指示 | decision-maker からの「#81 実装」明示指示                                                                                        | 5 サブタスク (バケット作成 / SLI/SLO 設定 / ダッシュボード / Budget アラート / PII 検知)。ADR-010 実装フェーズ参照 |
 
-### 今セッションの操作記録（2026-05-18、Auto モード）
+### 却下候補 (記録のみ)
 
-| アクション                                             | 結果                                                                                                                                                   |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| PR #126 (Issue #119 fix: trafficSplit) マージ          | ✅ レビュー Critical 1 件 (gcloud JMESPath 風 filter が silent failure) を実機検証で確定 → `infra/promote-traffic.sh` ヘルパ抽出 → merged              |
-| PR #127 (Issue #118 docs: ADR-011 既知制限確定) マージ | ✅ reverse-engineering 本家 `eoleedi/TimeTree-Exporter` の `formatter.py:get_datetime` 実装調査で「all_day なら +1 日固定」を確認、判別不能を確定      |
-| Dependabot triage 一括: #121/#122/#123/#128/#130/#124  | ✅ 5 PR merged + #122 auto-closed (#121 で同時更新)。#124 (postcss audit fix) は `pnpm-lock` の overrides を `package.json` に転記して整合性確保       |
-| Dependabot 自動 close: #129 lodash / #131 node-forge   | ✅ #124 overrides で `lodash@<=4.17.23` / `node-forge@<=1.3.3` 強制 bump → 後発 PR 不要になり Dependabot が自動判定 close                              |
-| 重要な副次発見: web 側 Issue #119 被害進行中           | `latestCreatedRevisionName=00048-wdv` だが `latestReadyRevisionName=00024-thk` で traffic 固定。次回 web デプロイで PR #126 修正により自動解消する設計 |
-| pnpm.overrides 機構を root `package.json` に追加       | `@tootallnate/once` / brace-expansion / fast-xml-parser / lodash / node-forge / picomatch / postcss / vite / yaml の transitive を一括強制 bump        |
+| 項目                                         | 理由                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 予約管理 UI 追加                             | C カテゴリ (起点アイデア decision-maker 領分)。明示指示なき限り着手不可                    |
+| `ownerDisplayName` 空文字 bug 修正           | C カテゴリ。実害低 (表示空のまま動作継続、UX 影響軽微)                                     |
+| vitest が `dist/` を拾う問題                 | C カテゴリ。`dist/` 削除で回避可能、CI 環境では dist 生成しないため影響なし                |
+| Dependabot ws (security_update_not_possible) | C カテゴリ + pnpm overrides の手動設計が必要、影響は dev-only                              |
+| Node.js 20 → 24 移行 (2026-09-16 まで)       | 前 LATEST.md 持ち越し、decision-maker 領分                                                 |
+| `[MAIL-FAIL] kind=AUTH` 発生時の UI 通知昇格 | 前 LATEST.md 持ち越し、Issue #74 関連 (現状: PR #139 で AUTH エラー自体が発生しなくなった) |
 
-**Issue Net: -2** (#118 / #119 close、起票 0)
-**Vulnerabilities Net: -13** (27 → 14、critical 1→0)
+## Issue Net 変化
 
-## 技術メモ（今セッション = 2026-05-18）
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0 件**
 
-### gcloud `--format=value(...[?key=value]...)` の JMESPath 風 filter は未サポート silent failure（PR #126 レビューで発覚）
+triage 基準 (CLAUDE.md GitHub Issues §) に照らし、起票見送り判断:
 
-PR #126 初版で `gcloud run services describe ... --format="value(status.traffic[?latestRevision=true].percent)"` を使い「latest revision の percent が 100 か」を検証しようとしたが、**gcloud は `[?key=value]` 構文を未サポートでエラーも返さず空文字を返す** (exit=0)。実機検証 (gcloud 552.0.0):
+- 予約管理 UI / `ownerDisplayName` / vitest dist / Dependabot ws はいずれも rating 5-6 相当の改善提案。実害基準 (#1) / 再現バグ基準 (#2) / CI 破壊基準 (#3) / rating ≥7 confidence ≥80 基準 (#4) / ユーザー明示指示基準 (#5) のいずれも満たさない
+- AC-8 verify は本田様目視タスクで Issue 化不要
 
-```bash
-$ gcloud auth list --format="value(account[?status=ACTIVE].account)"
-(empty, length=0)  exit=0
-```
+## 最終結論
 
-このまま merge していれば検証ロジックが**全 deploy で必ず失敗** (`got: none`) して deploy ジョブが赤くなる回帰を生むところだった。pr-review-toolkit `code-reviewer` agent が同種実機検証で Critical 検出。
+✅ **セッション終了可**
 
-**正解**: `--format=json(status.traffic)` で取得 → `jq '[.status.traffic[]? | select(.latestRevision==true) | .percent // 0] | add // 0'` で集計。これにより canary/tag 構成の複数 latest entry にも対応可能（silent-failure-hunter agent 指摘の I1）。
+- OPEN PR: 0 件 (#138/#139/#140 全 merge + deploy 完了)
+- main clean (HEAD = `2943b9e`)
+- 残留プロセスなし
+- 即着手タスク: 0 件
+- 条件待ち: 4 件 (すべて trigger 未充足、decision-maker 判断待ち)
+- 実機 verify: AC-6 / AC-7 / 日時表記 fix ✅、AC-8 のみ本田様目視待ち (executor 領分外)
+- § 4.6 同根再発スキャン: 該当なし
+- § 4.7 対症療法判定: 該当なし
 
-### TimeTree 2日間終日は判別不能を確定（Issue #118 / ADR-011 更新, PR #127）
+---
 
-reverse-engineering の本家 [`eoleedi/TimeTree-Exporter`](https://github.com/eoleedi/TimeTree-Exporter) を `gh api` で源コード取得し `formatter.py:get_datetime` を確認:
+# 以下、過去セッション (2026-05-18 まで) の参照情報
 
-```python
-if self.time_tree_event.all_day:
-    if not is_start_time:
-        # RFC 5545 all-day DTEND is exclusive.
-        datetime_value += timedelta(days=1)
-```
+## MVP 実装状況
 
-→ **all_day=true なら end_at を常に +1 日**しており、単日と多日を区別していない。Calendar Hub と逆方向の誤り（TimeTree-Exporter は単日終日を 2 日表示にする）を選択している。本家が「区別不能」を前提に設計している事実は、internal API の raw レスポンスに判別フィールドが**存在しない**ことの強力な傍証。TimeTree 公式 API は 2023-12-22 にシャットダウン済み (developers.timetreeapp.com 廃止) で確認手段なし。実機観測タスクは ROI 不足で打ち切り、ADR-011 §既知の制限を「判別不能 (確定)」に改題、ワークアラウンド（TimeTree 側で 1+1 件 or 3 日以上、Google 側で末日延長）を明文化。
+| 機能                                 | 状態              |
+| ------------------------------------ | ----------------- |
+| Firebase Auth + Google OAuth         | ✅ 完了           |
+| Google Calendar / TimeTree 統合      | ✅ 完了           |
+| 統合カレンダー UI                    | ✅ 完了           |
+| Vertex AI 提案 (Gemini 2.5 Flash)    | ✅ 完了           |
+| メール通知 (Gmail API 経由、PR #139) | ✅ 完了           |
+| 公開予約リンク (Calendly ライク)     | ✅ 完了           |
+| Google 予約 read-only ミラー化       | ✅ 完了 (PR #138) |
+| カレンダー同期 (extendedProps)       | ✅ 完了           |
+| 全日イベント同期 (TZ 対応)           | ✅ 完了 (#58/#59) |
+| syncIntervalMinutes スケジューラ     | ✅ 完了 (#53)     |
+| timeMax 月末バグ                     | ✅ 完了 (dd241df) |
+| 繰り返しイベント同期 (RRULE 展開)    | ✅ 完了 (#61/#64) |
 
-### Dependabot security 一括対応の運用パターン（本セッション 5 PR merged + 3 PR auto-closed）
+## 過去セッションの技術メモ参照先
 
-1. **`@dependabot rebase`/`recreate`/`--auto-merge`**: 通常 `rebase` で base 同期、conflict 残存時は `recreate` でブランチ再作成。`--auto-merge` は本リポジトリで **無効化** (`enablePullRequestAutoMerge` false) のため使えず、`gh pr merge` の都度実行が必要。
-2. **branch protection「require up to date」**: PR 連続マージ時、後発 PR は前発 merge 後に毎回 BEHIND → rebase 必要。`mergeStateStatus=CLEAN` を Monitor で待ってから merge する反復ループになる。
-3. **superseded auto-close**: PR #122 (@protobufjs/utf8) / #129 (lodash) / #131 (node-forge) は親 PR (#121 protobufjs / #124 overrides) のマージで lockfile が同時に更新され、Dependabot が「up-to-date now」と判定し自動 close。手動操作不要で 3 PR が消える幸運パターン。
-4. **`pnpm-lock.yaml` の `overrides:` セクションは `package.json` の `pnpm.overrides` と必ず対応**: Dependabot security audit fix (#124) が `pnpm-lock.yaml` のみ更新し `package.json` 未更新だと `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` で CI が必ず失敗する。`package.json` に同じ overrides を転記して `pnpm install --no-frozen-lockfile` → 追加 commit (force push 不要) で解消。
-
-### TimeTree 複数日終日の Google 最終日1日不足修正（2026-05-17, PR #117 / ADR-011）
-
-**症状**: ユーザー報告「TimeTree で 1日〜3日の終日設定が、Google カレンダーには 1日〜2日として反映される（最終日が抜ける）」。
-
-**根本原因**: TimeTree 内部 API は終日 `end_at` を以下のように返す（実観測モデル）。
-
-| ケース     | raw `end_at`    | `diff` | 解釈                        |
-| ---------- | --------------- | ------ | --------------------------- |
-| 単日終日   | 翌日 0:00 JST   | 24h    | exclusive（正常）           |
-| 2日間終日  | 最終日 0:00 JST | 24h    | inclusive（単日と区別不能） |
-| N≥3 日終日 | 最終日 0:00 JST | ≥48h   | inclusive                   |
-
-一方 Google `end.date` は exclusive。N≥3 で 1 日不足。ADR-008 で「スコープ外」として別 Issue 化されていた懸念を本 PR で N≥3 範囲で解消。
-
-**修正方針**: `normalizeAllDayEnd(startMs, endMs)` を追加し、`raw.all_day=true` かつ `diff >= 48h` かつ `diff % 24h == 0` の場合のみ `+24h` で exclusive 表現に正規化。`toCalendarEvent` / `listEvents` 通常イベント範囲フィルタ / RRULE 展開 の 3 経路で適用。`Number.isFinite` ガードで NaN/Infinity の silent normalization も防止。
-
-**レビュー指摘対応**: 初版で Codex `no-go` 判定 → ADR とテストの仮説モデル不整合 / listEvents 範囲フィルタ漏れ / silent failure ガード / RRULE 経路テスト不足の 4 件を全件対応。最終 320 テスト PASS。
-
-**既知の制限（Issue #118 として起票）**: 2日間終日は raw 値だけでは単日と区別不能。`start_timezone` / `end_timezone` 等の追加フィールドで判別可能か実機観測タスクが残る。
-
-### Dependabot CI 失敗の根本原因と解消（2026-05-17）
-
-**症状**: 2026-05-13 以降、Dependabot Updates ジョブが連続失敗（`pull_request_exists_for_security_update` エラー）。
-
-**根本原因**: PR #115 (hono) と PR #116 (next) が 2026-05-09 / 5-12 から open のまま放置されており、新規 Dependabot job が「同じセキュリティ対象 PR が既存」エラーで終了していた。
-
-**解消**: 両 PR をマージ（#116 は `recreate` で再生成。lockfile conflict で `rebase` が機能しなかった）+ PR #120 (uuid backport patch) もマージ。次回 Dependabot ジョブで正常終了する見込み（マージ直後の fast-xml-builder ジョブは `in_progress`）。
-
-**教訓**: Dependabot の open PR を放置すると後続ジョブが全滅する。weekly メンテとして dependabot PR の triage を定常化すべき。
-
-### TimeTree 日曜→月曜ずれバグ修正と CI/CD trafficSplit 昇格漏れ事故（2026-05-02, PR #109）
-
-**症状**: ユーザー報告「日曜の繰り返し予定が月曜に作られ、削除しても無限に復活する」。
-
-**根本原因 2 層**:
-
-1. **コードバグ（PR #109 で修正）**: `expandRecurringEvent` で rrule lib に実 UTC instant をそのまま渡していた。rrule は `tzid` 未指定時 `BYDAY` を UTC 基準で判定するため、JST 0:00-8:59 帯の予定は UTC 上で前日となり +1 日ずれる。`BYDAY=SU` の occurrence が UTC 日曜（= JST 月曜 0:00 以降）として展開されていた。
-
-2. **デプロイの trafficSplit 昇格漏れ（手動切替で対症療法）**: PR #109 マージで Deploy ジョブは success、新 revision `00062-s85` も Ready=True で作成されたが、Cloud Run の traffic は旧 revision `00050-hhh` に 100% のまま。新コードは一度も traffic を受けていなかった。
-
-**ADR-008** に座標系（実 UTC instant ↔ JST wall-clock floating Date）の方針と移行戦略を記録。`instanceDateSuffix` を JST 日付基準に変更したが、修正前の UTC 基準 suffix と全ケースで偶然一致する（全日イベント前提）ため tagMap マッチが維持され、移行は自動収束。時間指定 JST 0:00-8:59 帯のみ `toDelete + toCreate` 経路に寄る。
-
-**観測**: 手動 traffic 切替直後の初回 sync で **c=12 d=12**（過去にずれた 12 件を自動削除＋日曜の正しい位置に 12 件新規生成）。以降 c=0 d=0 で安定。ユーザーの「削除→復活」が完全停止。
-
-**Codex セカンドオピニオン活用**: 設計レビュー段階で `rrulestr({ tzid: 'Asia/Tokyo' })` 単独では効果なし（実測確認）→ floating wall-clock 化が必須と判明。PR レビュー段階で `parseExdateFloating` の Z なし date-time 二重補正バグを発見・修正。
-
-**今後の課題**:
-
-- **CI/CD の trafficSplit 昇格漏れ**: 次回デプロイで再発するリスクあり。`.github/workflows/deploy.yml` または `infra/deploy-api.sh` 側の `gcloud run deploy` で `--no-traffic` 相当の挙動になっている可能性。**起票必須レベル**（実害あり）。
-- `rruleSet.between(timeMin, timeMax, true)` の上限 inclusive による隣接同期窓重複可能性（既存挙動、PR #109 では悪化なし）。ADR-008 の「スコープ外」に記載。
-- 時間指定 RRULE + date-only EXDATE は rrule の厳密一致仕様で除外不発（TimeTree が当該パターンを送るかは未観測、テストに記録）。
-
-### Dependabot security 運用の初期対応（2026-04-16, PR #96/#97/#101-#103/#105）
-
-- **9 件脆弱性解消**（24 → 15）: direct deps の nodemailer/hono-node-server/next(high DoS)/hono(medium x5) は patch/minor で解消。Actions は auth v3/checkout v6/setup-gcloud v3 へ major bump（パラメータ互換性確認済）。
-- **`open-pull-requests-limit: 0` の副作用**: Dependabot が PR 再作成を拒否する（"dependabot.yml entry deleted"）。`update-branch` API も「user edit」と判定され rebase 不可。→ 手動 `pnpm update <pkg>` でローカル更新 → PR する運用が現実的。
-- **Actions major bump 判断基準**: release notes で使用中パラメータの deprecated/removed を確認。本プロジェクトは `workload_identity_provider` + `service_account` のみ使用、v3 でも維持されるため安全。
-- **残 15 件の実質リスク評価**: dev-only (vite 3, picomatch 2) は prod 非搭載。runtime-transitive (lodash 4, node-forge 4, brace-expansion 1, @tootallnate/once 1 low) は攻撃者入力の到達経路なし（個人利用のため template/certificate 解析に外部入力が流れない）。現状受容が合理的。
-
-### Dependabot 最小構成（2026-04-16, #80 / PR #100）
-
-- **方針**: 個人利用のため version 更新ノイズを回避。CVE 対応のみを自動 PR 化。
-- **repo 設定**: `gh api -X PUT repos/:owner/:repo/vulnerability-alerts` と `.../automated-security-fixes` の 2 API で有効化（両方 disabled だった）。
-- **`.github/dependabot.yml`**: npm は `open-pull-requests-limit: 0` で version 更新 PR を抑止しつつ、security 更新 PR は継続発行（公式仕様）。github-actions は月次で version 更新も許可（使用アクション数が少ないためノイズ小）。
-- **pnpm monorepo カバレッジ**: `directory: "/"` のみだが、security 更新の実体は repo 全体の `pnpm-lock.yaml` をスキャンするため全 workspace カバー。push 時に GitHub が 24 件（9 high / 13 moderate / 2 low）を即時検知で実証。
-- **次回対応**: マージ後に Dependabot が順次 security PR を発行する。手動マージで反映（自動マージは個人利用のため未導入）。
-
-### API 健全性アラート: Cloud Run built-in metrics 活用（2026-04-15, #77 / PR #94）
-
-- **対象**: `run.googleapis.com/request_count` (labels: `response_code`/`response_code_class`/`route`) と `request_latencies`。アプリ側コード追加なしで Cloud Run 側が emit するためコスト ≒ 0。`metricDescriptors` REST API で実ラベル確認 (2026-04-15): `response_code_class` は `"4xx"` 等の文字列、`response_code` は `"401"` 等の整数文字列。
-- **閾値 deviation (絶対件数)**: spec 原文「5xx 率 5%」「4xx 前日比+300%」は低トラフィック単独開発で false-positive 多発（idle window で 1 件が 100% 化）。絶対件数 (5xx≥3/5min, 4xx≥20/5min, p99>3s 5min) に切替。ADR-006 §deviation に理由明記。
-- **4xx 2 条件 OR**: `400` 入力ノイズと `401/403` OAuth 失効が同じ 20 件閾値に埋もれる silent-failure を防ぐため、401/403 専用条件を `response_code="401" OR response_code="403"` で 5/5min に分離（`combiner: OR` で独立発火）。
-- **groupByFields は冗長**: filter 側で `service_name="calendar-hub-api"` を固定すると REDUCE_SUM は 1 時系列に集約されるため `groupByFields: [resource.label.service_name]` は no-op。3 YAML から削除（simplifier レビュー反映）。
-- **ADR-006 死角セクション訂正**: 初版の (b) 「public-booking の 200+error body」は実在しない（全 `c.json({error:...})` が 400/404/409）。削除。(a) を実在する `sendBookingNotificationsAsync` の fire-and-forget パターンに訂正（HTTP 201 後の非同期失敗、`[MAIL-FAIL]` で既カバー）。(c) OOM metric 名を `container/memory/utilizations` に訂正（`cpu/utilization` は誤り）、(d) startup probe を `container/startup_latencies` + Error Reporting に訂正。
-- **実機 E2E**: 404 を 3 回誘発 → 1 分以内に `response_code_class="4xx"` metric が 3 件 ingestion（2026-04-15 13:58:19Z、`timeSeries list` で確認）。`4xx spike` policy の `conditions.len()` = 2 で 2 条件 live 確認。
-
-### Gmail 送信失敗の可視化（2026-04-15, #74 / PR #87）
-
-- **`apps/api/src/lib/mail-fail.ts`**: `classifyMailError(err)` は `invalid_grant` / HTTP 401/403 / SMTP 535 を `AUTH`、429/503/ETIMEDOUT/ECONNRESET を `TRANSIENT`、それ以外を `UNKNOWN` に分類する純粋関数。`logMailFailure()` が `[MAIL-FAIL] context=X recipient=***@domain kind=K reason=R` 形式で `console.error` 出力（recipient のローカル部をマスク、`reason` は空白/=/改行を `_` に sanitize）。
-- **`sendEmail()`** は互換性維持のため `context` をオプショナルに追加。省略時は従来通り。指定時は内部で分類＋ログ出力してから再 throw（呼び出し側の既存 `try-catch` ロジックは不変）。`createTransport` も try 内に包含しているため OAuth2 config 由来の synchronous 例外も捕捉可能。
-- **呼び出し側**: 予約通知の `context=owner-notification` / `guest-confirmation` / `booking-auth`（refresh token 取得段階）、AI 提案の `ai-suggestion`、テスト通知の `test-notification`。
-- **アラート**: `calendar_hub_mail_fail` metric + `[Calendar Hub] Mail send failure` policy（10分内 ≥1件、 Sync failed と同等、auto-close 24h）。
-- **E2E 注入検証 (2026-04-15 04:49 UTC)**: `bash infra/inject-test-alert-log.sh mail-fail` で `[MAIL-FAIL]` ログを `cloud_run_revision=00047-qcm` 上に 1 件注入 → `calendar_hub_mail_fail` metric `int64Value=1` を 04:49-04:50 window で確認済。`alignmentPeriod=600s` のためアラート発火タイミングは注入から最大 10 分後、メール配信までは GCP 側の揺らぎで追加遅延あり（#72 の Sync failed 実測: 1-3 分）。次セッションで実メール受信を目視確認する場合は `gcloud logging read 'textPayload:"[MAIL-FAIL]"'` と Monitoring > Alerts を並べて確認。
-
-### Firestore Backup セットアップの落とし穴（2026-04-15, #73）
-
-1. **`gcloud firestore backups schedules list --filter=...` で `dailyRecurrence` を検出できない**:
-   `dailyRecurrence: {}` は空オブジェクトで filter の `:*` マッチが機能しない。
-   冪等判定には `--format=json | jq '.[] | select(.dailyRecurrence != null)'` が必要。
-2. **PITR の `earliestVersionTime` は有効化時刻から進行**: 有効化直後は直近まで、
-   7日分のウィンドウが埋まるまで最大 7 日かかる（version_retention_period=604800s）。
-3. **復元は新 DB へ**: `gcloud firestore databases restore` は常に新しい database を作成する。
-   `(default)` を直接上書きする手段はない（ADR-007 復元後 orchestration 節参照）。
-
-### アラート E2E 検証の落とし穴（2026-04-15, #72 / PR #83）
-
-1. **`gcloud logging write` は使えない**: `resource.type=global` でログを書き込むため、
-   log-based metric の filter (`resource.type="cloud_run_revision"`) と一致せず、
-   アラートは発火しない。Issue #72 / ADR-006 の原文例が silent に動いていなかった。
-   → `infra/inject-test-alert-log.sh` で REST API 直接呼び出し（`cloud_run_revision` 明示）。
-2. **SYNC-GAP は 1回注入では発火しない**: `duration=900s` により sustained signal が必須。
-   3分間隔で6回注入（18分連続）で確実発火確認。5分間隔4回は境界で逃す事例あり。
-3. **E2E 結果**: 3種すべて発火 + メール到着確認済（RRULE-SKIP 2min / Sync failed 3min / SYNC-GAP 19min）。
-
-### TimeTree繰り返しイベント同期の不具合連鎖（2026-04-14）
-
-ユーザー報告「2026-04-14以降の繰り返しイベントが未反映」の調査で**2つの独立した問題**が連鎖していたことが判明：
-
-1. **デプロイ漏れ（PR #63で対応）** — PR #61（RRULE展開）の修正がそもそも本番に入っていなかった。revision 00032-ftb は commit 4f75b61（#61前）でビルドされており、前回ハンドオフの「繰り返しイベント対応済み」記載が誤り。
-2. **カンマ区切りEXDATE未対応（PR #64で対応）** — TimeTreeはRFC 5545準拠で1行EXDATEに複数日をカンマ並列（例: `EXDATE:20260505T000000Z,20260526T000000Z,...`）。旧 `parseExdate` は単一値想定で `Invalid Date` を生成 → `rrule.between()` 内で `RangeError: Invalid date passed to DateWithZone` → `try/catch` で握り潰され、該当マスターの全インスタンスが静かに消失。
-
-### `[SYNC-STATS]` / `[RRULE-SKIP]` 観測ログ
-
-- 場所: `apps/api/src/routes/sync.ts` / `packages/calendar-sdk/src/adapters/timetree.ts`
-- `[SYNC-STATS]` 形式: `tt=N (recurring=M) gg=K tagged=T actions: c=X u=Y d=Z`
-  - 同期結果0件時に「TT側に無い」「既に全マッチ」「タグ欠落」を判別可能
-- `[RRULE-SKIP]` 形式: `calendar=X event=Y title="..." recurrences=[...] err=...`
-  - 今後の静かなスキップ再発を即座に検知するため `console.error` で出力
-- 両ログは Cloud Logging で検索可能。次ステップ #65 でアラート化予定。
-
-### TimeTree繰り返しイベント展開の実装要点（#61 + #64）
-
-- TimeTree API `/events/sync` は繰り返しイベントをマスター1件のみ返す。`recurrences`フィールドに RRULE/EXDATE 文字列配列を格納。
-- `rrule` ライブラリで解析、同期期間内のインスタンスを個別イベントとして展開。ID形式: `{masterId}_R{YYYYMMDD[THHmmss]}`（決定論的）。
-- `rrule` はCJSモジュールのためデフォルトインポート必須（`import pkg from 'rrule'`）。
-- EXDATE は RFC 5545 準拠のカンマ区切りに対応（`split(',')` で分解して各日付を `rruleSet.exdate()` へ）。
-- 無効なRRULE/日付は `try-catch` でスキップし `[RRULE-SKIP]` で可視化。
-
-### 運用メモ
-
-- **GCPアカウント**: gcloud操作時は `hy.unimail.11@gmail.com` に切り替え必要（`.envrc` の `sasaki.system0801` には calendar-hub-prod の権限なし）
-- **デプロイ**: `bash infra/deploy-api.sh`（`git rev-parse --short HEAD` をイメージタグにするため、デプロイ前に必ず `git checkout main && git pull` 必須）
+過去セッションの技術メモ (gcloud JMESPath 風 filter pitfall / TimeTree 2 日間終日 / Dependabot 運用 / rrule 座標系 / Cloud Run built-in metrics / Gmail 送信失敗可視化 / Firestore Backup / アラート E2E / RRULE 展開実装) は本ファイルの過去版 (`git log -- docs/handoff/LATEST.md`) で参照可能。
+
+主要 ADR:
+
+- ADR-005: CI/CD 自動デプロイ + `promote-traffic.sh` (PR #126 で trafficSplit 昇格保証)
+- ADR-006: Monitoring (7 alert policies)
+- ADR-007: Firestore PITR + バックアップ
+- ADR-008: RRULE JST wall-clock 座標系
+- ADR-009: TimeTree session management
+- ADR-010: SLO + ログ保持 (設計フェーズ)
+- ADR-011: TimeTree 2 日間終日「判別不能」確定
 
 ## アカウント情報
 
 - GCP: `hy.unimail.11@gmail.com` / プロジェクト: `calendar-hub-prod`
 - GitHub: `yasushi-honda` / https://github.com/yasushi-honda/Calendar-Hub
 - TimeTree: `hon.family.da@gmail.com`
-- Firebase Auth: Google Sign-In有効化済み
+- Firebase Auth: Google Sign-In 有効化済み
 - gcloud named config: `calendar-hub`
+
+## 運用メモ
+
+- **GCP アカウント**: gcloud 操作時は `hy.unimail.11@gmail.com` に切り替え必要 (本プロジェクトは `.envrc` で `calendar-hub` named config が自動 active)
+- **デプロイ**: main push → `.github/workflows/deploy.yml` (quality → deploy-api → deploy-web) → `infra/promote-traffic.sh` で LATEST 昇格 + jq 検証

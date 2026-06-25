@@ -41,6 +41,7 @@ export function classifyMailError(err: unknown): MailFailClassification {
   const message = typeof e.message === 'string' ? e.message : '';
   const code = typeof e.code === 'string' ? e.code : '';
   const responseCode = typeof e.responseCode === 'number' ? e.responseCode : undefined;
+  const responseStatus = readResponseStatus(e);
   const oauthError = readOAuthErrorField(e);
 
   // AUTH 判定
@@ -50,19 +51,35 @@ export function classifyMailError(err: unknown): MailFailClassification {
   if (responseCode === 401 || responseCode === 403) {
     return { kind: 'AUTH', reason: `http=${responseCode}` };
   }
+  if (responseStatus === 401 || responseStatus === 403) {
+    return { kind: 'AUTH', reason: `http=${responseStatus}` };
+  }
   if (/\b535-5\.7\.\d\b|Invalid login|Username and Password not accepted/i.test(message)) {
     return { kind: 'AUTH', reason: 'smtp_auth_rejected' };
+  }
+  // Gmail API: scope 不足 / 認証情報不正の典型メッセージ
+  if (/invalid authentication credentials|insufficient.+scope/i.test(message)) {
+    return { kind: 'AUTH', reason: 'gmail_api_auth_rejected' };
   }
 
   // TRANSIENT 判定
   if (responseCode === 429 || responseCode === 503 || responseCode === 504) {
     return { kind: 'TRANSIENT', reason: `http=${responseCode}` };
   }
+  if (responseStatus === 429 || responseStatus === 503 || responseStatus === 504) {
+    return { kind: 'TRANSIENT', reason: `http=${responseStatus}` };
+  }
   if (code === 'ETIMEDOUT' || code === 'ECONNRESET' || code === 'ECONNREFUSED') {
     return { kind: 'TRANSIENT', reason: `code=${code}` };
   }
 
   return { kind: 'UNKNOWN', reason: message || 'no-message' };
+}
+
+function readResponseStatus(e: Record<string, unknown>): number | undefined {
+  const response = e.response as { status?: unknown } | undefined;
+  if (typeof response?.status === 'number') return response.status;
+  return undefined;
 }
 
 function readOAuthErrorField(e: Record<string, unknown>): string | undefined {

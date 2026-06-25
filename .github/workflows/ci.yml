@@ -30,3 +30,50 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  e2e:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('apps/web/package.json') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @calendar-hub/web exec playwright install --with-deps chromium
+
+      - name: Build packages (api/shared/sdk for tsx runtime)
+        run: pnpm turbo build --filter=@calendar-hub/api...
+
+      - name: Run E2E tests under Firebase Emulator
+        run: pnpm e2e
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

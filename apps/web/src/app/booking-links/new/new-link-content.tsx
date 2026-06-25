@@ -38,6 +38,11 @@ export function NewLinkContent() {
   const [availableDays, setAvailableDays] = useState([1, 2, 3, 4, 5]);
   const [rangeDays, setRangeDays] = useState(14);
   const [bufferMinutes, setBufferMinutes] = useState(0);
+  const [autoCreateCalendarEvent, setAutoCreateCalendarEvent] = useState(true);
+  const [useSpecificAvailabilityCalendars, setUseSpecificAvailabilityCalendars] = useState(false);
+  const [selectedAvailabilityCalendarIds, setSelectedAvailabilityCalendarIds] = useState<string[]>(
+    [],
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -86,24 +91,39 @@ export function NewLinkContent() {
   );
 
   const handleSubmit = async () => {
-    if (!title.trim() || !calendarIdForEvent || selectedAccountIds.length === 0) {
-      setError('タイトル、カレンダー、アカウントを設定してください');
+    if (!title.trim() || selectedAccountIds.length === 0) {
+      setError('タイトルとアカウントを設定してください');
+      return;
+    }
+    if (autoCreateCalendarEvent && !calendarIdForEvent) {
+      setError('予約イベント作成先のカレンダーを設定してください');
+      return;
+    }
+    if (useSpecificAvailabilityCalendars && selectedAvailabilityCalendarIds.length === 0) {
+      setError(
+        '「特定のカレンダーのみで空き時間を判定する」を有効にした場合は、対象カレンダーを 1 つ以上選択してください',
+      );
       return;
     }
     setSubmitting(true);
     setError('');
     try {
+      const calendarIdsForAvailability = useSpecificAvailabilityCalendars
+        ? selectedAvailabilityCalendarIds
+        : null;
       await apiPost('/api/booking-links', {
         title: title.trim(),
         description: description.trim() || undefined,
         durationMinutes,
         accountIds: selectedAccountIds,
-        calendarIdForEvent,
-        accountIdForEvent,
+        calendarIdForEvent: autoCreateCalendarEvent ? calendarIdForEvent : null,
+        accountIdForEvent: autoCreateCalendarEvent ? accountIdForEvent : null,
         freeTimeOptions: { dayStartHour, dayEndHour },
         availableDays,
         rangeDays,
         bufferMinutes,
+        autoCreateCalendarEvent,
+        calendarIdsForAvailability,
       });
       router.push('/booking-links');
     } catch (err) {
@@ -197,18 +217,62 @@ export function NewLinkContent() {
               ))}
             </div>
 
-            <label style={s.label}>予約イベントを作成するカレンダー</label>
-            <select
-              value={calendarIdForEvent}
-              onChange={(e) => handleCalendarSelect(e.target.value)}
-              style={s.select}
-            >
-              {calendars.map((cal) => (
-                <option key={cal.id} value={cal.id}>
-                  {cal.name}
-                </option>
-              ))}
-            </select>
+            <label style={{ ...s.checkboxItem, marginTop: '12px' }}>
+              <input
+                type="checkbox"
+                checked={useSpecificAvailabilityCalendars}
+                onChange={(e) => setUseSpecificAvailabilityCalendars(e.target.checked)}
+              />
+              <span>特定のカレンダーのみで空き時間を判定する</span>
+            </label>
+            {useSpecificAvailabilityCalendars && (
+              <div style={{ ...s.checkboxList, marginTop: '8px', paddingLeft: '24px' }}>
+                {calendars
+                  .filter((cal) => selectedAccountIds.includes(cal.accountId))
+                  .map((cal) => (
+                    <label key={cal.id} style={s.checkboxItem}>
+                      <input
+                        type="checkbox"
+                        checked={selectedAvailabilityCalendarIds.includes(cal.id)}
+                        onChange={() => {
+                          setSelectedAvailabilityCalendarIds((prev) =>
+                            prev.includes(cal.id)
+                              ? prev.filter((id) => id !== cal.id)
+                              : [...prev, cal.id],
+                          );
+                        }}
+                      />
+                      <span>{cal.name}</span>
+                    </label>
+                  ))}
+              </div>
+            )}
+
+            <label style={{ ...s.checkboxItem, marginTop: '16px' }}>
+              <input
+                type="checkbox"
+                checked={autoCreateCalendarEvent}
+                onChange={(e) => setAutoCreateCalendarEvent(e.target.checked)}
+              />
+              <span>予約成立時に Google Calendar へ予定を自動登録する</span>
+            </label>
+
+            {autoCreateCalendarEvent && (
+              <>
+                <label style={s.label}>予約イベントを作成するカレンダー</label>
+                <select
+                  value={calendarIdForEvent}
+                  onChange={(e) => handleCalendarSelect(e.target.value)}
+                  style={s.select}
+                >
+                  {calendars.map((cal) => (
+                    <option key={cal.id} value={cal.id}>
+                      {cal.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
 
           {/* 受付設定 */}

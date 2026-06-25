@@ -400,28 +400,33 @@ function sendBookingNotificationsAsync(
     }
 
     let auth: { email: string; accessToken: string };
-    try {
-      const refreshToken = await getRefreshToken(link.ownerUid, googleAccount.id);
-      if (!refreshToken) {
-        // refresh_token が Firestore に残っていないケース。再ログインが必要。
-        logMailFailure(
-          { context: 'booking-auth', recipient: googleAccount.email },
-          new Error('no_refresh_token_stored'),
-        );
+    if (process.env.E2E_MAIL_MOCK === '1') {
+      // E2E: sendEmail 側で Firestore に書き込むだけなので access_token は使われない
+      auth = { email: googleAccount.email, accessToken: 'e2e-mock-token' };
+    } else {
+      try {
+        const refreshToken = await getRefreshToken(link.ownerUid, googleAccount.id);
+        if (!refreshToken) {
+          // refresh_token が Firestore に残っていないケース。再ログインが必要。
+          logMailFailure(
+            { context: 'booking-auth', recipient: googleAccount.email },
+            new Error('no_refresh_token_stored'),
+          );
+          return;
+        }
+        const tokens = await refreshAccessToken(refreshToken);
+        if (!tokens.access_token) {
+          logMailFailure(
+            { context: 'booking-auth', recipient: googleAccount.email },
+            new Error('empty_access_token'),
+          );
+          return;
+        }
+        auth = { email: googleAccount.email, accessToken: tokens.access_token };
+      } catch (err) {
+        logMailFailure({ context: 'booking-auth', recipient: googleAccount.email }, err);
         return;
       }
-      const tokens = await refreshAccessToken(refreshToken);
-      if (!tokens.access_token) {
-        logMailFailure(
-          { context: 'booking-auth', recipient: googleAccount.email },
-          new Error('empty_access_token'),
-        );
-        return;
-      }
-      auth = { email: googleAccount.email, accessToken: tokens.access_token };
-    } catch (err) {
-      logMailFailure({ context: 'booking-auth', recipient: googleAccount.email }, err);
-      return;
     }
 
     // オーナーへ通知（独立try-catch: error-handling.mdルール遵守）

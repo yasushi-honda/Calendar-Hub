@@ -1,5 +1,7 @@
 import { google } from 'googleapis';
 import { logMailFailure } from './mail-fail.js';
+import { getDb } from './firebase-admin.js';
+import { FieldValue } from 'firebase-admin/firestore';
 
 interface SendEmailOptions {
   to: string;
@@ -85,6 +87,21 @@ export function buildMimeMessage(opts: {
  *  535 認証エラーが発生していた。)
  */
 export async function sendEmail(auth: GmailAuth, options: SendEmailOptions): Promise<void> {
+  if (process.env.E2E_MAIL_MOCK === '1') {
+    await getDb()
+      .collection('_e2eMail')
+      .add({
+        from: auth.email,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text ?? null,
+        context: options.context ?? null,
+        sentAt: FieldValue.serverTimestamp(),
+      });
+    return;
+  }
+
   try {
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: auth.accessToken });

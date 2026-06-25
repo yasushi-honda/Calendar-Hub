@@ -2,11 +2,16 @@ import { GoogleCalendarAdapter, TimeTreeAdapter } from '@calendar-hub/calendar-s
 import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
 import { getRefreshToken } from './token-store.js';
 import { refreshAccessToken } from './google-oauth.js';
+import { MockCalendarAdapter } from './mock-calendar-adapter.js';
 
 /**
  * 連携アカウントIDからCalendarAdapterを生成
  */
 export async function createAdapter(userId: string, accountId: string): Promise<CalendarAdapter> {
+  if (process.env.E2E_CALENDAR_MOCK === '1') {
+    return new MockCalendarAdapter();
+  }
+
   const provider = accountId.startsWith('google_') ? 'google' : 'timetree';
 
   if (provider === 'google') {

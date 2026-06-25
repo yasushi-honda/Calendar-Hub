@@ -1,0 +1,28 @@
+displayName: '[Calendar Hub] TimeTree session expired (24h ≥ 3)'
+documentation:
+  content: |
+    TimeTree session (cookie) 切れが 24 時間以内に 3 件以上発生した。
+
+    対応:
+    1. Cloud Logging で `textPayload:"[TT-SESSION-EXPIRED]"` を検索し、reason (expiresAt/httpStatus) と URL を確認
+    2. ユーザーが Web アプリ「連携アカウント設定」画面で TimeTree を再連携する必要あり (ADR-009 §2 参照)
+    3. 連続発生がプロジェクト全体で複数アカウント横断なら、TimeTree 側 API 仕様変更の可能性も視野
+
+    補足: 個別ユーザー識別は現状ログに含まれていないため、本 alert はプロジェクト全体集計。
+    ユーザー単位の identification は ADR-009 Future Work の「session 残日数バッジ」実装と合わせて将来検討。
+  mimeType: text/markdown
+combiner: OR
+conditions:
+  - displayName: 'tt_session_expired >= 3 in 24h'
+    conditionThreshold:
+      filter: 'metric.type="logging.googleapis.com/user/calendar_hub_tt_session_expired" AND resource.type="cloud_run_revision"'
+      comparison: COMPARISON_GT
+      thresholdValue: 2
+      duration: 0s
+      aggregations:
+        - alignmentPeriod: 86400s
+          perSeriesAligner: ALIGN_SUM
+          crossSeriesReducer: REDUCE_SUM
+alertStrategy:
+  autoClose: 86400s
+enabled: true

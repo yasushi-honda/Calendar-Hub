@@ -64,6 +64,11 @@ create_or_update_metric \
   "Count of [MAIL-FAIL] occurrences (Gmail OAuth2 send failure, #74)" \
   "${BASE_FILTER} AND textPayload:\"[MAIL-FAIL]\""
 
+create_or_update_metric \
+  "calendar_hub_tt_session_expired" \
+  "Count of [TT-SESSION-EXPIRED] occurrences (TimeTree cookie expired, #79)" \
+  "${BASE_FILTER} AND textPayload:\"[TT-SESSION-EXPIRED]\""
+
 # --- 2. Notification channel (email) ---
 
 # 既存のチャネルを検索。権限失敗を NOT_FOUND と取り違えて重複作成しないよう、
@@ -193,6 +198,7 @@ apply_policy "${SCRIPT_DIR}/alert-policies/mail-fail.yaml"
 apply_policy "${SCRIPT_DIR}/alert-policies/api-5xx-rate.yaml"
 apply_policy "${SCRIPT_DIR}/alert-policies/api-4xx-spike.yaml"
 apply_policy "${SCRIPT_DIR}/alert-policies/api-latency-p99.yaml"
+apply_policy "${SCRIPT_DIR}/alert-policies/tt-session-expired.yaml"
 
 echo ""
 echo "=== Monitoring setup complete ==="

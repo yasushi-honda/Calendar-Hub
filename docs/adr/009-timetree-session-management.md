@@ -68,12 +68,19 @@ session 切れが検出された場合のユーザー対応フロー:
 - 自動再ログインは依然不可能（password 永続化しない設計の延長）
 - ユーザーには 14 日ごとの再連携が暗黙的に必要
 
+## 実装済み (本 ADR の後続作業)
+
+- ✅ ログベースメトリクス `calendar_hub_tt_session_expired` 作成 (PR #150、`infra/setup-monitoring.sh`)
+- ✅ アラートポリシー `[Calendar Hub] TimeTree session expired (24h ≥ 3)` (`infra/alert-policies/tt-session-expired.yaml`)
+  - **スコープ調整**: プロジェクト全体で 24h 内 3 件以上で発報。ADR 当初案の「単一ユーザー」識別は現状ログ (`timetree.ts:91/103`) に userId/accountId が含まれないため将来課題 (下記 Future Work)
+
 ## Future Work
 
-- ログベースメトリクス（`logging.googleapis.com/user/timetree_session_expired`）作成
-- アラートポリシー: 単一ユーザーで 24h 以内に `[TT-SESSION-EXPIRED]` 連続発生 → 通知
-- Web UI の連携アカウント設定画面で **session 残日数バッジ**表示（`expiresAt` を Firestore に保存して算出）
-- session 切れ通知メール（任意機能）
+- 単一ユーザー (accountId) 単位の `[TT-SESSION-EXPIRED]` グループ化 alert
+  - 前提: ログに `accountId=...` を追加 (`TimeTreeAdapter` constructor で accountId を受け取り、ログ出力に含める)
+  - 別 Issue 化候補 (本 ADR スコープ外、ログ schema 変更が必要)
+- Web UI の連携アカウント設定画面で **session 残日数バッジ**表示 (`expiresAt` を Firestore に保存して算出)
+- session 切れ通知メール (任意機能)
 
 ### 既存ロジックの強化候補（本 ADR スコープ外、将来検討）
 

@@ -1,0 +1,21 @@
+{
+  "displayName": "Sync success: 99% of 1-hour windows have 0 failures (24h rolling)",
+  "goal": 0.99,
+  "rollingPeriod": "86400s",
+  "serviceLevelIndicator": {
+    "windowsBased": {
+      "windowPeriod": "3600s",
+      "metricSumInRange": {
+        "timeSeries": "metric.type=\"logging.googleapis.com/user/calendar_hub_sync_failed\" resource.type=\"cloud_run_revision\"",
+        "range": {
+          "max": 0
+        }
+      }
+    }
+  },
+  "userLabels": {
+    "managed_by": "setup-slo-sh",
+    "issue": "81",
+    "note": "ADR-010 sync 成功率 99%/day の Pragmatic 実装: 総 sync 数を表すメトリクス未整備のため windowsBased で 1h 単位で failure 0 件を good window と定義"
+  }
+}

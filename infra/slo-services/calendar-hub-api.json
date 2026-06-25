@@ -1,0 +1,8 @@
+{
+  "displayName": "Calendar Hub API (Cloud Run)",
+  "userLabels": {
+    "managed_by": "setup-slo-sh",
+    "issue": "81",
+    "adr": "010"
+  }
+}

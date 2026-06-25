@@ -33,9 +33,15 @@ app.use(
   }),
 );
 
-// 公開APIのレート制限
-app.use('/api/public/booking/*/slots', rateLimit({ windowMs: 60_000, max: 30 }));
-app.use('/api/public/booking/*/book', rateLimit({ windowMs: 60_000, max: 5 }));
+// 公開APIのレート制限 (E2E 時は spec が短時間で複数 POST するため無効化、本番事故防止 guard 付き)
+const isE2EMode = process.env.E2E_MAIL_MOCK === '1' || process.env.E2E_CALENDAR_MOCK === '1';
+if (isE2EMode && process.env.NODE_ENV === 'production') {
+  throw new Error('E2E_* must not be enabled in production');
+}
+if (!isE2EMode) {
+  app.use('/api/public/booking/*/slots', rateLimit({ windowMs: 60_000, max: 30 }));
+  app.use('/api/public/booking/*/book', rateLimit({ windowMs: 60_000, max: 5 }));
+}
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 

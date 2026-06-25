@@ -5,8 +5,8 @@
   "serviceLevelIndicator": {
     "requestBased": {
       "goodTotalRatio": {
-        "totalServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"calendar-hub-api\"",
-        "badServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"calendar-hub-api\" metric.label.\"response_code_class\"=\"5xx\""
+        "totalServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\"",
+        "badServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\" metric.labels.\"response_code_class\"=\"5xx\""
       }
     }
   },

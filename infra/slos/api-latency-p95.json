@@ -5,7 +5,7 @@
   "serviceLevelIndicator": {
     "requestBased": {
       "distributionCut": {
-        "distributionFilter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.label.\"service_name\"=\"calendar-hub-api\"",
+        "distributionFilter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.labels.\"service_name\"=\"calendar-hub-api\"",
         "range": {
           "max": 1000
         }

@@ -49,6 +49,45 @@ fi
 
 # --- 1. Custom Monitoring Services ---
 
+# curl エラーで HTTP status を返す共通関数。
+# - 000: network 失敗 (DNS / TCP / TLS)
+# - 401/403: token expire / 権限不足
+# - 200/404: 期待される存在チェック結果
+classify_status() {
+  local status="$1"
+  local context="$2"
+  case "$status" in
+    000)
+      echo "ERROR: network failure (DNS/TCP/TLS) reaching Monitoring API for ${context}" >&2
+      exit 1
+      ;;
+    401 | 403)
+      echo "ERROR: auth failure HTTP ${status} for ${context}. Token may be expired/invalid." >&2
+      echo "       Rerun: gcloud auth login && bash $(basename "$0")" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# curl POST/PATCH を実行して失敗時にレスポンス body を表示。
+# --fail-with-body は curl 7.76+ で利用可、不在環境は -fS にフォールバック。
+curl_call() {
+  local method="$1"
+  local url="$2"
+  local config_file="$3"
+  local context="$4"
+  local body
+  if ! body=$(curl -sS --fail-with-body -X "$method" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "$url" \
+    -d @"$config_file" 2>&1); then
+    echo "ERROR: $method failed for ${context}" >&2
+    echo "$body" >&2
+    exit 1
+  fi
+}
+
 apply_service() {
   local service_id="$1"
   local config_file="$2"
@@ -59,21 +98,14 @@ apply_service() {
   status=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     "$url")
+  classify_status "$status" "service ${service_id}"
 
   if [ "$status" = "200" ]; then
     echo "Updating service: $service_id"
-    curl -sfS -X PATCH \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      -H "Content-Type: application/json" \
-      "${url}?updateMask=displayName,userLabels" \
-      -d @"$config_file" >/dev/null
+    curl_call PATCH "${url}?updateMask=displayName,userLabels" "$config_file" "service ${service_id}"
   elif [ "$status" = "404" ]; then
     echo "Creating service: $service_id"
-    curl -sfS -X POST \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      -H "Content-Type: application/json" \
-      "${API_BASE}/services?serviceId=${service_id}" \
-      -d @"$config_file" >/dev/null
+    curl_call POST "${API_BASE}/services?serviceId=${service_id}" "$config_file" "service ${service_id}"
   else
     echo "ERROR: unexpected HTTP $status from services GET for $service_id" >&2
     exit 1
@@ -91,25 +123,30 @@ apply_slo() {
   local config_file="$3"
   local url="${API_BASE}/services/${service_id}/serviceLevelObjectives/${slo_id}"
 
+  # SLO 存在チェックは services 直後の eventual consistency を吸収するため
+  # 一度だけ 2 秒待って retry する (404 が "service 未到達" の偽陰性ケース)。
   local status
   status=$(curl -s -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     "$url")
+  if [ "$status" = "404" ]; then
+    sleep 2
+    status=$(curl -s -o /dev/null -w "%{http_code}" \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      "$url")
+  fi
+  classify_status "$status" "SLO ${service_id}/${slo_id}"
 
   if [ "$status" = "200" ]; then
     echo "Updating SLO: ${service_id}/${slo_id}"
-    curl -sfS -X PATCH \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      -H "Content-Type: application/json" \
+    curl_call PATCH \
       "${url}?updateMask=displayName,goal,rollingPeriod,serviceLevelIndicator,userLabels" \
-      -d @"$config_file" >/dev/null
+      "$config_file" "SLO ${service_id}/${slo_id}"
   elif [ "$status" = "404" ]; then
     echo "Creating SLO: ${service_id}/${slo_id}"
-    curl -sfS -X POST \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      -H "Content-Type: application/json" \
+    curl_call POST \
       "${API_BASE}/services/${service_id}/serviceLevelObjectives?serviceLevelObjectiveId=${slo_id}" \
-      -d @"$config_file" >/dev/null
+      "$config_file" "SLO ${service_id}/${slo_id}"
   else
     echo "ERROR: unexpected HTTP $status from SLOs GET for ${service_id}/${slo_id}" >&2
     exit 1

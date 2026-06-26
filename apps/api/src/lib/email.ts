@@ -227,6 +227,39 @@ export function buildTestEmailHtml(): string {
 /**
  * 予約通知メールのHTML生成（オーナー向け）
  */
+/**
+ * Google Calendar の event 作成画面 (deep link) を開く URL を生成する。
+ *
+ * - クリック → Google にログイン中のユーザーで「予定を作成」画面がプレフィルされた状態で開く
+ * - OAuth scope / API 呼び出し不要
+ * - ユーザーが「保存」を押すまで予定は作成されない (= 確認後に登録できる)
+ *
+ * @see https://stackoverflow.com/questions/22757908/google-calendar-render-action-template-parameter-documentation
+ */
+export function buildGoogleCalendarRenderUrl(params: {
+  title: string;
+  start: Date;
+  end: Date;
+  details?: string;
+}): string {
+  const { title, start, end, details } = params;
+  const u = new URL('https://calendar.google.com/calendar/render');
+  u.searchParams.set('action', 'TEMPLATE');
+  u.searchParams.set('text', title);
+  u.searchParams.set('dates', `${formatGCalDate(start)}/${formatGCalDate(end)}`);
+  if (details) u.searchParams.set('details', details);
+  return u.toString();
+}
+
+/** Google Calendar render URL の `dates` パラメータ形式 `YYYYMMDDTHHMMSSZ` (basic ISO 8601 UTC) */
+function formatGCalDate(d: Date): string {
+  // 2026-07-04T08:00:00.000Z → 20260704T080000Z
+  return d
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
+}
+
 export function buildBookingNotificationHtml(params: {
   linkTitle: string;
   guestName: string;
@@ -247,6 +280,20 @@ export function buildBookingNotificationHtml(params: {
     ? `<p style="margin:8px 0;padding:12px;background:#f5f5f5;border-radius:6px;font-size:14px;">${escapeHtml(guestMessage)}</p>`
     : '';
 
+  // Google Calendar event 作成画面への deep link
+  // タイトル: 「<linkTitle> - <guestName>」、詳細: 予約者・メール・メッセージ
+  const detailsLines = [
+    `予約者: ${guestName}`,
+    guestEmail ? `メール: ${guestEmail}` : '',
+    guestMessage ? `メッセージ: ${guestMessage}` : '',
+  ].filter(Boolean);
+  const gcalUrl = buildGoogleCalendarRenderUrl({
+    title: `${linkTitle} - ${guestName}`,
+    start: slotStart,
+    end: slotEnd,
+    details: detailsLines.join('\n'),
+  });
+
   return `
 <!DOCTYPE html>
 <html>
@@ -259,6 +306,12 @@ export function buildBookingNotificationHtml(params: {
     ${guestEmailHtml}
     <p style="margin:4px 0;font-size:14px;"><strong>日時:</strong> ${escapeHtml(startStr)} 〜 ${escapeHtml(endStr)}</p>
     ${messageHtml}
+  </div>
+  <div style="text-align:center;margin:20px 0;">
+    <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
+      📅 Google カレンダーに追加
+    </a>
+    <p style="font-size:11px;color:#999;margin:8px 0 0;">ボタンを押すと予定の作成画面が開きます (保存するまで登録されません)</p>
   </div>
   <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
   <p style="font-size:12px;color:#999;">Calendar Hub から自動送信されています。</p>

@@ -24,6 +24,16 @@ export {
   type CreateBookingInput,
 } from './booking-types.js';
 export {
+  type BookingMirrorLinkStatus,
+  type BookingMirrorLink,
+  type PublicBookingMirrorLinkInfo,
+  type CreateBookingMirrorLinkInput,
+  type UpdateBookingMirrorLinkInput,
+  type BookingMirrorSlot,
+  type CreateBookingMirrorInput,
+  type BookingLinkType,
+} from './booking-mirror-types.js';
+export {
   SYNC_INTERVAL_OPTIONS,
   type SyncIntervalMinutes,
   type SyncConfig,

@@ -7,7 +7,9 @@ import { profileRoutes } from './routes/profile.js';
 import { aiRoutes } from './routes/ai.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { bookingLinkRoutes } from './routes/booking-links.js';
+import { bookingMirrorLinkRoutes } from './routes/booking-mirror-links.js';
 import { publicBookingRoutes } from './routes/public-booking.js';
+import { publicBookingMirrorRoutes } from './routes/public-booking-mirror.js';
 import { syncRoutes } from './routes/sync.js';
 import { rateLimit } from './middleware/rate-limit.js';
 import type { AppEnv } from './types.js';
@@ -41,6 +43,8 @@ if (isE2EMode && process.env.NODE_ENV === 'production') {
 if (!isE2EMode) {
   app.use('/api/public/booking/*/slots', rateLimit({ windowMs: 60_000, max: 30 }));
   app.use('/api/public/booking/*/book', rateLimit({ windowMs: 60_000, max: 5 }));
+  app.use('/api/public/booking-mirror/*/slots', rateLimit({ windowMs: 60_000, max: 30 }));
+  app.use('/api/public/booking-mirror/*/book', rateLimit({ windowMs: 60_000, max: 5 }));
 }
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -51,5 +55,7 @@ app.route('/api/profile', profileRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/notifications', notificationRoutes);
 app.route('/api/booking-links', bookingLinkRoutes);
+app.route('/api/booking-mirror-links', bookingMirrorLinkRoutes);
 app.route('/api/public/booking', publicBookingRoutes);
+app.route('/api/public/booking-mirror', publicBookingMirrorRoutes);
 app.route('/api/sync', syncRoutes);

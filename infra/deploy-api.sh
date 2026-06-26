@@ -47,7 +47,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --min-instances=0 \
   --max-instances=3 \
   --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,FRONTEND_URL=$WEB_URL,GOOGLE_REDIRECT_URI=$API_URL/api/auth/callback/google" \
-  --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
+  --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest,GOOGLE_BOOKING_MIRROR_API_KEY=google-booking-mirror-api-key:latest"
 
 # Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
 PROJECT_ID="$PROJECT_ID" REGION="$REGION" \

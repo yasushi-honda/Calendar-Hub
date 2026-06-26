@@ -25,6 +25,7 @@ import {
   shouldCreateCalendarEvent,
 } from '../lib/booking-link-utils.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
+import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -59,8 +60,7 @@ async function getActiveBookingLink(linkId: string): Promise<LinkResult> {
 async function getOwnerDisplayName(ownerUid: string): Promise<string> {
   const db = getDb();
   const doc = await db.collection('users').doc(ownerUid).get();
-  const data = doc.data();
-  return data?.displayName ?? data?.email ?? 'User';
+  return pickOwnerDisplayName(doc.data());
 }
 
 async function fetchOwnerEvents(

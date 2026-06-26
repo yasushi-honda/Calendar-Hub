@@ -83,6 +83,31 @@ jobs:
           fi
           echo "url=${WEB_URL}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve API URL for OAuth redirect_uri
+        id: apiurl
+        run: |
+          # 既存APIサービス未存在（初回ブートストラップ）のみ空を許容。
+          # 空のとき GOOGLE_REDIRECT_URI は env から省略 → google-oauth.ts の localhost default が使われる
+          # (初回 deploy 後の 2 回目以降で本番 URL が解決され、env が設定される)
+          set +e
+          API_URL=$(gcloud run services describe calendar-hub-api \
+            --project="$GCP_PROJECT_ID" \
+            --region="$GCP_REGION" \
+            --format="value(status.url)" 2>describe_api_err.log)
+          DESCRIBE_EXIT=$?
+          set -e
+          if [ "$DESCRIBE_EXIT" -ne 0 ]; then
+            if grep -q "NOT_FOUND\|Cannot find service" describe_api_err.log; then
+              echo "::warning::calendar-hub-api not yet deployed; GOOGLE_REDIRECT_URI will use localhost default on first bootstrap"
+              API_URL=""
+            else
+              echo "::error::failed to describe calendar-hub-api"
+              cat describe_api_err.log
+              exit 1
+            fi
+          fi
+          echo "url=${API_URL}" >> "$GITHUB_OUTPUT"
+
       - name: Cloud Build submit (API image)
         env:
           COMMIT_SHA: ${{ github.sha }}
@@ -100,7 +125,14 @@ jobs:
         id: deploy
         env:
           WEB_URL: ${{ steps.weburl.outputs.url }}
+          API_URL: ${{ steps.apiurl.outputs.url }}
         run: |
+          # API_URL が空 (初回 bootstrap) のときは GOOGLE_REDIRECT_URI を省略
+          # → google-oauth.ts の localhost default → 次回 deploy で本番 URL 解決後に env 設定
+          REDIRECT_URI_ENV=""
+          if [ -n "$API_URL" ]; then
+            REDIRECT_URI_ENV=",GOOGLE_REDIRECT_URI=${API_URL}/api/auth/callback/google"
+          fi
           gcloud run deploy calendar-hub-api \
             --project="$GCP_PROJECT_ID" \
             --region="$GCP_REGION" \
@@ -112,7 +144,7 @@ jobs:
             --cpu=1 \
             --min-instances=0 \
             --max-instances=3 \
-            --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},FRONTEND_URL=${WEB_URL}" \
+            --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},FRONTEND_URL=${WEB_URL}${REDIRECT_URI_ENV}" \
             --set-secrets="GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,TOKEN_ENCRYPTION_KEY=token-encryption-key:latest,SYNC_SCHEDULER_TOKEN=sync-scheduler-token:latest"
           # Cloud Run の traffic ピン留め回避 (Issue #119) — 詳細は infra/promote-traffic.sh
           PROJECT_ID="$GCP_PROJECT_ID" REGION="$GCP_REGION" \

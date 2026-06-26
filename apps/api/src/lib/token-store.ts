@@ -116,12 +116,7 @@ export async function listConnectedAccounts(userId: string): Promise<ConnectedAc
   });
 }
 
-export async function deactivateAccount(userId: string, accountId: string): Promise<void> {
+export async function deleteConnectedAccount(userId: string, accountId: string): Promise<void> {
   const db = getDb();
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('connectedAccounts')
-    .doc(accountId)
-    .update({ isActive: false });
+  await db.collection('users').doc(userId).collection('connectedAccounts').doc(accountId).delete();
 }

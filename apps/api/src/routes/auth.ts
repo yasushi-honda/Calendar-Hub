@@ -7,7 +7,7 @@ import { generateAuthUrl, exchangeCode, getGoogleUserInfo } from '../lib/google-
 import {
   saveConnectedAccount,
   listConnectedAccounts,
-  deactivateAccount,
+  deleteConnectedAccount,
 } from '../lib/token-store.js';
 import { getDb } from '../lib/firebase-admin.js';
 
@@ -181,7 +181,7 @@ authRoutes.post('/connect/timetree', requireAuth, async (c) => {
 authRoutes.delete('/accounts/:accountId', requireAuth, async (c) => {
   const user = c.get('user');
   const accountId = c.req.param('accountId');
-  await deactivateAccount(user.uid, accountId);
+  await deleteConnectedAccount(user.uid, accountId);
   return c.json({ success: true });
 });
 

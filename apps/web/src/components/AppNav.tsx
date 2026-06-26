@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: '/calendar', label: 'カレンダー', icon: '◎' },
   { href: '/sync-settings', label: '同期', icon: '⟳' },
   { href: '/booking-links', label: '予約', icon: '◈' },
+  { href: '/booking-mirror-links', label: 'ミラー', icon: '◆' },
   { href: '/ai', label: 'AI提案', icon: '◇' },
   { href: '/settings', label: '設定', icon: '⚙' },
 ];

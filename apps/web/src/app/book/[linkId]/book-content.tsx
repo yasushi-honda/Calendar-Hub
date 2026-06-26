@@ -57,7 +57,7 @@ export function BookContent() {
         setLinkInfo(linkRes.link);
         setSlots(slotsRes.slots);
         if (slotsRes.slots.length > 0) {
-          setSelectedDate(slotsRes.slots[0].start.split('T')[0]);
+          setSelectedDate(jstDateKey(slotsRes.slots[0].start));
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load');
@@ -117,11 +117,12 @@ export function BookContent() {
     };
   }, [step, linkId, refreshSlots]);
 
-  // 日付別グルーピング
+  // 日付別グルーピング（JST 基準。slot.start は UTC ISO 文字列なので、UTC 日付で
+  // split するとタイムゾーン境界で翌日朝の枠が当日に紛れ込む grouping bug が起きる）
   const dateGroups = useMemo(() => {
     const groups: Record<string, BookingSlot[]> = {};
     for (const slot of slots) {
-      const date = slot.start.split('T')[0];
+      const date = jstDateKey(slot.start);
       if (!groups[date]) groups[date] = [];
       groups[date].push(slot);
     }
@@ -134,6 +135,17 @@ export function BookContent() {
     () => (selectedDate ? (dateGroups[selectedDate] ?? []) : []),
     [selectedDate, dateGroups],
   );
+
+  // 時間帯セクション分け（朝 / 昼 / 午後 / 夕方 / 夜）
+  const slotsByTimeBand = useMemo(() => {
+    return TIME_BANDS.map((band) => ({
+      band,
+      slots: slotsForSelectedDate.filter((s) => {
+        const h = jstHour(s.start);
+        return h >= band.startHour && h < band.endHour;
+      }),
+    })).filter((g) => g.slots.length > 0);
+  }, [slotsForSelectedDate]);
 
   const handleSelectSlot = useCallback((slot: BookingSlot) => {
     setSelectedSlot(slot);
@@ -314,23 +326,32 @@ export function BookContent() {
                     </div>
                   </div>
 
-                  {/* Time slots */}
+                  {/* Time slots — 時間帯セクション化 */}
                   {selectedDate && (
                     <>
                       <div style={s.sectionLabel}>{formatDate(selectedDate)} の空き時間</div>
-                      <div style={s.slotsGrid}>
-                        {slotsForSelectedDate.map((slot) => (
-                          <button
-                            key={slot.start}
-                            data-testid={`slot-btn-${slot.start}`}
-                            onClick={() => handleSelectSlot(slot)}
-                            className="slot-btn"
-                            style={s.slotBtn}
-                          >
-                            {formatTime(slot.start)}
-                          </button>
-                        ))}
-                      </div>
+                      {slotsByTimeBand.length === 0 ? (
+                        <div style={s.noSlots}>この日の空き時間はありません</div>
+                      ) : (
+                        slotsByTimeBand.map(({ band, slots: bandSlots }) => (
+                          <div key={band.key} style={s.timeBandWrap}>
+                            <div style={s.timeBandLabel}>【{band.label}】</div>
+                            <div style={s.slotsGrid}>
+                              {bandSlots.map((slot) => (
+                                <button
+                                  key={slot.start}
+                                  data-testid={`slot-btn-${slot.start}`}
+                                  onClick={() => handleSelectSlot(slot)}
+                                  className="slot-btn"
+                                  style={s.slotBtn}
+                                >
+                                  {formatTime(slot.start)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </>
                   )}
                 </>
@@ -347,7 +368,7 @@ export function BookContent() {
               <div style={s.selectedTime}>
                 <span style={s.selectedTimeLabel}>選択した日時</span>
                 <span style={s.selectedTimeValue}>
-                  {formatDate(selectedSlot.start.split('T')[0])} {formatTime(selectedSlot.start)} -{' '}
+                  {formatDate(jstDateKey(selectedSlot.start))} {formatTime(selectedSlot.start)} -{' '}
                   {formatTime(selectedSlot.end)}
                 </span>
               </div>
@@ -420,7 +441,7 @@ export function BookContent() {
                   <strong>{confirmation.linkTitle}</strong>
                 </p>
                 <p style={s.confirmedItem}>
-                  {formatDate(confirmation.slotStart.split('T')[0])}{' '}
+                  {formatDate(jstDateKey(confirmation.slotStart))}{' '}
                   {formatTime(confirmation.slotStart)} - {formatTime(confirmation.slotEnd)}
                 </p>
                 <p style={s.confirmedItem}>主催: {confirmation.ownerDisplayName}</p>
@@ -446,6 +467,30 @@ export function BookContent() {
 }
 
 // --- ユーティリティ（モジュールスコープ） ---
+
+const TIME_BANDS = [
+  { key: 'morning', label: '朝', startHour: 0, endHour: 12 },
+  { key: 'noon', label: '昼', startHour: 12, endHour: 14 },
+  { key: 'afternoon', label: '午後', startHour: 14, endHour: 17 },
+  { key: 'evening', label: '夕方', startHour: 17, endHour: 19 },
+  { key: 'night', label: '夜', startHour: 19, endHour: 24 },
+] as const;
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function jstDateKey(isoStr: string): string {
+  const t = new Date(isoStr).getTime();
+  const jst = new Date(t + JST_OFFSET_MS);
+  const y = jst.getUTCFullYear();
+  const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(jst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function jstHour(isoStr: string): number {
+  const t = new Date(isoStr).getTime();
+  return new Date(t + JST_OFFSET_MS).getUTCHours();
+}
 
 function toLocalDate(dateStr: string): Date {
   return new Date(dateStr + 'T00:00:00');
@@ -716,11 +761,21 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   // Time slots
+  timeBandWrap: {
+    marginBottom: '20px',
+  },
+  timeBandLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
+    marginBottom: '8px',
+    letterSpacing: '0.3px',
+  },
   slotsGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
     gap: '8px',
-    marginBottom: '16px',
+    marginBottom: '8px',
   },
   slotBtn: {
     padding: '10px 8px',

@@ -1,5 +1,180 @@
 # Calendar Hub ハンドオフ (2026-06-26)
 
+> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。LATEST.md は第 6 編以降のみ保持し 500 行制限内を維持する。
+
+## 2026-06-26 セッション総括 (第 7 編): PR #167 ゲスト確認メール改修 + 主催者名 bug 修正 + グローバル memory 追加
+
+第 6 編 final update で次セッション持ち越し判定された **PR #166 候補 2 件** (ゲスト確認メール改修 + 主催者名空欄 bug 修正) を本セッションで全クローズ。あわせてミラー機能の gRPC-web 発見プロセスを抽象化した汎用 reference をグローバル memory に追加し、handoff LATEST.md の archive 整理も実施。
+
+### PR 一覧
+
+| PR   | 内容                                                     | 規模              | 結果                      |
+| ---- | -------------------------------------------------------- | ----------------- | ------------------------- |
+| #167 | fix(email): ゲスト確認メール改修 + 主催者名空欄 bug 修正 | 6 files / +143/-5 | ✅ merge + Deploy success |
+| #168 | (本 PR) docs(handoff): 第 7 編 + archive 整理            | 2 files (想定)    | ⏳ 本セッションで作成中   |
+
+### 主要成果
+
+#### M1: 主催者名空欄 bug 修正 (PR #167)
+
+`getOwnerDisplayName` で `data?.displayName ?? data?.email ?? 'User'` の `??` は `undefined`/`null` のみ fallback するため、Firestore に `displayName: ''` (空文字) が入った場合に空文字をそのまま返し、確認メールで「主催者: 」が空欄になる bug が発生していた。
+
+修正方針:
+
+- pure helper `pickOwnerDisplayName` を `apps/api/src/lib/owner-display-name.ts` に新規作成 (`||` 使用、Why コメント明示)
+- `public-booking.ts` + `public-booking-mirror.ts` の重複定義 2 箇所を helper 経由に統一 (DRY 改善は bug 修正の副次効果)
+- 単体テスト 8 件 (null / undefined / 空文字 / 空白 / 両ありなし の境界値網羅)
+
+#### M2: ゲスト確認メールに Google カレンダーボタン追加 (PR #167)
+
+PR #165 (owner 通知側) と対称実装。`buildBookingConfirmationHtml` に `buildGoogleCalendarRenderUrl` を活用したボタン追加。
+
+- タイトル: `<linkTitle> - <ownerDisplayName>` (ゲスト視点で「誰との予定か」明示)
+- details: 主催者 / 所要時間
+- 単体テスト 4 件追加 (URL / title / details / 既存要素維持)
+
+#### M3: グローバル memory 追加 — Network 観察技法の reference
+
+第 6 編 M5 (gRPC-web ブレークスルー) を抽象化し、グローバル `reference_browser_internal_api_observation.md` を新規作成。
+
+- 内容: 公式 API 不在時に Network 観察 → curl 最小化で internal API の公開性を判別する技法
+- ガード: 規約評価は decision-maker 領分 / public web client と同じ key/path の実証必須 / `internal` namespace 不安定性は構造化エラー + alert でカバー
+- scope 判定: ✅ 汎用原則のみ (プロジェクト固有な人名・組織名・実機絶対パス含まず、CRITICAL §8 準拠)
+- MEMORY.md: 「Tool / MCP / Skill / Plugin」セクション末尾に 1 行 index 追加 (136 → 137 行、200 制限内)
+- commit 担当: グローバル AI セッション側 (Calendar Hub プロジェクト AI の領分外)
+
+#### M4: MUST 化 vs reference の trade-off 議論 (decision-maker 判断)
+
+本 reference を CLAUDE.md MUST 化するか議論。多角的評価の結果:
+
+| 観点            | 結論                                                                        |
+| --------------- | --------------------------------------------------------------------------- |
+| MUST 化の効果   | 「絶対に次回も同じ判断に到達」を保証 (push 型強制)                          |
+| MUST 化のリスク | Cognitive noise / 過剰拡大解釈 / MUST inflation / 4 原則 §1 衝突            |
+| 希少事象 ROI    | 「internal API 発見」は年に数回。日常的に発動する MUST と並列にすべきでない |
+
+→ **case A 採用** (現状の reference + MEMORY.md index、pull 型運用)。CLAUDE.md は触らない。
+
+#### M5: handoff LATEST.md archive 整理 (本 PR)
+
+LATEST.md 487 行 (500 行目標を逸脱寸前) のため、第 3〜5 編 (2026-06-25〜26、line 220-424) を `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離。第 6 編 + 第 7 編のみ保持し、~280 行に圧縮。
+
+### Issue Net 変化 (第 7 編)
+
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0** (active Issue ゼロ維持)
+
+本日通算 (第 6 編 + 第 7 編): PR merge **9 件** (#158-#163, #164, #165, #167)、グローバル memory **1 件追加** (`reference_browser_internal_api_observation.md`)、active Issue 0 件維持。
+
+### 同根再発スキャン (§ 4.6)
+
+本セッション修正 PR: PR #167 (`fix(email):`) 1 件。
+
+- 同根 keyword grep (`email` / `displayName` / `getOwnerDisplayName`): 過去 7 日 archive ヒットなし
+- PR #165 (owner 通知側 feat) は **意図的な対称実装**で同根バグではない
+- 同 util / 同 middleware / 同依存共有 PR: なし
+
+→ **同根再発候補 0 件** ✅
+
+### 対症療法判定 (§ 4.7)
+
+| #   | 基準                                              | 判定 (PR #167)                                                |
+| --- | ------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ 構造的修正 (`??` → `\|\|` + helper 集約 + DRY 改善)        |
+| 2   | WebSearch / changelog 確認なし                    | ❌ JS 仕様 (`??` vs `\|\|`) は確定挙動、外部要因起因ではない  |
+| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ 新規発見 bug                                               |
+| 4   | smoke のみで構造的検証なし                        | ❌ unit test 12 件追加 + lint + type-check + e2e 7 件 全 PASS |
+
+→ **対症療法疑いなし** ✅
+
+### グローバル memory scope (§ 4.5)
+
+`~/.claude/memory/` 配下に変更 2 件 (`reference_browser_internal_api_observation.md` 新規 + `MEMORY.md` index 追加)。
+
+- scope 判定: ✅ 汎用原則のみ、プロジェクト固有要素含まず
+- commit 担当: ⏭️ Calendar Hub プロジェクト AI 領分外、グローバル AI セッション側で処理
+
+### 構造的整合性 (§ 4)
+
+| 項目                               | 判定                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 型・共有ロジック・設定ファイル変更 | ✅ `pickOwnerDisplayName` helper 新規、call site (`public-booking.ts` + `public-booking-mirror.ts`) 全更新済 |
+| 新規テーブル / API 追加            | ⏭️ なし                                                                                                      |
+| データフロー実装                   | ⏭️ なし                                                                                                      |
+
+### Quality Gate (PR #167)
+
+| 項目                                        | 結果                                       |
+| ------------------------------------------- | ------------------------------------------ |
+| `pnpm vitest run` (API)                     | ✅ 150 tests pass (helper 8 + html 4 追加) |
+| `pnpm test` (全パッケージ)                  | ✅ 243 tests pass (15 files)               |
+| `pnpm --filter @calendar-hub/api lint`      | ✅                                         |
+| `pnpm turbo type-check`                     | ✅ 8 packages successful                   |
+| `/safe-refactor`                            | ✅ 自動修正対象なし                        |
+| `/code-review low`                          | ✅ findings 0                              |
+| CI quality / e2e / GitGuardian / CodeRabbit | ✅ all pass                                |
+| Deploy workflow (calendar-hub-api + web)    | ✅ success (9m6s)                          |
+
+### 本セッションで実施した運用議論 (記録)
+
+1. **MEMORY.md 200 行制限の認識共有** — `MEMORY.md is always loaded into your conversation context — lines after 200 will be truncated`。今後追記時は (1) 既存行数確認、(2) 200 接近時は統合・圧縮検討、(3) 純粋追加は 1 行 / ~150 chars、(4) memory body は別ファイル + index 1 行リンク
+2. **グローバル設定の commit scope** — `~/.claude/` 配下の commit はグローバル AI セッションの領分。プロジェクト AI (本セッション) は memory ファイル作成までを executor として実施し、commit は別 scope で処理
+3. **MUST 化の trade-off** — MUST は強制力高いが、希少事象に適用すると cognitive noise を生む。pull 型 (reference + index) と push 型 (MUST) の使い分け原則を再確認
+
+### 次のアクション (第 7 編 final)
+
+#### 即着手タスク
+
+なし。本セッションで PR #167 merge + Deploy 完了、handoff PR (#168 想定) 作成中。
+
+#### 条件待ち (明示 trigger 付き)
+
+| #   | 項目                                                 | trigger                                            | 充足時のタスク                                               |
+| --- | ---------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
+| 1   | グローバル memory `~/.claude/` 側の commit/push      | グローバル AI セッション起動                       | 同セッションで `git status` → commit → push                  |
+| 2   | PR #167 本番動作確認 (実機)                          | decision-maker 手動 E2E                            | 「主催者: 本田泰」表示 + Google カレンダーボタンクリック確認 |
+| 3   | C1 拡張 (booking-mirror に Google Calendar 自動登録) | decision-maker 起点指示                            | spec §9.1 末尾参照                                           |
+| 4   | gRPC-web API 仕様変更時の運用 fallback               | Google 側 `internal` namespace 変更 / API Key 失効 | `parseSlotResponse` の structured log alert 化               |
+
+#### 却下候補 (記録のみ)
+
+| #   | 項目                                                                        | 着手しない理由                                                                                                                                 |
+| --- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `~/.claude/CLAUDE.md` に Network 観察 MUST 追加                             | 多角的評価の結果 MUST 化は逆効果リスク大 (cognitive noise / 4 原則衝突)。reference + index で 70% 効果、残り 30% を取りに行くコスト > メリット |
+| 2   | v1 bookingLink 機能の完全廃止                                               | 共存可能、廃止は decision-maker 起点指示で別途                                                                                                 |
+| 3   | `firebase.json` + `firestore.indexes.json` フルセット導入                   | 整理・点検カテゴリ、既存 PR #163 で最小カバー済                                                                                                |
+| 4   | gRPC-web API レスポンスの protobuf-typed parser                             | 新規価値創出、現状の defensive parser で十分稼働                                                                                               |
+| 5   | global memory 追加候補 (Cloud Run env 二重管理 / soft vs hard delete UX 等) | 別セッションで本田様確認、グローバル AI 側の領分                                                                                               |
+
+### 再開可能性判定 (第 7 編)
+
+| 項目                        | 状態                                   |
+| --------------------------- | -------------------------------------- |
+| OPEN PR                     | 1 件 (本 handoff PR #168、最後の PR)   |
+| active Issue                | 0 件 ✅                                |
+| Git clean (本 PR commit 後) | ✅                                     |
+| 残留プロセス                | ✅ なし                                |
+| Deploy 状態                 | ✅ PR #167 本番反映完了                |
+| 構造的整合性                | ✅ helper 集約完了、call site 全更新   |
+| 同根再発                    | ✅ なし                                |
+| 対症療法疑い                | ✅ なし                                |
+| グローバル memory scope     | ✅ 汎用、commit はグローバル AI 側     |
+| MEMORY.md 行数              | ✅ 137 / 200                           |
+| LATEST.md 行数              | ✅ ~430 / 500 (archive 分離で余裕確保) |
+
+### 最終結論 (第 7 編)
+
+✅ **セッション終了可** — PR #167 merge + Deploy + memory 追加 + handoff archive 整理まで完了
+
+- OPEN PR: 1 件 (本 handoff PR)
+- active Issue: 0 件
+- 即着手タスク: 0 件 / 条件待ち: 4 件 (全 decision-maker 領分)
+- 同根再発候補 0 件 / 対症療法疑いなし
+- 本セッション最大成果: handoff 第 6 編「次セッション持ち越し判定」項目をすべてクローズ + gRPC-web 発見プロセスを汎用 reference 化
+
+---
+
 ## 2026-06-26 セッション総括 (第 6 編): UX 修正 → 仕様根本見直し → Google 予約スケジュール完全反映ミラー実装 (PR #158-#163)
 
 第 5 編完了後の idle 状態から、本田様の `/catchup` → idle 判定 → 予約スケジュール `/book/<linkId>` の表示 vs Google 予約スケジュール公開ページの不一致報告 → UX 修正 (PR #158) → 仕様根本見直し → OAuth 復旧 (PR #159/#160) → アカウント hard delete (PR #161) → **gRPC-web 公開 API ブレークスルー** → Codex review → v2 完全反映ミラー実装 (PR #162) → 本番 E2E 成功 → IaC 化 (PR #163) という当初想定を大幅に超える展開。
@@ -216,212 +391,6 @@ E2E 確認中に追加で発覚した小バグ + 改善余地:
 | 型・共有ロジック・設定ファイル変更 | ✅ `BookingMirrorLink` 型新規、call site (`apps/api` + `apps/web`) 全更新済                                                            |
 | 新規テーブル / API 追加            | ✅ `bookingMirrorLinks` collection + `/api/booking-mirror-links` + `/api/public/booking-mirror` (composite index は PR #163 で IaC 化) |
 | データフロー実装                   | ✅ gRPC-web → parser → BookingMirrorSlot → FE 表示までトレース可能                                                                     |
-
-## 2026-06-26 セッション総括 (第 5 編): Issue #81 完全完了 + ADR-009 Future Work 実装
-
-第 4 編からの continuation。本田様の `/catchup` → idle 判定 → 「Vertex AI 使ってる?」確認 → 「他にすることは?」→ handoff 提案 (PR #152) → 「Issue #81 / ADR-009 Future Work 起点指示」→ ADR-009 先 (PR #153) → Issue #81 3 PR sequence (a/b/c = #154/#155/#156) の流れ。
-
-### PR 一覧
-
-| PR   | 内容                                                            | 規模               | 結果     |
-| ---- | --------------------------------------------------------------- | ------------------ | -------- |
-| #152 | docs(handoff): 第 4 編 update (PR #150 本番適用完了)            | 1 file / +41/-14   | ✅ merge |
-| #153 | feat: ADR-009 Future Work — per-account TimeTree session alert  | 6 files / +160/-44 | ✅ merge |
-| #154 | feat(infra): log retention buckets + sinks (Issue #81 a)        | 1 file / +132/-4   | ✅ merge |
-| #155 | feat(infra): Cloud Monitoring SLI/SLO definitions (Issue #81 b) | 8 files / +281/-6  | ✅ merge |
-| #156 | feat(infra): SLI/SLO dashboard (Issue #81 c)                    | 3 files / +284/-1  | ✅ merge |
-
-### ADR-009 Future Work 実装 (PR #153)
-
-- `TimeTreeAdapter` constructor を options object 化 (`{ accountId, reLoginFn? }`) + 空文字 guard
-- `[TT-SESSION-EXPIRED]` ログに `accountId=...` 埋め込み (prefix 直後)
-- log-based metric `calendar_hub_tt_session_expired` に label extractor 後付け (`REGEXP_EXTRACT(textPayload, "accountId=([^ ]+)")`)
-- alert policy を per-account 集計 (groupByFields: metric.label.accountId、threshold 1+/24h) に変更
-- `setup-monitoring.sh` に旧 displayName policy 削除の冪等 cleanup 追加
-- ADR-009 Future Work → 実装済み移動 + Codex / silent-failure-hunter / type-design-analyzer 指摘の修正 audit trail
-
-### Issue #81 完全完了 (PR #154/#155/#156)
-
-ADR-010 §1-4 設計通り 3 段階で実装:
-
-- **(a) Log retention** (PR #154): sync-logs (90d) / auth-logs (180d) buckets + 同名 sinks。`_Default sink` と並行運用 (新 sink は抑止せず、storage コスト延長分のみ加算)
-- **(b) SLI/SLO** (PR #155): 4 SLO (API 稼働率 99.5%/月 / API p95 1s / Sync 99%/day / Web 稼働率 99.5%/月) + Custom Monitoring Services 2 つ。gcloud CLI 非対応のため REST API + curl 経由
-  - Sync SLO は Pragmatic 実装: 総 sync 数メトリクス未整備のため `windowsBased.metricSumInRange` で 1h 単位 failure 0 件を good window と近似 (将来 `calendar_hub_sync_attempt` 追加後に true 成功率 SLO へ置換予定)
-- **(c) Dashboard** (PR #156): 7 widget mosaic dashboard (12 col grid、4 行構成、SLI 4 種 + 関連メトリクス集約)
-
-ADR-010 を「Accepted (設計)」→「Accepted (設計 + 一部実装中)」に更新、Status 進捗を反映。
-
-### /codex review が捕捉した本番 apply blocker 5 件 (記録)
-
-PR #155 / PR #156 で /codex review が schema 不正を検出、merge 前に修正:
-
-- **PR #155**: Custom Service body の `"custom": {}` identifier 欠落 → 追加 (Service POST 400 回避)
-- **PR #155**: SLI filter `resource.label.X` / `metric.label.X` → `resource.labels.X` / `metric.labels.X` (複数形必須)
-- **PR #155**: Sync SLO の `metricSumInRange` が MetricKind=GAUGE を要求の可能性 → TODO 記録、実機 apply 時 fallback 計画
-- **PR #156**: XyChart `thresholds` の `color` / `direction` は schema 不正 → `value` / `label` のみに削減
-- **PR #156**: `timeshiftDuration: 0s` は LINE plot のみ、STACKED_AREA で使用不可 → 削除
-
-教訓 (本セッション内 audit trail として記録、global memory 化対象外: REST API + curl IaC pattern は本 PJ 固有):
-
-- gcloud CLI で構文チェック不可な REST API + curl ベース IaC は複数 reviewer (特に Codex の schema 知識) を必ず通す
-- Cloud Monitoring filter は `*.labels.X` (複数形) が正規 (PR #154 から学んだ syntax を PR #155/#156 で一貫適用)
-
-### Issue Net 変化 (第 5 編)
-
-- Close 数: **1 件** (#81 — 3 PR 合計で完了)
-- 起票数: 0 件
-- **Net: -1 (進捗あり)**
-
-本日通算 (第 3-5 編、6/25-6/26): Issue Close **3 件** (#145 / #79 / #81)、PR merge **8 件** (#148/#149/#150/#152/#153/#154/#155/#156)、グローバル memory 3 件追加 (第 3 編)、ADR-009 / ADR-010 実装フェーズ進捗大幅
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション内: PR #152-156 すべて `feat:` / `docs:` 系、修正 PR ゼロ (各 PR 内の review fix commit は同 PR scope 内)、過去 7 日 archive grep で同根 keyword なし。**同根再発候補 0 件** ✅
-
-### 対症療法判定 (§ 4.7)
-
-修正 PR ゼロ → スキップ ✅
-
-### グローバル memory scope (§ 4.5)
-
-git status memory ファイル変更なし → スキップ ✅
-
-### 構造的整合性 (§ 4)
-
-| 項目                               | 判定                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| 型・共有ロジック・設定ファイル変更 | ✅ TimeTreeAdapter constructor 変更 (PR #153)、call site 単一 (adapter-factory.ts) のみで全箇所更新済み |
-| 新規テーブル / API 追加            | ⏭️ なし (Cloud Monitoring resources 追加のみ、アプリケーション API 変更なし)                            |
-| データフロー実装                   | ⏭️ なし                                                                                                 |
-
----
-
-## 2026-06-25 セッション総括 (第 4 編): PR #150 本番適用
-
-第 3 編で merge 済みだった PR #150 (TimeTree session expired alert) を本田様の手元で `bash infra/setup-monitoring.sh` 実行し本番適用完了。
-
-### 適用結果
-
-| 項目                                                                       | 状態                                        |
-| -------------------------------------------------------------------------- | ------------------------------------------- |
-| 新規 log metric `calendar_hub_tt_session_expired`                          | ✅ Created                                  |
-| 新規 alert policy `[Calendar Hub] TimeTree session expired (24h ≥ 3)`      | ✅ Created (id: 14975889720450637168)       |
-| 既存 4 metrics + 7 policies                                                | ✅ Updated (冪等、実質 no-op)               |
-| Notification channel `projects/.../11987628746704320713` (hy.unimail.11..) | ✅ 既存 channel 流用 (過去に VERIFIED 済み) |
-
-本セッションでは alert 稼働開始のみ。Vertex AI SDK 移行確認 (catchup 監視中項目) も実施し、`@google/genai` v1.46.0 への移行は完了済み (旧 `@google-cloud/vertexai` 不使用) を確認。
-
-### Issue Net 変化 (第 4 編)
-
-- Close 数: 0 (第 3 編で #145 + #79 既に close)
-- 起票数: 0
-- **Net: 0 (前セッション分の +2 close は維持)**
-
-### 同根再発 / 対症療法判定 (§ 4)
-
-⏭️ スキップ (本セッションは IaC apply のみ、コード変更なし)
-
----
-
-## 2026-06-25 セッション総括 (第 3 編 update): Issue #145 + #79 完全解消 + memory 3 件 + ADR-009 Future Work 実装
-
-本田様の `/catchup` → Issue #145 着手 → 完了 → ctx 余裕で memory 追記 + handoff doc → 更に Issue #79 / #81 起点指示 → 実態調査で「両者大部分実装済み」を発見 → #79 alert 1 件のみ最小スコープ着手の流れ。
-
-| PR   | 内容                                                                                  | 規模               | 結果                              |
-| ---- | ------------------------------------------------------------------------------------- | ------------------ | --------------------------------- |
-| #148 | Issue #145 解消: dummy Firebase env で AuthProvider crash 回避                        | 5 files / +119/-11 | ✅ merge + deploy success         |
-| #149 | docs(handoff): 第3セッション handoff doc                                              | 1 file / +87/-220  | ✅ merge                          |
-| #150 | feat(monitoring): Issue #79 TimeTree session expired alert (ADR-009 Future Work 実装) | 3 files / +45/-4   | ✅ merge + 本番適用済み (第 4 編) |
-
-### Issue #145 解消の根本原因
-
-CI ログの `[browser pageerror] (0,_firebase_util...getModularInstance)(...).onAuthStateChanged is not a function` が決め手。当初の最有力仮説 (IPv6 vs IPv4 解決) は probe (127.0.0.1 / localhost / ::1 全 HTTP 200) で否定。真因は以下の 4 段連鎖:
-
-1. `apps/web/src/lib/firebase.ts:19`: `apiKey` 未設定時に `auth = ({} as Auth)` を返す (空 obj cast、CI build 用 guard)
-2. `apps/web/src/components/AuthProvider.tsx:24`: `onAuthStateChanged(auth, ...)` で空 obj に対し throw
-3. `apps/web/src/app/layout.tsx`: `<Providers>` (= AuthProvider) で全 page を wrap → 公開ページも巻き添え
-4. ローカルは `.env.local` 設定済みで迂回されていた
-
-修正: `apps/web/playwright.config.ts` の web webServer command に dummy `NEXT_PUBLIC_FIREBASE_*` env を 5 種追加。**本番コード変更ゼロ**。
-
-### Issue #79 解消: 実態調査 → 最小スコープ実装
-
-CRITICAL「未実装確認プロトコル」適用で発見:
-
-- ADR-009 `009-timetree-session-management.md` (2026-05-03 Accepted) で**大部分既に完了**: 観測点プロトコル / 再ログイン運用手順 / Secret 配置
-- **真の残作業はログベースメトリクス + alert policy のみ** (Future Work セクションに記載)
-
-PR #150 で実装:
-
-- `infra/alert-policies/tt-session-expired.yaml`: `[Calendar Hub] TimeTree session expired (24h ≥ 3)`、metric `calendar_hub_tt_session_expired`、24h 内 3 件以上で発報
-- `infra/setup-monitoring.sh`: metric + alert apply 追加 (既存パターン完全踏襲)
-- `docs/adr/009-...md`: Future Work を「実装済み」「残作業」に分離、ユーザー単位識別はログ schema 変更必要なため Future Work 保持
-
-### Issue #81 実態 (調査済み、起点指示あったが未着手)
-
-ADR-010 `010-slo-and-log-retention.md` (2026-05-03 Accepted「設計」) で**設計完了**:
-
-- SLO 定義 (API 稼働率 99.5%/月、p95 1s、Sync 99%/日)、Error Budget、ログ保持 (sync 90 日 / auth 180 日)、PII マスクポリシー → ADR 記載済み
-- **真の残作業 3 件**: (a) ログバケット + sink IaC、(b) SLI/SLO Cloud Monitoring 設定、(c) ダッシュボード作成
-
-decision-maker 判断 (本セッション中)「最小スコープ #79 のみ着手」により Issue #81 は次セッション持ち越し。
-
-### グローバル memory 追加 (汎用原則として抽出、PR #149 で反映済み)
-
-| ファイル                                     | 教訓                                                                                            |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `feedback_ci_e2e_pageerror_first.md`         | CI 固有 E2E フレークは `page.on('pageerror'/'requestfailed'/'console'/'response')` を最初に取れ |
-| `feedback_root_provider_public_page_risk.md` | root layout 全 wrap provider (Auth/Context) は公開ページに巻き添えで hydration を壊す           |
-| `feedback_e2e_dummy_env_minimal_invasion.md` | E2E 固有 env 差異は test config に dummy 渡す (本番に test 分岐入れない)                        |
-
-MEMORY.md index も 2 セクション (Quality Gate / 評価バイアス + 言語/プラットフォーム Pitfall) に 3 entry 追加済み。
-
-### 同根再発スキャン (§ 4.6)
-
-- 本セッション内: `fix(e2e):` PR #148 + `feat(monitoring):` PR #150 + `docs(handoff):` PR #149 = **同根候補ゼロ** (各 PR の root cause は独立: PR #148 = Firebase guard 問題、PR #150 = Future Work 実装、PR #149 = doc 更新)
-- 過去 7 日 handoff archive (`docs/handoff/archive/`) grep: 関連症状なし
-- 前回 handoff (PR #147) は Dependabot CI failure で別 root cause
-- **同根再発なし** ✅
-
-### 対症療法判定 (§ 4.7)
-
-| 基準                                                   | 判定 (PR #148)                                                     | 判定 (PR #150)                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------- |
-| 1. retry/timeout/fallback/エラー文言のみで調査ログなし | ❌ Phase B で pageerror から真因確定、診断証跡完備                 | ❌ ADR-009 Future Work の素直な実装、retry 系修正なし         |
-| 2. WebSearch/changelog 確認ログなし                    | ❌ 内部 guard コード由来で外部 release 起因ではない                | ❌ ADR 既存設計通りの実装                                     |
-| 3. 同症状 PR が過去 30 日以内に 1 件以上               | ❌ 新規事象                                                        | ❌ ADR-009 で初実装、過去なし                                 |
-| 4. unit/smoke のみで構造的検証なし                     | ❌ CI 3 連続 PASS + ローカル regression なし + 真因 4 段連鎖言語化 | ❌ shell syntax check + 既存 yaml pattern 完全踏襲 + ADR 反映 |
-
-→ 両 PR とも全 4 基準 ❌、**対症療法疑いなし** ✅
-
-### グローバル memory scope チェック (§ 4.5)
-
-本 PJ git status には memory ファイル変更なし (`~/.claude/memory` は別管理)。本セッションで追加した 3 件は scope 判定済み:
-
-- すべて抽象表現、PR# / Issue# / プロジェクト名 / 人名 / 実機絶対パスを含まず
-- 各教訓は framework 横断の汎用原則 (Next.js / React / Playwright 等の framework 名は許容)
-- → scope OK ✅
-
-### 構造的整合性チェック (§ 4)
-
-| 項目                               | 判定                                      |
-| ---------------------------------- | ----------------------------------------- |
-| 型・共有ロジック・設定ファイル変更 | ⏭️ なし (E2E config + IaC + ADR doc のみ) |
-| 新規テーブル/API追加               | ⏭️ なし                                   |
-| データフロー実装                   | ⏭️ なし                                   |
-
-### Deploy 確認
-
-- Deploy run 28166278598 (PR #148 後): ✅ success (quality / deploy-api / deploy-web 全 PASS、8m3s)
-- PR #149 (doc only) / PR #150 (IaC + ADR only) 後の Deploy は Cloud Run 再デプロイ trigger だが、コード変更ゼロのため実質 no-op
-
-### Issue Net 変化
-
-- Close 数: **2 件** (#145 / #79)
-- 起票数: 0 件
-- **Net: +2 close (進捗あり)**
-
----
 
 ## 次のアクション (第 6 編 final update)
 

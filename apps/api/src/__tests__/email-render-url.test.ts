@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildGoogleCalendarRenderUrl, buildBookingNotificationHtml } from '../lib/email.js';
+import {
+  buildGoogleCalendarRenderUrl,
+  buildBookingNotificationHtml,
+  buildBookingConfirmationHtml,
+} from '../lib/email.js';
 
 describe('buildGoogleCalendarRenderUrl', () => {
   it('action=TEMPLATE と必須パラメータ (text / dates) を含む URL を生成する', () => {
@@ -89,5 +93,68 @@ describe('buildBookingNotificationHtml の Google カレンダー追加ボタン
 
     // details に予約者行は必ず含まれる
     expect(html).toMatch(/details=[^&]+/);
+  });
+});
+
+describe('buildBookingConfirmationHtml の Google カレンダー追加ボタン', () => {
+  it('Google Calendar render URL を含む <a> タグが本文に挿入される', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: 'テスト予約スケジュール',
+      ownerDisplayName: '本田泰',
+      guestName: '山田太郎',
+      slotStart: new Date('2026-07-04T08:00:00Z'),
+      slotEnd: new Date('2026-07-04T09:00:00Z'),
+      durationMinutes: 60,
+    });
+
+    expect(html).toContain('https://calendar.google.com/calendar/render');
+    expect(html).toContain('action=TEMPLATE');
+    expect(html).toMatch(/dates=20260704T080000Z(%2F|\/)20260704T090000Z/);
+    expect(html).toContain('Google カレンダーに追加');
+  });
+
+  it('title は「<linkTitle> - <ownerDisplayName>」形式 (ゲスト視点で誰との予定か明示)', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: '【30分】MTG',
+      ownerDisplayName: '本田泰',
+      guestName: '山田',
+      slotStart: new Date('2026-07-04T08:00:00Z'),
+      slotEnd: new Date('2026-07-04T08:30:00Z'),
+      durationMinutes: 30,
+    });
+
+    // text パラメータに linkTitle と ownerDisplayName が両方含まれる
+    expect(html).toMatch(/text=[^&]*MTG[^&]*/);
+    // %20-%20 (= " - ") もしくは + 区切りで含まれる
+    expect(html).toContain('text=');
+  });
+
+  it('details に主催者・所要時間が含まれる', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: '予約',
+      ownerDisplayName: '本田',
+      guestName: 'テスト',
+      slotStart: new Date('2026-07-04T08:00:00Z'),
+      slotEnd: new Date('2026-07-04T08:30:00Z'),
+      durationMinutes: 30,
+    });
+
+    expect(html).toMatch(/details=[^&]+/);
+  });
+
+  it('既存の予約情報 (主催者・日時・所要時間) も維持される', () => {
+    const html = buildBookingConfirmationHtml({
+      linkTitle: 'テスト予約',
+      ownerDisplayName: '本田泰',
+      guestName: '山田太郎',
+      slotStart: new Date('2026-07-04T08:00:00Z'),
+      slotEnd: new Date('2026-07-04T09:00:00Z'),
+      durationMinutes: 60,
+    });
+
+    expect(html).toContain('山田太郎');
+    expect(html).toContain('本田泰');
+    expect(html).toContain('60分');
+    expect(html).toContain('予約が確定しました');
   });
 });

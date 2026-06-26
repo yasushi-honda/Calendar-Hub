@@ -17,6 +17,7 @@ import {
   type GoogleSlot,
 } from '../lib/google-booking-mirror.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
+import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
 import type {
   BookingMirrorLink,
   BookingMirrorSlot,
@@ -63,8 +64,7 @@ async function getActiveLink(linkId: string): Promise<LinkResult> {
 async function getOwnerDisplayName(ownerUid: string): Promise<string> {
   const db = getDb();
   const doc = await db.collection('users').doc(ownerUid).get();
-  const data = doc.data();
-  return data?.displayName ?? data?.email ?? 'User';
+  return pickOwnerDisplayName(doc.data());
 }
 
 /** GoogleSlot[] を CalendarHub の BookingMirrorSlot[] に変換 */

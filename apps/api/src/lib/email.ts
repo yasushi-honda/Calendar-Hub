@@ -334,6 +334,16 @@ export function buildBookingConfirmationHtml(params: {
   const startStr = formatJstDateTime(slotStart);
   const endStr = formatJstTime(slotEnd);
 
+  // Google Calendar event 作成画面への deep link (ゲスト視点)
+  // タイトル: 「<linkTitle> - <ownerDisplayName>」、詳細: 主催者・所要時間
+  const detailsLines = [`主催者: ${ownerDisplayName}`, `所要時間: ${durationMinutes}分`];
+  const gcalUrl = buildGoogleCalendarRenderUrl({
+    title: `${linkTitle} - ${ownerDisplayName}`,
+    start: slotStart,
+    end: slotEnd,
+    details: detailsLines.join('\n'),
+  });
+
   return `
 <!DOCTYPE html>
 <html>
@@ -346,6 +356,12 @@ export function buildBookingConfirmationHtml(params: {
     <p style="margin:4px 0;font-size:14px;"><strong>主催者:</strong> ${escapeHtml(ownerDisplayName)}</p>
     <p style="margin:4px 0;font-size:14px;"><strong>日時:</strong> ${escapeHtml(startStr)} 〜 ${escapeHtml(endStr)}</p>
     <p style="margin:4px 0;font-size:14px;"><strong>所要時間:</strong> ${durationMinutes}分</p>
+  </div>
+  <div style="text-align:center;margin:20px 0;">
+    <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
+      📅 Google カレンダーに追加
+    </a>
+    <p style="font-size:11px;color:#999;margin:8px 0 0;">ボタンを押すと予定の作成画面が開きます (保存するまで登録されません)</p>
   </div>
   <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
   <p style="font-size:12px;color:#999;">このメールは Calendar Hub から自動送信されています。</p>

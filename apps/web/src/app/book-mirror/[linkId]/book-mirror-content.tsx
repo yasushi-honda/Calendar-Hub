@@ -223,6 +223,7 @@ export function BookMirrorContent() {
 
       {/* Main layout */}
       <div
+        className="book-layout"
         style={{
           ...s.layout,
           opacity: mounted ? 1 : 0,
@@ -230,13 +231,15 @@ export function BookMirrorContent() {
         }}
       >
         {/* Left: Info panel */}
-        <aside style={s.infoPanel}>
+        <aside className="book-info-panel" style={s.infoPanel}>
           <a href="/" style={s.logo}>
             Calendar<span style={s.logoAccent}>Hub</span>
           </a>
 
           <div style={s.ownerName}>{linkInfo.ownerDisplayName}</div>
-          <h1 style={s.meetingTitle}>{linkInfo.title}</h1>
+          <h1 className="book-meeting-title" style={s.meetingTitle}>
+            {linkInfo.title}
+          </h1>
 
           {slots.length > 0 && (
             <div style={s.durationBadge}>
@@ -245,12 +248,17 @@ export function BookMirrorContent() {
             </div>
           )}
 
-          {linkInfo.description && <p style={s.description}>{linkInfo.description}</p>}
+          {linkInfo.description && (
+            <p className="book-description" style={s.description}>
+              {linkInfo.description}
+            </p>
+          )}
 
-          <div style={s.divider} />
+          <div className="book-divider" style={s.divider} />
 
-          <div style={s.steps}>
+          <div className="book-steps" style={s.steps}>
             <div
+              className="book-step"
               style={{
                 ...s.stepItem,
                 color: step === 'select' ? 'var(--color-accent)' : 'var(--color-text-muted)',
@@ -259,6 +267,7 @@ export function BookMirrorContent() {
               <span style={s.stepNum}>1</span> 日時を選択
             </div>
             <div
+              className="book-step"
               style={{
                 ...s.stepItem,
                 color: step === 'form' ? 'var(--color-accent)' : 'var(--color-text-muted)',
@@ -267,6 +276,7 @@ export function BookMirrorContent() {
               <span style={s.stepNum}>2</span> 情報を入力
             </div>
             <div
+              className="book-step"
               style={{
                 ...s.stepItem,
                 color: step === 'confirmed' ? 'var(--color-accent)' : 'var(--color-text-muted)',
@@ -278,7 +288,7 @@ export function BookMirrorContent() {
         </aside>
 
         {/* Right: Content area */}
-        <main style={s.contentPanel}>
+        <main className="book-content-panel" style={s.contentPanel}>
           {error && <div style={s.errorBanner}>{error}</div>}
 
           {step === 'select' && (
@@ -291,7 +301,7 @@ export function BookMirrorContent() {
                 <div style={s.noSlots}>利用可能な日程がありません</div>
               ) : (
                 <>
-                  <div style={s.dateCardsWrap}>
+                  <div className="book-date-cards-wrap" style={s.dateCardsWrap}>
                     <div style={s.dateCards}>
                       {availableDates.map((date) => (
                         <button
@@ -301,7 +311,7 @@ export function BookMirrorContent() {
                             setSelectedDate(date);
                             setSelectedSlot(null);
                           }}
-                          className="date-card"
+                          className="date-card book-date-card"
                           style={{
                             ...s.dateCard,
                             borderColor:
@@ -338,13 +348,13 @@ export function BookMirrorContent() {
                         slotsByTimeBand.map(({ band, slots: bandSlots }) => (
                           <div key={band.key} style={s.timeBandWrap}>
                             <div style={s.timeBandLabel}>【{band.label}】</div>
-                            <div style={s.slotsGrid}>
+                            <div className="book-slots-grid" style={s.slotsGrid}>
                               {bandSlots.map((slot) => (
                                 <button
                                   key={slot.start}
                                   data-testid={`slot-btn-${slot.start}`}
                                   onClick={() => handleSelectSlot(slot)}
-                                  className="slot-btn"
+                                  className="slot-btn book-slot-btn"
                                   style={s.slotBtn}
                                 >
                                   {formatTime(slot.start)}
@@ -384,6 +394,7 @@ export function BookMirrorContent() {
                   value={guestName}
                   onChange={(e) => setGuestName(e.target.value)}
                   placeholder="山田 太郎"
+                  className="book-input"
                   style={s.input}
                   autoFocus
                 />
@@ -394,6 +405,7 @@ export function BookMirrorContent() {
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
                   placeholder="email@example.com"
+                  className="book-input"
                   style={s.input}
                 />
                 <span style={s.hint}>入力すると確認メールをお送りします</span>
@@ -404,6 +416,7 @@ export function BookMirrorContent() {
                   onChange={(e) => setGuestMessage(e.target.value)}
                   placeholder="ご要望など"
                   rows={3}
+                  className="book-input"
                   style={{ ...s.input, resize: 'vertical' as const }}
                 />
               </div>
@@ -412,7 +425,7 @@ export function BookMirrorContent() {
                 onClick={handleSubmit}
                 disabled={!guestName.trim() || submitting}
                 data-testid="submit-btn"
-                className="submit-btn"
+                className="submit-btn book-submit-btn"
                 style={{
                   ...s.submitBtn,
                   opacity: !guestName.trim() || submitting ? 0.5 : 1,
@@ -547,15 +560,77 @@ const keyframes = `
   .submit-btn:hover:not(:disabled) {
     background: #c86840 !important;
   }
-  @media (max-width: 768px) {
+  @media (max-width: 767px) {
     .book-layout {
       flex-direction: column !important;
+      margin: 12px 12px 8px !important;
+      min-height: auto !important;
+      border-radius: 16px !important;
     }
     .book-info-panel {
+      width: 100% !important;
+      min-width: 0 !important;
       border-right: none !important;
       border-bottom: 1px solid var(--color-border) !important;
-      max-width: 100% !important;
-      padding: 24px !important;
+      padding: 20px 20px 16px !important;
+    }
+    .book-meeting-title {
+      font-size: 20px !important;
+      margin-bottom: 10px !important;
+    }
+    .book-description {
+      font-size: 12px !important;
+      line-height: 1.6 !important;
+      margin-bottom: 4px !important;
+    }
+    .book-divider {
+      margin: 12px 0 4px !important;
+    }
+    .book-steps {
+      margin-top: 4px !important;
+      flex-direction: row !important;
+      gap: 12px !important;
+      justify-content: flex-start !important;
+      flex-wrap: wrap !important;
+    }
+    .book-step {
+      font-size: 11px !important;
+      gap: 6px !important;
+    }
+    .book-content-panel {
+      padding: 20px 18px 24px !important;
+      max-height: none !important;
+      overflow-y: visible !important;
+    }
+    .book-date-cards-wrap {
+      margin: 0 -18px 20px !important;
+      padding: 0 18px 8px !important;
+      -webkit-overflow-scrolling: touch;
+    }
+    .book-date-card {
+      min-width: 64px !important;
+      min-height: 76px !important;
+      padding: 12px 14px !important;
+    }
+    .book-slots-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 10px !important;
+    }
+    .book-slot-btn {
+      padding: 14px 8px !important;
+      min-height: 48px !important;
+      font-size: 15px !important;
+      border-radius: 10px !important;
+    }
+    .book-input {
+      min-height: 44px !important;
+      font-size: 16px !important;
+    }
+    .book-submit-btn {
+      min-height: 52px !important;
+      font-size: 16px !important;
+      position: sticky;
+      bottom: 12px;
     }
   }
 `;

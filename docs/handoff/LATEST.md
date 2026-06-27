@@ -1,4 +1,4 @@
-# Calendar Hub ハンドオフ (2026-06-27)
+# Calendar Hub ハンドオフ (2026-06-27, 第 9 編まで)
 
 > 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。LATEST.md は第 7 編以降のみ保持し 500 行制限内を維持する。
 
@@ -229,63 +229,116 @@ decision-maker から本番 URL のモバイル表示スクリーンショット
 
 ---
 
-## 次のアクション (第 8 編 update)
+## 2026-06-27 セッション総括 (第 9 編): 条件待ち #3/#4/#5 整理 — PR #171 SLO fix + 監視 IaC 適用 + global memory 化見送り判断
+
+第 8 編完了後、decision-maker から「条件待ち 8 件は重要か?」の問いを受け、AI 側で 3 カテゴリ分類 (予防/監視 / 新機能ネタ / 長期放置) して整理提案 → decision-maker 判断「#3/#4/#5 を整理したい」を受け、第 5/第 6 編からの積み残し 3 項目を集中解消。さらに global memory 化 (#3) は影響範囲の慎重評価により最終的に見送り判断。
+
+### PR / 適用一覧
+
+| 項目         | 内容                                                                                     | 規模           | 結果                                                                |
+| ------------ | ---------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------- |
+| PR #171      | fix(infra): SLO sync-success userLabels の 63 chars 制約違反を修正                       | 1 file / +2/-2 | ✅ merge                                                            |
+| #4 適用      | bash infra/setup-monitoring.sh (PR #153 由来 TimeTree session expired per-account alert) | -              | ✅ alertPolicies/3361644955105358696 created + 既存 alert 全 update |
+| #5 適用      | bash setup-log-retention.sh + setup-slo.sh + setup-dashboard.sh (PR #154/#155/#156 由来) | -              | ✅ log buckets / SLO 4 種 / dashboard 全 create                     |
+| (close) #318 | claude-code-config: Calendar Hub 第 6 編教訓 4 件追加 (global memory)                    | -              | ❌ close (global 影響回避)                                          |
+
+### 主要成果
+
+#### M1: SLO 適用中に sync-success.json の 63 chars 制約違反を発見 → fix PR #171
+
+`bash infra/setup-slo.sh` 実行中、`sync-success.json` の `userLabels` に `note` (110 chars) + `todo_metric_kind` (142 chars) が含まれており GCP SLO API の **label value 63 chars 制限** で create 失敗。短縮ラベル (`adr=010` / `impl=pragmatic-windows-based`) のみ残して fix → 4 SLO 全 create 成功。
+
+#### M2: 監視 IaC 一括本番適用 (第 5/第 6 編からの積み残し解消)
+
+- Cloud Monitoring Alert Policies (Calendar Hub 全 7 種 + 新規 TimeTree per-account alert) update / create
+- Log buckets (sync-logs 90d / auth-logs 180d) + sinks 作成
+- SLI/SLO 定義 (api-availability / api-latency-p95 / sync-success / web-availability) create
+- SLI/SLO Dashboard create
+
+#### M3: global memory 化 (#3) は最終的に見送り — global 影響範囲の慎重評価
+
+第 6 編教訓 4 件 (Cloud Run env 二重管理 / Google gRPC-web Playwright 解析 / soft vs hard delete UX / Codex verdict → impl-plan) を `~/.claude/memory/` に追加しようとして PR #318 (claude-code-config) を作成したが、decision-maker から「グローバルの変更は影響が大きい、徹底して考えろ」の指摘。再評価の結果:
+
+- 実害は Calendar Hub 1 プロジェクトのみで発生 (CLAUDE.md MUST: project-scope に書くべき)
+- 他プロジェクトでも AI が同じ behavior を強制すると過干渉・誤判断のリスク
+- AI 起点で global rule を作るのは 4 原則 §1 違反の疑い (decision-maker の起点指示なし)
+- 既存 memory との重複も発見 (`reference_browser_internal_api_observation.md` と新規 reference が実質重複)
+
+→ PR #318 を close + ローカル 4 ファイル削除 + MEMORY.md revert。グローバル影響完全ゼロ (~/.claude 全領域 untouched 状態) を確認。
+
+### 同根再発スキャン (§ 4.6)
+
+- 本セッション内 / 過去 7 日 archive とも候補 0 件
+- PR #171 は GCP SLO API の label 仕様問題、共有 util / middleware 経由なし
+
+### 対症療法判定 (§ 4.7)
+
+- 該当なし (PR #171 は root cause = GCP label 仕様未把握を特定 + 短縮対応で構造的に解消)
+
+### グローバル memory scope チェック (§ 4.5)
+
+- ローカル `~/.claude/memory/` への変更は最終的に全て revert
+- グローバル影響ゼロ (~/.claude の memory / CLAUDE.md / rules / skills / hooks / settings.json すべて untouched)
+
+---
+
+## 次のアクション (第 9 編 update)
 
 ### 即着手タスク
 
-なし。本セッション (第 8 編) で PR #169 (book-mirror モバイル UI 改善) を merge + 本番反映 + 実機確認まで完了。OPEN PR ゼロ。
+なし。本セッション (第 9 編) で 条件待ち #3/#4/#5 を整理 (PR #171 fix + 監視 IaC 全適用 + global memory 化見送り判断) + PR #169 (book-mirror モバイル UI) 完了済。OPEN PR ゼロ。
 
-### 条件待ち (明示 trigger 付き)
+### 条件待ち (明示 trigger 付き) — 第 9 編で 8 件 → 5 件に整理
 
 | #   | 項目                                                     | trigger                                              | trigger 充足時のタスク                                                                                                                                 |
 | --- | -------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加) | decision-maker から「C1 着手」明示指示               | 対象カレンダーを CalendarHub OAuth 連携、`BookingMirrorLink` に `blockCalendarId` 等追加、POST `/book` に `createBlockEvent` 追加 (spec §9.1 末尾参照) |
 | 2   | gRPC-web API 仕様変更時の運用 fallback                   | Google 側で `internal` namespace 変更 / API Key 失効 | `parseSlotResponse` の structured log を Cloud Logging で alert 化、Codex review High #1 の継続対応                                                    |
-| 3   | global memory 追加 (第 6 編教訓 4 件)                    | 別セッションで本田様確認                             | Cloud Run env 二重管理 / Google 内部 API Playwright 解析 / soft vs hard delete UX / Codex verdict ワークフロー                                         |
-| 4   | PR #153 本番適用 (`bash infra/setup-monitoring.sh`)      | decision-maker 手動実行 (第 5 編からの継続)          | 適用後 alert policy 表示確認                                                                                                                           |
-| 5   | PR #154/#155/#156 本番適用                               | decision-maker 手動実行 (第 5 編からの継続)          | 適用後 各リソース確認 (buckets / SLOs / dashboard)                                                                                                     |
-| 6   | ADR-010 Future Work 3 件 + ADR-009 既存ロジック強化 3 件 | decision-maker 起点指示 (第 5 編からの継続)          | 該当指示時に着手                                                                                                                                       |
-| 7   | Issue #145 の 3 連続 PASS 厳密化                         | 万一 main 上で flaky 再発                            | listener は永続化済み、再発時に diagnostic PR を起動                                                                                                   |
-| 8   | book-mirror デスクトップ (≥ 768px) UI レビュー           | decision-maker 起点指示                              | モバイル改修で desktop は touch せず、layout 維持。要望あれば確認                                                                                      |
+| 3   | ADR-010 Future Work 3 件 + ADR-009 既存ロジック強化 3 件 | decision-maker 起点指示 (第 5 編からの継続)          | 該当指示時に着手                                                                                                                                       |
+| 4   | Issue #145 の 3 連続 PASS 厳密化                         | 万一 main 上で flaky 再発                            | listener は永続化済み、再発時に diagnostic PR を起動                                                                                                   |
+| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー           | decision-maker 起点指示                              | モバイル改修で desktop は touch せず、layout 維持。要望あれば確認                                                                                      |
 
 ### 却下候補 (記録のみ)
 
-| #   | 項目                                                          | 着手しない理由                                                                                        |
-| --- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 1   | v1 bookingLink 機能の完全廃止                                 | 共存可能、廃止は decision-maker 起点指示で別途                                                        |
-| 2   | `firebase.json` + `firestore.indexes.json` フルセット導入     | 整理・点検カテゴリ。既存 index export → JSON 化が必要、PR #163 で最小カバー済み、本セッションの範囲外 |
-| 3   | gRPC-web API レスポンスの protobuf-typed parser               | 新規価値創出。現状の defensive parser で十分稼働、Codex 指摘外                                        |
-| 4   | BigQuery sink (Issue #81 任意項目、第 5 編から継続)           | 新規価値創出。decision-maker 起点なし                                                                 |
-| 5   | route group `(public)` で AuthProvider 分離 (第 5 編から継続) | 新規価値創出。アーキテクチャ改善は起点 unclear                                                        |
-| 6   | E2E spec の listener を共通 helper に抽出 (第 5 編から継続)   | 整理・点検。DRY 効果限定的                                                                            |
-| 7   | GitHub 脆弱性アラート 21 件の追加対応                         | 守り (修正)。Dependabot 自動 PR 待ち                                                                  |
+| #   | 項目                                                          | 着手しない理由                                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | v1 bookingLink 機能の完全廃止                                 | 共存可能、廃止は decision-maker 起点指示で別途                                                                                                                                                                             |
+| 2   | `firebase.json` + `firestore.indexes.json` フルセット導入     | 整理・点検カテゴリ。既存 index export → JSON 化が必要、PR #163 で最小カバー済み、本セッションの範囲外                                                                                                                      |
+| 3   | gRPC-web API レスポンスの protobuf-typed parser               | 新規価値創出。現状の defensive parser で十分稼働、Codex 指摘外                                                                                                                                                             |
+| 4   | BigQuery sink (Issue #81 任意項目、第 5 編から継続)           | 新規価値創出。decision-maker 起点なし                                                                                                                                                                                      |
+| 5   | route group `(public)` で AuthProvider 分離 (第 5 編から継続) | 新規価値創出。アーキテクチャ改善は起点 unclear                                                                                                                                                                             |
+| 6   | E2E spec の listener を共通 helper に抽出 (第 5 編から継続)   | 整理・点検。DRY 効果限定的                                                                                                                                                                                                 |
+| 7   | GitHub 脆弱性アラート 21 件の追加対応                         | 守り (修正)。Dependabot 自動 PR 待ち                                                                                                                                                                                       |
+| 8   | 第 6 編教訓 4 件の global memory 化 (第 9 編で判断)           | 実害が Calendar Hub 1 プロジェクトのみで発生 (CLAUDE.md MUST: project-scope)。global 影響範囲が大きく、AI 起点で global rule を作るのは 4 原則 §1 違反の疑い。教訓は handoff archive (`archive/2026-06-26-vol6.md`) で完結 |
 
 ### 再開可能性判定
 
-| 項目                    | 状態                                                                |
-| ----------------------- | ------------------------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (PR #169 merge 済、本 handoff PR が最後)                    |
-| active Issue            | 0 件 ✅                                                             |
-| Git clean               | ✅ (本 handoff PR commit 後)                                        |
-| 残留プロセス            | ✅ なし                                                             |
-| Deploy 状態             | ✅ PR #169 本番反映完了 (Deploy 9m25s success)、実機 UI 確認済      |
-| 構造的整合性            | ✅ 1 file CSS / className 変更のみ、API・型・データフロー影響なし   |
-| 同根再発                | ✅ なし (本セッション内 / 過去 7 日 archive とも候補 0 件)          |
-| 対症療法疑い            | ✅ なし (root cause = className 未付与 を特定 + 構造的修正)         |
-| グローバル memory scope | ✅ memory 変更なし、§ 4.5 スキップ                                  |
-| 本番 UI 動作確認        | ✅ iPhone 12 Pro viewport で縦並び + 2 列 grid + 44px touch (Image) |
+| 項目                    | 状態                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (PR #169/#170/#171 merge 済、本 handoff PR が最後)                            |
+| active Issue            | 0 件 ✅                                                                               |
+| Git clean               | ✅ (本 handoff PR commit 後)                                                          |
+| 残留プロセス            | ✅ なし                                                                               |
+| Deploy 状態             | ✅ PR #169/#171 本番反映完了                                                          |
+| 監視 IaC 本番適用       | ✅ Alert Policies / Log buckets / SLI/SLO 4 種 / Dashboard すべて create              |
+| 構造的整合性            | ✅ infra 変更は冪等スクリプト、コード側 API・型・データフロー影響なし                 |
+| 同根再発                | ✅ なし (本セッション内 / 過去 7 日 archive とも候補 0 件)                            |
+| 対症療法疑い            | ✅ なし (PR #171 = GCP label 仕様の構造的対応)                                        |
+| グローバル memory scope | ✅ **完全に無し** — PR #318 close + ローカル 4 ファイル削除 + MEMORY.md revert 確認済 |
+| 本番 UI 動作確認        | ✅ iPhone 12 Pro viewport で縦並び + 2 列 grid + 44px touch (第 8 編で確認済)         |
 
 ---
 
 ## 最終結論
 
-✅ **セッション終了可** — PR #169 (book-mirror モバイル UI 大幅改善) が本番反映 + 実機 UI 確認まで完了
+✅ **セッション終了可** — 条件待ち 3 件解消 (#4 monitoring + #5 SLI/SLO IaC 適用 + #3 global memory 化見送り判断) + PR #171 SLO fix + PR #169 book-mirror モバイル UI (第 8 編完了済)
 
-- OPEN PR ゼロ (PR #169 merge 済、本 handoff PR が最後)
+- OPEN PR ゼロ (PR #169/#170/#171 merge 済、本 handoff PR が最後)
 - active Issue ゼロ
 - Git clean (本 handoff PR commit 後)
 - 即着手タスク = 0 / 残留プロセスなし
 - Issue Net 変化 = 0 / 0
 - 同根再発候補 0 件 / 対症療法疑いなし
-- 本セッション成果: モバイル予約 UX を「使いにくくて見づらい」状態 → 縦並び + 2 列 grid + touch target 44px+ の usable な状態へ
-- 次セッション候補: 第 7 編「条件待ち」リストは引き続き有効。decision-maker 起点指示があるまで AI 側からの能動着手なし
+- **グローバル影響完全ゼロ** (~/.claude の memory / CLAUDE.md / rules / skills / hooks / settings.json すべて untouched)
+- 本セッション成果: 条件待ち 8 件 → 5 件に削減 (#4/#5 適用済 + #3 却下候補へ降格)
+- 次セッション候補: 残 5 件はすべて decision-maker 起点指示待ち。AI 側からの能動着手なし

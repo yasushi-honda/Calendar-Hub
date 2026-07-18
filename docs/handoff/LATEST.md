@@ -1,349 +1,6 @@
-# Calendar Hub ハンドオフ (2026-06-27, 第 9 編まで)
+# Calendar Hub ハンドオフ (2026-07-19, 第 12 編まで)
 
-> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。LATEST.md は第 7 編以降のみ保持し 500 行制限内を維持する。
-
-## 2026-06-26 セッション総括 (第 7 編): PR #167 ゲスト確認メール改修 + 主催者名 bug 修正 + グローバル memory 追加
-
-第 6 編 final update で次セッション持ち越し判定された **PR #166 候補 2 件** (ゲスト確認メール改修 + 主催者名空欄 bug 修正) を本セッションで全クローズ。あわせてミラー機能の gRPC-web 発見プロセスを抽象化した汎用 reference をグローバル memory に追加し、handoff LATEST.md の archive 整理も実施。
-
-### PR 一覧
-
-| PR   | 内容                                                     | 規模              | 結果                      |
-| ---- | -------------------------------------------------------- | ----------------- | ------------------------- |
-| #167 | fix(email): ゲスト確認メール改修 + 主催者名空欄 bug 修正 | 6 files / +143/-5 | ✅ merge + Deploy success |
-| #168 | (本 PR) docs(handoff): 第 7 編 + archive 整理            | 2 files (想定)    | ⏳ 本セッションで作成中   |
-
-### 主要成果
-
-#### M1: 主催者名空欄 bug 修正 (PR #167)
-
-`getOwnerDisplayName` で `data?.displayName ?? data?.email ?? 'User'` の `??` は `undefined`/`null` のみ fallback するため、Firestore に `displayName: ''` (空文字) が入った場合に空文字をそのまま返し、確認メールで「主催者: 」が空欄になる bug が発生していた。
-
-修正方針:
-
-- pure helper `pickOwnerDisplayName` を `apps/api/src/lib/owner-display-name.ts` に新規作成 (`||` 使用、Why コメント明示)
-- `public-booking.ts` + `public-booking-mirror.ts` の重複定義 2 箇所を helper 経由に統一 (DRY 改善は bug 修正の副次効果)
-- 単体テスト 8 件 (null / undefined / 空文字 / 空白 / 両ありなし の境界値網羅)
-
-#### M2: ゲスト確認メールに Google カレンダーボタン追加 (PR #167)
-
-PR #165 (owner 通知側) と対称実装。`buildBookingConfirmationHtml` に `buildGoogleCalendarRenderUrl` を活用したボタン追加。
-
-- タイトル: `<linkTitle> - <ownerDisplayName>` (ゲスト視点で「誰との予定か」明示)
-- details: 主催者 / 所要時間
-- 単体テスト 4 件追加 (URL / title / details / 既存要素維持)
-
-#### M3: グローバル memory 追加 — Network 観察技法の reference
-
-第 6 編 M5 (gRPC-web ブレークスルー) を抽象化し、グローバル `reference_browser_internal_api_observation.md` を新規作成。
-
-- 内容: 公式 API 不在時に Network 観察 → curl 最小化で internal API の公開性を判別する技法
-- ガード: 規約評価は decision-maker 領分 / public web client と同じ key/path の実証必須 / `internal` namespace 不安定性は構造化エラー + alert でカバー
-- scope 判定: ✅ 汎用原則のみ (プロジェクト固有な人名・組織名・実機絶対パス含まず、CRITICAL §8 準拠)
-- MEMORY.md: 「Tool / MCP / Skill / Plugin」セクション末尾に 1 行 index 追加 (136 → 137 行、200 制限内)
-- commit 担当: グローバル AI セッション側 (Calendar Hub プロジェクト AI の領分外)
-
-#### M4: MUST 化 vs reference の trade-off 議論 (decision-maker 判断)
-
-本 reference を CLAUDE.md MUST 化するか議論。多角的評価の結果:
-
-| 観点            | 結論                                                                        |
-| --------------- | --------------------------------------------------------------------------- |
-| MUST 化の効果   | 「絶対に次回も同じ判断に到達」を保証 (push 型強制)                          |
-| MUST 化のリスク | Cognitive noise / 過剰拡大解釈 / MUST inflation / 4 原則 §1 衝突            |
-| 希少事象 ROI    | 「internal API 発見」は年に数回。日常的に発動する MUST と並列にすべきでない |
-
-→ **case A 採用** (現状の reference + MEMORY.md index、pull 型運用)。CLAUDE.md は触らない。
-
-#### M5: handoff LATEST.md archive 整理 (本 PR)
-
-LATEST.md 487 行 (500 行目標を逸脱寸前) のため、第 3〜5 編 (2026-06-25〜26、line 220-424) を `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離。第 6 編 + 第 7 編のみ保持し、~280 行に圧縮。
-
-### Issue Net 変化 (第 7 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0** (active Issue ゼロ維持)
-
-本日通算 (第 6 編 + 第 7 編): PR merge **9 件** (#158-#163, #164, #165, #167)、グローバル memory **1 件追加** (`reference_browser_internal_api_observation.md`)、active Issue 0 件維持。
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #167 (`fix(email):`) 1 件。
-
-- 同根 keyword grep (`email` / `displayName` / `getOwnerDisplayName`): 過去 7 日 archive ヒットなし
-- PR #165 (owner 通知側 feat) は **意図的な対称実装**で同根バグではない
-- 同 util / 同 middleware / 同依存共有 PR: なし
-
-→ **同根再発候補 0 件** ✅
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定 (PR #167)                                                |
-| --- | ------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ 構造的修正 (`??` → `\|\|` + helper 集約 + DRY 改善)        |
-| 2   | WebSearch / changelog 確認なし                    | ❌ JS 仕様 (`??` vs `\|\|`) は確定挙動、外部要因起因ではない  |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ 新規発見 bug                                               |
-| 4   | smoke のみで構造的検証なし                        | ❌ unit test 12 件追加 + lint + type-check + e2e 7 件 全 PASS |
-
-→ **対症療法疑いなし** ✅
-
-### グローバル memory scope (§ 4.5)
-
-`~/.claude/memory/` 配下に変更 2 件 (`reference_browser_internal_api_observation.md` 新規 + `MEMORY.md` index 追加)。
-
-- scope 判定: ✅ 汎用原則のみ、プロジェクト固有要素含まず
-- commit 担当: ⏭️ Calendar Hub プロジェクト AI 領分外、グローバル AI セッション側で処理
-
-### 構造的整合性 (§ 4)
-
-| 項目                               | 判定                                                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 型・共有ロジック・設定ファイル変更 | ✅ `pickOwnerDisplayName` helper 新規、call site (`public-booking.ts` + `public-booking-mirror.ts`) 全更新済 |
-| 新規テーブル / API 追加            | ⏭️ なし                                                                                                      |
-| データフロー実装                   | ⏭️ なし                                                                                                      |
-
-### Quality Gate (PR #167)
-
-| 項目                                        | 結果                                       |
-| ------------------------------------------- | ------------------------------------------ |
-| `pnpm vitest run` (API)                     | ✅ 150 tests pass (helper 8 + html 4 追加) |
-| `pnpm test` (全パッケージ)                  | ✅ 243 tests pass (15 files)               |
-| `pnpm --filter @calendar-hub/api lint`      | ✅                                         |
-| `pnpm turbo type-check`                     | ✅ 8 packages successful                   |
-| `/safe-refactor`                            | ✅ 自動修正対象なし                        |
-| `/code-review low`                          | ✅ findings 0                              |
-| CI quality / e2e / GitGuardian / CodeRabbit | ✅ all pass                                |
-| Deploy workflow (calendar-hub-api + web)    | ✅ success (9m6s)                          |
-
-### 本セッションで実施した運用議論 (記録)
-
-1. **MEMORY.md 200 行制限の認識共有** — `MEMORY.md is always loaded into your conversation context — lines after 200 will be truncated`。今後追記時は (1) 既存行数確認、(2) 200 接近時は統合・圧縮検討、(3) 純粋追加は 1 行 / ~150 chars、(4) memory body は別ファイル + index 1 行リンク
-2. **グローバル設定の commit scope** — `~/.claude/` 配下の commit はグローバル AI セッションの領分。プロジェクト AI (本セッション) は memory ファイル作成までを executor として実施し、commit は別 scope で処理
-3. **MUST 化の trade-off** — MUST は強制力高いが、希少事象に適用すると cognitive noise を生む。pull 型 (reference + index) と push 型 (MUST) の使い分け原則を再確認
-
-### 次のアクション (第 7 編 final)
-
-#### 即着手タスク
-
-なし。本セッションで PR #167 merge + Deploy 完了、handoff PR (#168 想定) 作成中。
-
-#### 条件待ち (明示 trigger 付き)
-
-| #   | 項目                                                 | trigger                                            | 充足時のタスク                                               |
-| --- | ---------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| 1   | グローバル memory `~/.claude/` 側の commit/push      | グローバル AI セッション起動                       | 同セッションで `git status` → commit → push                  |
-| 2   | PR #167 本番動作確認 (実機)                          | decision-maker 手動 E2E                            | 「主催者: 本田泰」表示 + Google カレンダーボタンクリック確認 |
-| 3   | C1 拡張 (booking-mirror に Google Calendar 自動登録) | decision-maker 起点指示                            | spec §9.1 末尾参照                                           |
-| 4   | gRPC-web API 仕様変更時の運用 fallback               | Google 側 `internal` namespace 変更 / API Key 失効 | `parseSlotResponse` の structured log alert 化               |
-
-#### 却下候補 (記録のみ)
-
-| #   | 項目                                                                        | 着手しない理由                                                                                                                                 |
-| --- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `~/.claude/CLAUDE.md` に Network 観察 MUST 追加                             | 多角的評価の結果 MUST 化は逆効果リスク大 (cognitive noise / 4 原則衝突)。reference + index で 70% 効果、残り 30% を取りに行くコスト > メリット |
-| 2   | v1 bookingLink 機能の完全廃止                                               | 共存可能、廃止は decision-maker 起点指示で別途                                                                                                 |
-| 3   | `firebase.json` + `firestore.indexes.json` フルセット導入                   | 整理・点検カテゴリ、既存 PR #163 で最小カバー済                                                                                                |
-| 4   | gRPC-web API レスポンスの protobuf-typed parser                             | 新規価値創出、現状の defensive parser で十分稼働                                                                                               |
-| 5   | global memory 追加候補 (Cloud Run env 二重管理 / soft vs hard delete UX 等) | 別セッションで本田様確認、グローバル AI 側の領分                                                                                               |
-
-### 再開可能性判定 (第 7 編)
-
-| 項目                        | 状態                                   |
-| --------------------------- | -------------------------------------- |
-| OPEN PR                     | 1 件 (本 handoff PR #168、最後の PR)   |
-| active Issue                | 0 件 ✅                                |
-| Git clean (本 PR commit 後) | ✅                                     |
-| 残留プロセス                | ✅ なし                                |
-| Deploy 状態                 | ✅ PR #167 本番反映完了                |
-| 構造的整合性                | ✅ helper 集約完了、call site 全更新   |
-| 同根再発                    | ✅ なし                                |
-| 対症療法疑い                | ✅ なし                                |
-| グローバル memory scope     | ✅ 汎用、commit はグローバル AI 側     |
-| MEMORY.md 行数              | ✅ 137 / 200                           |
-| LATEST.md 行数              | ✅ ~430 / 500 (archive 分離で余裕確保) |
-
-### 最終結論 (第 7 編)
-
-✅ **セッション終了可** — PR #167 merge + Deploy + memory 追加 + handoff archive 整理まで完了
-
-- OPEN PR: 1 件 (本 handoff PR)
-- active Issue: 0 件
-- 即着手タスク: 0 件 / 条件待ち: 4 件 (全 decision-maker 領分)
-- 同根再発候補 0 件 / 対症療法疑いなし
-- 本セッション最大成果: handoff 第 6 編「次セッション持ち越し判定」項目をすべてクローズ + gRPC-web 発見プロセスを汎用 reference 化
-
----
-
-## 2026-06-27 セッション総括 (第 8 編): PR #169 book-mirror モバイル UI 大幅改善 (media query bug 修正)
-
-decision-maker から本番 URL のモバイル表示スクリーンショット提示 + `/fd` skill 起点で改善依頼。`book-mirror` ページの 390px モバイル表示が著しく使いにくかった問題を構造的に修正し、本番反映 + 実機 UI 確認まで完了。
-
-### PR 一覧
-
-| PR   | 内容                                                          | 規模           | 結果                       |
-| ---- | ------------------------------------------------------------- | -------------- | -------------------------- |
-| #169 | fix(book-mirror): モバイル UI 大幅改善 (media query bug 修正) | 1 file +89/-14 | ✅ merge + Deploy 9m25s OK |
-
-### 主要成果
-
-#### M1: 根本 bug — `@media (max-width: 768px)` が機能していなかった
-
-`keyframes` 内に書かれていた media query は className `book-layout` / `book-info-panel` を対象にしていたが、JSX 側に **該当 className 未付与**。`style` 属性のみで実装されており、media query セレクタが一切マッチせず、モバイル (390px) でも 2 カラム横並び (info 38.2% / content 61.8%) が押し込まれていた。
-
-修正方針:
-
-- JSX 側 13 箇所に className 付与 (`book-layout` / `book-info-panel` / `book-content-panel` / `book-slots-grid` / `book-slot-btn` / `book-date-card` / `book-input` / `book-submit-btn` / `book-meeting-title` / `book-description` / `book-divider` / `book-steps` / `book-step`)
-- `@media (max-width: 767px)` を mobile-first 思想で再設計
-
-#### M2: モバイル UX 改善 (≤ 767px)
-
-- 縦並びレイアウト + `min-height: auto !important` で空白除去
-- info panel を compact 化、step indicator を inline 横並び
-- content panel `max-height: 80vh` 解除でスムーススクロール
-- 時間枠 grid を `repeat(2, 1fr)` 強制 2 列化 (従来 autofit で実質 1 列)
-- touch target 44x44px 以上確保 (date-card 64x76 / slot-btn 48 / input 44 + font-size 16px で iOS Safari zoom 抑止 / submit-btn 52 + sticky bottom)
-
-### 検証
-
-- pnpm lint ✅ / type-check ✅ / next build ✅ (16 pages, book-mirror/[linkId] 含む)
-- code-review low ✅ (findings なし)
-- 本番デプロイ後の実機確認: iPhone 12 Pro viewport で縦並び + step inline + 日付横スクロール + 時間枠 2 列 + 44px touch target すべて反映確認 ([Image #3])
-
-### 同根再発スキャン (§ 4.6)
-
-- 本セッション内 / 過去 7 日 archive とも候補 0 件
-- PR #169 は CSS / className のみ、共有 util / middleware / 外部 API 経由なし
-
-### 対症療法判定 (§ 4.7)
-
-- 該当なし (retry / fallback / 文言修正のみではなく、media query セレクタと JSX className 不整合という root cause を特定 + 修正)
-
-### グローバル memory scope チェック (§ 4.5)
-
-- memory ファイル変更なし、スキップ
-
-### 教訓 (今回特に新 memory 化はせず、handoff のみで記録)
-
-- inline `style` と CSS class を併用する component で media query が効かない場合、まず JSX 側の className 付与漏れを疑う (これは React 一般の pitfall で、Calendar Hub プロジェクト固有ではないが、頻度低なので global memory 化は見送り)
-
----
-
-## 2026-06-27 セッション総括 (第 9 編): 条件待ち #3/#4/#5 整理 — PR #171 SLO fix + 監視 IaC 適用 + global memory 化見送り判断
-
-第 8 編完了後、decision-maker から「条件待ち 8 件は重要か?」の問いを受け、AI 側で 3 カテゴリ分類 (予防/監視 / 新機能ネタ / 長期放置) して整理提案 → decision-maker 判断「#3/#4/#5 を整理したい」を受け、第 5/第 6 編からの積み残し 3 項目を集中解消。さらに global memory 化 (#3) は影響範囲の慎重評価により最終的に見送り判断。
-
-### PR / 適用一覧
-
-| 項目         | 内容                                                                                     | 規模           | 結果                                                                |
-| ------------ | ---------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------- |
-| PR #171      | fix(infra): SLO sync-success userLabels の 63 chars 制約違反を修正                       | 1 file / +2/-2 | ✅ merge                                                            |
-| #4 適用      | bash infra/setup-monitoring.sh (PR #153 由来 TimeTree session expired per-account alert) | -              | ✅ alertPolicies/3361644955105358696 created + 既存 alert 全 update |
-| #5 適用      | bash setup-log-retention.sh + setup-slo.sh + setup-dashboard.sh (PR #154/#155/#156 由来) | -              | ✅ log buckets / SLO 4 種 / dashboard 全 create                     |
-| (close) #318 | claude-code-config: Calendar Hub 第 6 編教訓 4 件追加 (global memory)                    | -              | ❌ close (global 影響回避)                                          |
-
-### 主要成果
-
-#### M1: SLO 適用中に sync-success.json の 63 chars 制約違反を発見 → fix PR #171
-
-`bash infra/setup-slo.sh` 実行中、`sync-success.json` の `userLabels` に `note` (110 chars) + `todo_metric_kind` (142 chars) が含まれており GCP SLO API の **label value 63 chars 制限** で create 失敗。短縮ラベル (`adr=010` / `impl=pragmatic-windows-based`) のみ残して fix → 4 SLO 全 create 成功。
-
-#### M2: 監視 IaC 一括本番適用 (第 5/第 6 編からの積み残し解消)
-
-- Cloud Monitoring Alert Policies (Calendar Hub 全 7 種 + 新規 TimeTree per-account alert) update / create
-- Log buckets (sync-logs 90d / auth-logs 180d) + sinks 作成
-- SLI/SLO 定義 (api-availability / api-latency-p95 / sync-success / web-availability) create
-- SLI/SLO Dashboard create
-
-#### M3: global memory 化 (#3) は最終的に見送り — global 影響範囲の慎重評価
-
-第 6 編教訓 4 件 (Cloud Run env 二重管理 / Google gRPC-web Playwright 解析 / soft vs hard delete UX / Codex verdict → impl-plan) を `~/.claude/memory/` に追加しようとして PR #318 (claude-code-config) を作成したが、decision-maker から「グローバルの変更は影響が大きい、徹底して考えろ」の指摘。再評価の結果:
-
-- 実害は Calendar Hub 1 プロジェクトのみで発生 (CLAUDE.md MUST: project-scope に書くべき)
-- 他プロジェクトでも AI が同じ behavior を強制すると過干渉・誤判断のリスク
-- AI 起点で global rule を作るのは 4 原則 §1 違反の疑い (decision-maker の起点指示なし)
-- 既存 memory との重複も発見 (`reference_browser_internal_api_observation.md` と新規 reference が実質重複)
-
-→ PR #318 を close + ローカル 4 ファイル削除 + MEMORY.md revert。グローバル影響完全ゼロ (~/.claude 全領域 untouched 状態) を確認。
-
-### 同根再発スキャン (§ 4.6)
-
-- 本セッション内 / 過去 7 日 archive とも候補 0 件
-- PR #171 は GCP SLO API の label 仕様問題、共有 util / middleware 経由なし
-
-### 対症療法判定 (§ 4.7)
-
-- 該当なし (PR #171 は root cause = GCP label 仕様未把握を特定 + 短縮対応で構造的に解消)
-
-### グローバル memory scope チェック (§ 4.5)
-
-- ローカル `~/.claude/memory/` への変更は最終的に全て revert
-- グローバル影響ゼロ (~/.claude の memory / CLAUDE.md / rules / skills / hooks / settings.json すべて untouched)
-
----
-
-## 次のアクション (第 9 編 update)
-
-### 即着手タスク
-
-なし。本セッション (第 9 編) で 条件待ち #3/#4/#5 を整理 (PR #171 fix + 監視 IaC 全適用 + global memory 化見送り判断) + PR #169 (book-mirror モバイル UI) 完了済。OPEN PR ゼロ。
-
-### 条件待ち (明示 trigger 付き) — 第 9 編で 8 件 → 5 件に整理
-
-| #   | 項目                                                     | trigger                                              | trigger 充足時のタスク                                                                                                                                 |
-| --- | -------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加) | decision-maker から「C1 着手」明示指示               | 対象カレンダーを CalendarHub OAuth 連携、`BookingMirrorLink` に `blockCalendarId` 等追加、POST `/book` に `createBlockEvent` 追加 (spec §9.1 末尾参照) |
-| 2   | gRPC-web API 仕様変更時の運用 fallback                   | Google 側で `internal` namespace 変更 / API Key 失効 | `parseSlotResponse` の structured log を Cloud Logging で alert 化、Codex review High #1 の継続対応                                                    |
-| 3   | ADR-010 Future Work 3 件 + ADR-009 既存ロジック強化 3 件 | decision-maker 起点指示 (第 5 編からの継続)          | 該当指示時に着手                                                                                                                                       |
-| 4   | Issue #145 の 3 連続 PASS 厳密化                         | 万一 main 上で flaky 再発                            | listener は永続化済み、再発時に diagnostic PR を起動                                                                                                   |
-| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー           | decision-maker 起点指示                              | モバイル改修で desktop は touch せず、layout 維持。要望あれば確認                                                                                      |
-
-### 却下候補 (記録のみ)
-
-| #   | 項目                                                          | 着手しない理由                                                                                                                                                                                                             |
-| --- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | v1 bookingLink 機能の完全廃止                                 | 共存可能、廃止は decision-maker 起点指示で別途                                                                                                                                                                             |
-| 2   | `firebase.json` + `firestore.indexes.json` フルセット導入     | 整理・点検カテゴリ。既存 index export → JSON 化が必要、PR #163 で最小カバー済み、本セッションの範囲外                                                                                                                      |
-| 3   | gRPC-web API レスポンスの protobuf-typed parser               | 新規価値創出。現状の defensive parser で十分稼働、Codex 指摘外                                                                                                                                                             |
-| 4   | BigQuery sink (Issue #81 任意項目、第 5 編から継続)           | 新規価値創出。decision-maker 起点なし                                                                                                                                                                                      |
-| 5   | route group `(public)` で AuthProvider 分離 (第 5 編から継続) | 新規価値創出。アーキテクチャ改善は起点 unclear                                                                                                                                                                             |
-| 6   | E2E spec の listener を共通 helper に抽出 (第 5 編から継続)   | 整理・点検。DRY 効果限定的                                                                                                                                                                                                 |
-| 7   | GitHub 脆弱性アラート 21 件の追加対応                         | 守り (修正)。Dependabot 自動 PR 待ち                                                                                                                                                                                       |
-| 8   | 第 6 編教訓 4 件の global memory 化 (第 9 編で判断)           | 実害が Calendar Hub 1 プロジェクトのみで発生 (CLAUDE.md MUST: project-scope)。global 影響範囲が大きく、AI 起点で global rule を作るのは 4 原則 §1 違反の疑い。教訓は handoff archive (`archive/2026-06-26-vol6.md`) で完結 |
-
-### 再開可能性判定
-
-| 項目                    | 状態                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (PR #169/#170/#171 merge 済、本 handoff PR が最後)                            |
-| active Issue            | 0 件 ✅                                                                               |
-| Git clean               | ✅ (本 handoff PR commit 後)                                                          |
-| 残留プロセス            | ✅ なし                                                                               |
-| Deploy 状態             | ✅ PR #169/#171 本番反映完了                                                          |
-| 監視 IaC 本番適用       | ✅ Alert Policies / Log buckets / SLI/SLO 4 種 / Dashboard すべて create              |
-| 構造的整合性            | ✅ infra 変更は冪等スクリプト、コード側 API・型・データフロー影響なし                 |
-| 同根再発                | ✅ なし (本セッション内 / 過去 7 日 archive とも候補 0 件)                            |
-| 対症療法疑い            | ✅ なし (PR #171 = GCP label 仕様の構造的対応)                                        |
-| グローバル memory scope | ✅ **完全に無し** — PR #318 close + ローカル 4 ファイル削除 + MEMORY.md revert 確認済 |
-| 本番 UI 動作確認        | ✅ iPhone 12 Pro viewport で縦並び + 2 列 grid + 44px touch (第 8 編で確認済)         |
-
----
-
-## 最終結論 (第 9 編)
-
-✅ **セッション終了可** — 条件待ち 3 件解消 (#4 monitoring + #5 SLI/SLO IaC 適用 + #3 global memory 化見送り判断) + PR #171 SLO fix + PR #169 book-mirror モバイル UI (第 8 編完了済)
-
-- OPEN PR ゼロ (PR #169/#170/#171 merge 済、本 handoff PR が最後)
-- active Issue ゼロ
-- Git clean (本 handoff PR commit 後)
-- 即着手タスク = 0 / 残留プロセスなし
-- Issue Net 変化 = 0 / 0
-- 同根再発候補 0 件 / 対症療法疑いなし
-- **グローバル影響完全ゼロ** (~/.claude の memory / CLAUDE.md / rules / skills / hooks / settings.json すべて untouched)
-- 本セッション成果: 条件待ち 8 件 → 5 件に削減 (#4/#5 適用済 + #3 却下候補へ降格)
-- 次セッション候補: 残 5 件はすべて decision-maker 起点指示待ち。AI 側からの能動着手なし
-
----
+> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。LATEST.md は第 10 編以降のみ保持する。
 
 ## 2026-07-18 セッション総括 (第 10 編): catchup 新規検出 — Dependabot critical alert 修正 + PR 3 件マージ
 
@@ -564,3 +221,125 @@ memory ファイル変更なし、スキップ。
 - Issue Net 変化 = 0 / 0
 - 同根再発候補 0 件 (バグとして) / 対症療法疑いなし
 - ⚠️ **次回優先確認事項**: 既存の `vite` override (`pnpm.overrides`) が peer dependency 経由のため無効化されている可能性を発見。対象は high severity (CVSS 8.2) の Windows path traversal 脆弱性 (alert #78) 含む 2 件。本番ランタイム非依存 (dev のみ) だが、構造的な防御漏れの可能性がありセッション終了前に明記
+
+---
+
+## 2026-07-19 セッション総括 (第 12 編): vite override 機能不全の根本解決 + Dependabot alert 20→0 完全解消
+
+catchup の推奨に従い、第 11 編 M2 で発見された vite override 機能不全（条件待ち #7）を含む全 Dependabot open alert（high 13 / medium 6 / low 1 = 20 件）に順次対応。3 PR に分割して段階検証し、全件解消。
+
+### PR 一覧
+
+| PR   | 内容                                                                       | 規模              | 結果                                              |
+| ---- | -------------------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| #180 | fix(deps): vite を devDependencies に直接固定して peer override 不全を解消 | 2 files +150/-117 | ✅ merge (CI 全 PASS 後)                          |
+| #181 | fix(deps): esbuild/ws/grpc-js/form-data/qs/uuid の脆弱バージョンを解消     | 2 files +148/-207 | ✅ merge (CI 全 PASS 後)                          |
+| #182 | fix(deps): tar を firebase-tools 配下含め >=7.5.16 に override             | 2 files +5/-66    | ✅ merge (CI 全 PASS 後、Deploy success 確認済み) |
+
+### 主要成果
+
+#### M1: 【第 11 編 M2 の根本原因確定】pnpm.overrides はグラフ内で peerDependency としてのみ出現するパッケージには適用されない
+
+第 11 編で「未検証、仮説段階」としていた peer dependency 仮説を、公式 docs (pnpm.io/settings#overrides) + 既知 issue (`pnpm/pnpm#9913`, `vitest-dev/vitest#7520`) で確認。`pnpm why vite` で override 適用後も 8.0.1 のまま解決されないことを実測確認し、根本原因を特定。
+
+**対処法**: 該当パッケージ（vite, esbuild）を `pnpm.overrides` ではなく `devDependencies` に直接固定することで、peer 解決ロジックを経由せず確実に patched バージョンを強制。esbuild は vite/tsx 双方の peer/固定依存として出現しており、同一パターンで発見・修正（tsx 側のネスト pin には併せて override も追加）。
+
+#### M2: Dependabot open alert 20 件 → 0 件（完全解消）
+
+| パッケージ    | 修正内容                                    | 対象 alert                             |
+| ------------- | ------------------------------------------- | -------------------------------------- |
+| vite          | 8.0.1 → 8.1.5（devDependency 直接固定）     | #19,#20,#21,#77,#78 (high×3, medium×2) |
+| esbuild       | 0.27.4 → 0.28.1（同上 + tsx 配下 override） | #75 (low)                              |
+| ws            | 8.19.0 (@google/genai runtime) → 8.21.1     | #92,#66 (high, medium)                 |
+| @grpc/grpc-js | <1.9.16 → 1.14.3                            | #73,#74 (high×2)                       |
+| form-data     | 2.5.5 (@types/request配下) → 4.0.6          | #88 (high)                             |
+| qs            | 6.15.0/6.15.1 → 6.15.3                      | #63 (medium)                           |
+| uuid          | 8.3.2/9.0.1 → 11.1.1/14.0.1                 | #62 (medium)                           |
+| tar           | 6.2.1 (firebase-tools直接依存) → 7.5.16     | #94-#100 (high×6, medium×1)            |
+
+tar は firebase-tools の emulator バイナリ展開に使われる dev ツール依存のため他 6 件と PR を分離し、`firebase emulators:start --only firestore,auth` の実起動（jar ダウンロード・展開含む "All emulators ready!" まで）で個別に安全性を検証してからマージ。
+
+#### M3:【守り(検出)】既存 override 全件の同型弱点スイープ
+
+M1 の発見を受け、既存 20 件の override エントリ全てについて「対象パッケージが peer 経由で無効化されていないか」を `pnpm why` で検出のみ実施。picomatch/yaml は peer 経由で出現するが、実際の resolved バージョンは override target を満たしており、他に無効化されている override は検出されず。
+
+### 同根再発スキャン (§ 4.6)
+
+本セッション修正 PR: PR #180 / #181 / #182 の 3 件（いずれも `fix(deps):`）。
+
+- **同根確定**: PR #180 (vite) と PR #181 内の esbuild 修正は、第 11 編 M2 で仮説段階だった「pnpm.overrides が peerDependency 専有パッケージに無効」という**同一の構造的root causeによる再発**。今回 WebFetch/WebSearch で根本原因を確定させ、同一手法（devDependencies 直接固定）で両方解決したため、根本解決とみなす。
+- PR #181 内の ws/@grpc/grpc-js/form-data/qs/uuid、PR #182 の tar は通常の transitive dependency バージョン更新であり、vite/esbuild とは異なる（override が通常通り機能するケース）。相互に同根ではない。
+- 過去 7 日 archive を `vite` / `override` / `peer` で grep → 第 11 編（本リポジトリ内、7 日以内）に M2 として記録済み、今回はその直接の解決編。新規の別セッション同根なし。
+
+→ **同根再発 1 件（vite/esbuild、第 11 編 M2 の予告どおり）を根本解決** ✅。M3 のスイープで他の潜伏同根は検出されず。
+
+### 対症療法判定 (§ 4.7)
+
+| #   | 基準                                              | 判定                                                                                                                  |
+| --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ pnpm.overrides / devDependency 直接固定による構造的対応                                                            |
+| 2   | WebSearch / changelog 確認なし                    | ❌ pnpm 公式 docs + `pnpm/pnpm#9913` + `vitest-dev/vitest#7520` を WebFetch/WebSearch で確認、根本原因を実測特定      |
+| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ⚠️ 該当（vite/esbuild は同根）だが、今回で根本原因を確定し解決したため「再発」ではなく「解決編」と判定                |
+| 4   | smoke のみで構造的検証なし                        | ❌ 全 PR で test/type-check/lint/build 全通過 + tar は emulator 実起動、pnpm-lock diff の無関係変更混入なしを個別確認 |
+
+→ **対症療法疑いなし** ✅（基準3 はヒットするが、今回のセッションで根本原因を確定させ構造的に解決したため、この基準が意図する「原因不明のまま再発を繰り返す」パターンには該当しない）
+
+### グローバル memory scope (§ 4.5)
+
+memory ファイル変更なし、スキップ。
+
+### 構造的整合性 (§ 4)
+
+`package.json` (`pnpm.overrides` / `devDependencies`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
+
+### Issue Net 変化 (第 12 編)
+
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0**
+
+### 次のアクション (第 12 編 update)
+
+#### 即着手タスク
+
+なし。
+
+#### 条件待ち (明示 trigger 付き) — 第 10-11 編の項目のうち #7 (vite override 機能不全) を解消、残り 6 件は変化なし
+
+| #   | 項目                                                                                                                 | trigger                               | trigger 充足時のタスク |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------- |
+| 1-6 | (第 9-10 編から継続、内容変化なし: C1 拡張 / gRPC-web fallback / ADR Future Work / Issue #145 / desktop UI レビュー) | 各項目個別 (LATEST.md 第 9-10 編参照) | 各項目個別             |
+
+第 11 編の条件待ち #7（vite override 機能不全）は本セッションで根本解決・完了のため削除。
+
+#### 却下候補 (記録のみ)
+
+第 9-10 編の却下候補は変化なし。
+
+### 再開可能性判定 (第 12 編)
+
+| 項目                        | 状態                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| OPEN PR                     | 0 件 ✅ (PR #180/#181/#182 merge 済)                                                                                       |
+| active Issue                | 0 件 ✅                                                                                                                    |
+| Git clean                   | ✅                                                                                                                         |
+| 残留プロセス                | ⚠️ あり（別プロジェクト sanwa-houkai-app の next dev、本プロジェクト非依存・マシン全体チェックの検出。停止は条件待ち扱い） |
+| Security alert (Dependabot) | **0 件**（critical 0・high 0・medium 0・low 0、前セッションから 20 件全解消）                                              |
+| Deploy CI                   | ✅ success（#180/#181/#182 の 3 回とも success 確認済み）                                                                  |
+| 構造的整合性                | ⏭️ スキップ (設定ファイルのみ)                                                                                             |
+| 同根再発                    | ✅ 1 件検出・根本解決済み（vite/esbuild）                                                                                  |
+| 対症療法疑い                | ✅ なし                                                                                                                    |
+| グローバル memory scope     | ⏭️ 変更なし                                                                                                                |
+
+---
+
+## 最終結論 (第 12 編)
+
+✅ **セッション終了可** — catchup 推奨事項（vite override 機能不全 + Dependabot alert 内訳増加）を両方とも根本解決
+
+- OPEN PR ゼロ、active Issue ゼロ、Git clean
+- 即着手タスク = 0 / 条件待ち = 6 件（すべて decision-maker 領分、前セッションの vite override 項目は解消済みで削除）
+- Issue Net 変化 = 0 / 0
+- Dependabot open alert: **20 件 → 0 件**（critical/high/medium/low 全解消、Deploy CI 3 回とも success）
+- 同根再発候補 1 件検出・根本解決済み（vite/esbuild の peer override 不全、pnpm 既知issue で原因確定）／対症療法疑いなし
+- ⚠️ 残留プロセスは別プロジェクト（sanwa-houkai-app）の node dev サーバーのみ検出、本プロジェクト非依存につき条件待ち扱い（停止は明示指示があれば対応）

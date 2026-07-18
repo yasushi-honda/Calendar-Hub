@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { TimeTreeAdapter, normalizeAllDayEnd, type TimeTreeSession } from '../adapters/timetree.js';
+import {
+  TimeTreeAdapter,
+  TimeTreeSessionExpiredError,
+  normalizeAllDayEnd,
+  type TimeTreeSession,
+} from '../adapters/timetree.js';
 
 const TEST_ACCOUNT_ID = 'timetree_test_acc_001';
 
@@ -225,8 +230,8 @@ describe('TimeTreeAdapter session expiry observability', () => {
     return fn;
   }
 
-  it.each([400, 401, 403])(
-    'should log [TT-SESSION-EXPIRED] reason=httpStatus when %i received without reLoginFn',
+  it.each([400, 403])(
+    'should log [TT-SESSION-EXPIRED] and throw generic error when %i received without reLoginFn (permanent, not session-related)',
     async (status) => {
       fetchSpy = mockFetchSequence([{ status }]);
       vi.stubGlobal('fetch', fetchSpy);
@@ -244,6 +249,68 @@ describe('TimeTreeAdapter session expiry observability', () => {
       expect(warned).toContain('reLoginAvailable=false');
     },
   );
+
+  it.each([400, 403])(
+    'should NOT attempt reLogin when %i received even if reLoginFn is provided (permanent error classification)',
+    async (status) => {
+      fetchSpy = mockFetchSequence([{ status }]);
+      vi.stubGlobal('fetch', fetchSpy);
+      const reLoginFn = vi.fn().mockResolvedValue({
+        sessionId: 'new-sid',
+        csrfToken: 'new-csrf',
+        expiresAt: Date.now() + 60 * 60 * 1000,
+      });
+
+      const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID, reLoginFn });
+      await expect(adapter.listCalendars()).rejects.toThrow(
+        new RegExp(`TimeTree listCalendars failed: ${status}`),
+      );
+
+      expect(reLoginFn).not.toHaveBeenCalled();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('should throw TimeTreeSessionExpiredError when 401 received without reLoginFn', async () => {
+    fetchSpy = mockFetchSequence([{ status: 401 }]);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID });
+    let caught: unknown;
+    try {
+      await adapter.listCalendars();
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TimeTreeSessionExpiredError);
+    expect((caught as Error).message).toContain(`accountId=${TEST_ACCOUNT_ID}`);
+
+    const warned = warnSpy.mock.calls.flat().join(' ');
+    expect(warned).toContain('[TT-SESSION-EXPIRED]');
+    expect(warned).toContain('reason=httpStatus');
+    expect(warned).toContain('status=401');
+    expect(warned).toContain('reLoginAvailable=false');
+  });
+
+  it('should log [TT-SESSION-RELOGIN-INEFFECTIVE] when retry after reLogin still fails', async () => {
+    fetchSpy = mockFetchSequence([{ status: 401 }, { status: 401 }]);
+    vi.stubGlobal('fetch', fetchSpy);
+    const reLoginFn = vi.fn().mockResolvedValue({
+      sessionId: 'new-sid',
+      csrfToken: 'new-csrf',
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+
+    const adapter = new TimeTreeAdapter(validSession, { accountId: TEST_ACCOUNT_ID, reLoginFn });
+    await expect(adapter.listCalendars()).rejects.toThrow(/TimeTree listCalendars failed: 401/);
+
+    expect(reLoginFn).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const warned = warnSpy.mock.calls.flat().join(' ');
+    expect(warned).toContain('[TT-SESSION-RELOGIN-INEFFECTIVE]');
+    expect(warned).toContain(`accountId=${TEST_ACCOUNT_ID}`);
+    expect(warned).toContain('status=401');
+  });
 
   it('should log [TT-SESSION-EXPIRED] reason=expiresAt when session is past expiresAt', async () => {
     fetchSpy = mockFetchOk({ calendars: [] });

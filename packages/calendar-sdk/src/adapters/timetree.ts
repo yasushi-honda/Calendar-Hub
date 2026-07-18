@@ -16,6 +16,20 @@ export interface TimeTreeSession {
 /** Session期限切れ時に再ログインするためのコールバック */
 export type TimeTreeReLoginFn = () => Promise<TimeTreeSession>;
 
+/**
+ * TimeTree session が失効し、かつ reLoginFn が未注入のため自動復旧できない場合に throw されるエラー。
+ * 上位レイヤー（sync ジョブ等）が汎用エラーと区別して「ユーザー再連携待ち」の運用に分岐できるようにする。
+ */
+export class TimeTreeSessionExpiredError extends Error {
+  constructor(
+    readonly accountId: string,
+    readonly url: string,
+  ) {
+    super(`TimeTree session expired: accountId=${accountId} url=${url} (no re-login available)`);
+    this.name = 'TimeTreeSessionExpiredError';
+  }
+}
+
 /** TimeTreeAdapter constructor options */
 export interface TimeTreeAdapterOptions {
   /** 連携アカウントID (例: timetree_xxx)。session expired ログ出力時のグルーピングキー */
@@ -112,14 +126,28 @@ export class TimeTreeAdapter implements CalendarAdapter {
 
     const res = await fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
 
-    // 401/403で再ログイン試行（1回のみ）
     if (res.status === 400 || res.status === 401 || res.status === 403) {
       console.warn(
         `[TT-SESSION-EXPIRED] accountId=${this.accountId} reason=httpStatus url=${url} status=${res.status} reLoginAvailable=${Boolean(this.reLoginFn)}`,
       );
-      if (this.reLoginFn) {
-        await this.refreshSession();
-        return fetch(url, { ...init, headers: { ...this.headers, ...init?.headers } });
+
+      // 401のみ session 失効として reLogin 対象にする。400(malformed)/403(権限不足) は
+      // permanent error (rules/error-handling.md §3) であり reLogin では解決しないため試みない
+      if (res.status === 401) {
+        if (this.reLoginFn) {
+          await this.refreshSession();
+          const retryRes = await fetch(url, {
+            ...init,
+            headers: { ...this.headers, ...init?.headers },
+          });
+          if (!retryRes.ok) {
+            console.warn(
+              `[TT-SESSION-RELOGIN-INEFFECTIVE] accountId=${this.accountId} url=${url} status=${retryRes.status}`,
+            );
+          }
+          return retryRes;
+        }
+        throw new TimeTreeSessionExpiredError(this.accountId, url);
       }
     }
 

@@ -1,4 +1,4 @@
-# Calendar Hub ハンドオフ (2026-07-19, 第 12 編まで)
+# Calendar Hub ハンドオフ (2026-07-19, 第 13 編まで)
 
 > 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。LATEST.md は第 10 編以降のみ保持する。
 
@@ -343,3 +343,113 @@ memory ファイル変更なし、スキップ。
 - Dependabot open alert: **20 件 → 0 件**（critical/high/medium/low 全解消、Deploy CI 3 回とも success）
 - 同根再発候補 1 件検出・根本解決済み（vite/esbuild の peer override 不全、pnpm 既知issue で原因確定）／対症療法疑いなし
 - ⚠️ 残留プロセスは別プロジェクト（sanwa-houkai-app）の node dev サーバーのみ検出、本プロジェクト非依存につき条件待ち扱い（停止は明示指示があれば対応）
+
+## 2026-07-19 セッション総括 (第 13 編): ADR-009 既存ロジック強化 3 件実装 (PR #184)
+
+catchup 実行時、積み残しタスク・active Issue 共に 0 件で一旦セッション終了推奨だったが、条件待ち 6 件のうち decision-maker が着手可能な 4 件（C1 拡張 / ADR-010 Future Work / ADR-009 既存ロジック強化 / desktop UI レビュー）を提示し、本番 GCP 変更を伴わず TDD で完結できる「ADR-009 既存ロジック強化 3 件」を推奨・選定して実装した。
+
+### PR 一覧
+
+| PR   | 内容                                                                                | 規模            | 結果                     |
+| ---- | ----------------------------------------------------------------------------------- | --------------- | ------------------------ |
+| #184 | fix(calendar-sdk): TimeTreeAdapter の 401/400/403 エラー分類と reLogin 観測性を改善 | 3 files +103/-8 | ✅ merge (CI 全 PASS 後) |
+
+### 主要成果
+
+ADR-009 (`docs/adr/009-timetree-session-management.md`) の「既存ロジックの強化候補」3 件を全て解消:
+
+1. reLogin 後 retry の `res.ok` 検証追加 + `[TT-SESSION-RELOGIN-INEFFECTIVE]` ログ追加
+2. 400/401/403 のエラー分類精緻化（401 のみ reLogin 対象、400/403 は permanent 即返却、`rules/error-handling.md §3` 準拠）
+3. reLoginFn 不在時の 401 を `TimeTreeSessionExpiredError`（新規 public エラークラス、`packages/calendar-sdk` からexport）で明示 throw
+
+TDD (Red→Green) で実装: 既存の 400/401/403 混在パラメタライズテストを分割し、新規 4 テストを追加（400/403 で reLogin 未実行確認、401 の `TimeTreeSessionExpiredError` throw 確認、reLogin 後 retry 失敗時の INEFFECTIVE ログ確認）。本番の `adapter-factory.ts` は現状 `reLoginFn` を注入しておらず、既存の呼び出し元・エラーハンドリング（`apps/api/src/routes/sync.ts` の汎用 catch、文字列マッチなし）への影響はないことを Explore agent の事前調査で確認済み。
+
+### 検証
+
+- `pnpm --filter @calendar-hub/calendar-sdk vitest run timetree-adapter` — 35 tests PASS
+- `pnpm turbo type-check` — 8/8 packages PASS
+- `pnpm lint` — 全 PASS
+- `pnpm test`（モノレポ全体） — 246 tests PASS
+- `/code-review low` 実施 — findings 0 件
+- PR #184 の CI (quality/e2e/GitGuardian/CodeRabbit) 全 PASS を確認後、番号単位の明示認可を得てマージ
+
+### 同根再発スキャン (§ 4.6)
+
+本セッション修正 PR: PR #184 (`fix(calendar-sdk):`) 1 件。
+
+- 本セッション内の同根候補: 他に修正 PR なし
+- 過去 7 日 archive を `TimeTreeAdapter` / `reLoginFn` / `TT-SESSION` / `ADR-009` で grep → `archive/2026-06-26_to_27-vol7-to-vol9.md` のみヒット（ADR-009 自体の過去記録であり、バグ再発ではなく ADR に事前記録された改善候補の計画的解消）
+
+→ **同根再発候補 0 件（計画的 debt 解消のため対象外）** ✅
+
+### 対症療法判定 (§ 4.7)
+
+| #   | 基準                                              | 判定 (PR #184)                                                                                        |
+| --- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ transient/permanent 分類の構造的変更 (`rules/error-handling.md §3` 準拠) + 新規エラークラス導入    |
+| 2   | WebSearch / changelog 確認なし                    | ⏭️ 該当なし（外部要因起因のバグ修正ではなく、ADR-009 に事前記録済みの設計改善の計画的実装のため不要） |
+| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ TimeTreeAdapter のエラー分類変更は初                                                               |
+| 4   | smoke のみで構造的検証なし                        | ❌ TDD 新規 4 テスト + 型チェック + lint + 全体テスト (246 件) PASS                                   |
+
+→ **対症療法疑いなし** ✅
+
+### グローバル memory scope (§ 4.5)
+
+memory ファイル変更なし、スキップ。
+
+### 構造的整合性 (§ 4)
+
+`packages/calendar-sdk`（共有ロジック）の変更。正式な `/impact-analysis` スキルは未実行だが、Explore agent で `apps/api` の呼び出し元・エラーハンドリングへの影響を個別調査済み（`adapter-factory.ts` は reLoginFn 未注入、`sync.ts` は汎用 catch でエラーメッセージの文字列マッチなし）→ 影響なしを確認。
+
+### Issue Net 変化 (第 13 編)
+
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0**（ADR 記載済みタスクの実装のため Issue 起票不要）
+
+### 次のアクション (第 13 編 update)
+
+#### 即着手タスク
+
+なし。
+
+#### 条件待ち (明示 trigger 付き) — 第 12 編の 6 件のうち ADR-009 既存ロジック強化 3 件を解消、残り 5 件は変化なし
+
+| #   | 項目                                                                    | trigger                                                        | trigger 充足時のタスク                                           |
+| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加)                | decision-maker から「C1 着手」明示指示                         | spec §9.1 末尾参照 (第 9 編から継続)                             |
+| 2   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効           | `parseSlotResponse` の structured log alert 化 (第 9 編から継続) |
+| 3   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須） | ADR-010 実装フェーズ §4-5 参照                                   |
+| 4   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発                                      | diagnostic PR 起動 (第 9 編から継続)                             |
+| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                        | モバイル改修は desktop 非 touch (第 9 編から継続)                |
+
+ADR-009 既存ロジック強化 3 件（旧項目 3 の一部）は本セッションで PR #184 により完全解消。
+
+#### 却下候補 (記録のみ)
+
+第 9-10 編の却下候補は変化なし。
+
+### 再開可能性判定 (第 13 編)
+
+| 項目                    | 状態                                                  |
+| ----------------------- | ----------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (PR #184 merge 済)                            |
+| active Issue            | 0 件 ✅                                               |
+| Git clean               | ✅                                                    |
+| 残留プロセス            | ✅ なし                                               |
+| 構造的整合性            | ✅ 確認済み（Explore agent による手動調査、影響なし） |
+| 同根再発                | ✅ なし（計画的 debt 解消）                           |
+| 対症療法疑い            | ✅ なし                                               |
+| グローバル memory scope | ⏭️ 変更なし                                           |
+
+---
+
+## 最終結論 (第 13 編)
+
+✅ **セッション終了可** — ADR-009 既存ロジック強化 3 件を PR #184 で完全解消、CI 全 PASS・マージ済み・Git clean
+
+- OPEN PR ゼロ、active Issue ゼロ、Git clean
+- 即着手タスク = 0 / 条件待ち = 5 件（全て decision-maker 領分または外部 trigger 待ち、ADR-009 分は本セッションで解消済みのため削除）
+- Issue Net 変化 = 0 / 0
+- 同根再発候補 0 件（計画的 debt 解消）／対症療法疑いなし
+- 残留プロセスなし

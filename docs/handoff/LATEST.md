@@ -329,7 +329,7 @@ decision-maker から本番 URL のモバイル表示スクリーンショット
 
 ---
 
-## 最終結論
+## 最終結論 (第 9 編)
 
 ✅ **セッション終了可** — 条件待ち 3 件解消 (#4 monitoring + #5 SLI/SLO IaC 適用 + #3 global memory 化見送り判断) + PR #171 SLO fix + PR #169 book-mirror モバイル UI (第 8 編完了済)
 
@@ -342,3 +342,118 @@ decision-maker から本番 URL のモバイル表示スクリーンショット
 - **グローバル影響完全ゼロ** (~/.claude の memory / CLAUDE.md / rules / skills / hooks / settings.json すべて untouched)
 - 本セッション成果: 条件待ち 8 件 → 5 件に削減 (#4/#5 適用済 + #3 却下候補へ降格)
 - 次セッション候補: 残 5 件はすべて decision-maker 起点指示待ち。AI 側からの能動着手なし
+
+---
+
+## 2026-07-18 セッション総括 (第 10 編): catchup 新規検出 — Dependabot critical alert 修正 + PR 3 件マージ
+
+catchup 実行時に新規検出された「守り (修正)」候補 2 件 (第 9 編却下候補 #7 の後継) を decision-maker 承認を得て解消。critical severity の脆弱性 alert が 1 件 → 0 件になった。
+
+### PR 一覧
+
+| PR   | 内容                                                                        | 規模          | 結果                         |
+| ---- | --------------------------------------------------------------------------- | ------------- | ---------------------------- |
+| #173 | chore(deps): bump actions/setup-java from 4 to 5                            | 1 file        | ✅ merge (CI green 確認済み) |
+| #174 | chore(deps): bump actions/checkout from 6 to 7                              | 2 files       | ✅ merge (CI green 確認済み) |
+| #175 | chore(deps): bump actions/cache from 4 to 6                                 | 1 file        | ✅ merge (CI green 確認済み) |
+| #176 | fix(deps): websocket-driver を 0.7.5 に override して critical 脆弱性を解消 | 2 files +6/-4 | ✅ merge (CI 全 PASS 後)     |
+
+### 主要成果
+
+#### M1: Dependabot critical alert #104 (websocket-driver, CVE-2026-54466, CVSS v4 9.2) を手動 override で解消
+
+`firebase-admin`(devDependency) → `@firebase/database-compat` → `@firebase/database` → `faye-websocket` → `websocket-driver 0.7.4` の推移的依存が対象。Dependabot の自動修正 PR は alert 作成時点 (2026-07-16) で `security_update_not_possible` により失敗していたが、調査の結果、修正版 `websocket-driver@0.7.5` は既に npm に存在し `faye-websocket` の依存範囲 (`>=0.5.1`) にも収まることを確認。既存の `pnpm.overrides` パターン (14 件既存) に倣い `"websocket-driver@<0.7.5": ">=0.7.5"` を追加して解決。scope は development のみ (本番ランタイム非依存)。
+
+#### M2: open Dependabot PR 3 件 (GitHub Actions バージョン bump) をマージ
+
+17 日間放置されていた #173/#174/#175 (いずれも CI green・mergeable 確認済み) を番号単位の明示認可を得てマージ。setup-java v5 は内部で Node 24 へのアップグレードという breaking change を含むが、CI (quality/e2e) が green であることをマージ前に確認済み。
+
+### 検証
+
+- `pnpm install` 実行 → `pnpm why websocket-driver` で 0.7.5 への解決を確認
+- `pnpm turbo type-check` 全パッケージ PASS (8/8 successful)
+- pre-commit hook (husky + lint-staged) 通過確認
+- PR #176 の CI (quality / e2e / GitGuardian / CodeRabbit) 全 PASS を確認してからマージ
+
+### 同根再発スキャン (§ 4.6)
+
+本セッション修正 PR: PR #176 (`fix(deps):`) 1 件。
+
+- 本セッション内の同根候補: PR #173-175 は `chore(deps):` の GitHub Actions バージョン bump で、root cause が異なる (npm パッケージ脆弱性 vs Actions バージョン管理) ため同根ではない
+- 過去 7 日 archive を `websocket-driver` / `dependabot` / `CVE-2026` / `security alert` で grep → ヒットなし
+
+→ **同根再発候補 0 件** ✅
+
+### 対症療法判定 (§ 4.7)
+
+| #   | 基準                                              | 判定 (PR #176)                                                                        |
+| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ `pnpm.overrides` によるバージョン強制固定 (構造的対応、既存パターンに準拠)         |
+| 2   | WebSearch / changelog 確認なし                    | ❌ CVE 詳細確認済み (CVE-2026-54466, 公開日 2026-07-15, 修正版 0.7.5 存在確認)        |
+| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ websocket-driver 個別の override は初 (類似パターン 14 件はあるが対象パッケージ別) |
+| 4   | smoke のみで構造的検証なし                        | ❌ `pnpm why` で依存解決確認 + `pnpm turbo type-check` 全 PASS                        |
+
+→ **対症療法疑いなし** ✅
+
+### グローバル memory scope (§ 4.5)
+
+memory ファイル変更なし、スキップ。
+
+### 構造的整合性 (§ 4)
+
+`package.json` (`pnpm.overrides`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
+
+### Issue Net 変化 (第 10 編)
+
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0**（Issue の起票・close は本セッションで発生せず、Dependabot alert/PR での対応のみ）
+
+### 次のアクション (第 10 編 update)
+
+#### 即着手タスク
+
+なし。本セッションで catchup 新規検出の 2 項目 (critical alert 対応 + PR 3 件マージ) を全解消。OPEN PR ゼロ。
+
+#### 条件待ち (明示 trigger 付き) — 第 9 編の 5 件は変化なし、新規 1 件追加
+
+| #   | 項目                                                                                           | trigger                                                                                                                                                              | trigger 充足時のタスク                                                                       |
+| --- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加)                                       | decision-maker から「C1 着手」明示指示                                                                                                                               | spec §9.1 末尾参照 (第 9 編から継続)                                                         |
+| 2   | gRPC-web API 仕様変更時の運用 fallback                                                         | Google 側で `internal` namespace 変更 / API Key 失効                                                                                                                 | `parseSlotResponse` の structured log alert 化 (第 9 編から継続)                             |
+| 3   | ADR-010 Future Work 3 件 + ADR-009 既存ロジック強化 3 件                                       | decision-maker 起点指示                                                                                                                                              | 該当 ADR 参照 (第 9 編から継続)                                                              |
+| 4   | Issue #145 の 3 連続 PASS 厳密化                                                               | 万一 main 上で flaky 再発                                                                                                                                            | diagnostic PR 起動 (第 9 編から継続)                                                         |
+| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                                                 | decision-maker 起点指示                                                                                                                                              | モバイル改修は desktop 非 touch (第 9 編から継続)                                            |
+| 6   | Dependabot alert #102/#103 (js-yaml, medium, CVE-2026-53550, DoS via merge-key) の対応要否判断 | decision-maker の対応要否判断 (修正版 4.2.0 以降が既に存在、devDependency `@typescript-eslint/*` → `eslint` → `@eslint/eslintrc` → `js-yaml 4.1.1` 経由の推移的依存) | `pnpm.overrides` に `"js-yaml@<4.2.0": ">=4.2.0"` 追加を検討 (websocket-driver と同パターン) |
+
+#### 却下候補 (記録のみ)
+
+第 9 編の却下候補 1-7 は変化なし (#7「GitHub 脆弱性アラート 21 件の追加対応」は本セッションで critical 1 件を解消したため部分的に消化、残り high/medium/low は #6 条件待ちとして分離)。#8 (global memory 化見送り) も継続。
+
+### 再開可能性判定 (第 10 編)
+
+| 項目                    | 状態                                                                      |
+| ----------------------- | ------------------------------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (PR #173/#174/#175/#176 merge 済、本 handoff PR が最後)           |
+| active Issue            | 0 件 ✅                                                                   |
+| Git clean               | ✅ (本 handoff PR commit 後)                                              |
+| 残留プロセス            | ✅ なし                                                                   |
+| Security alert          | critical 1 → 0 件 ✅ / high 10・medium 4・low 1 は残存 (js-yaml 2 件含む) |
+| 構造的整合性            | ⏭️ スキップ (設定ファイルのみ、型・API 影響なし)                          |
+| 同根再発                | ✅ なし                                                                   |
+| 対症療法疑い            | ✅ なし                                                                   |
+| グローバル memory scope | ⏭️ 変更なし                                                               |
+
+---
+
+## 最終結論 (第 10 編)
+
+✅ **セッション終了可** — catchup 新規検出 2 項目 (Dependabot critical alert #104 修正 + PR 3 件マージ) を decision-maker 承認を得て全解消
+
+- OPEN PR ゼロ (PR #173/#174/#175/#176 merge 済、本 handoff PR が最後)
+- active Issue ゼロ
+- Git clean
+- 即着手タスク = 0 / 条件待ち = 6 件 (全 decision-maker 領分、うち 1 件新規: js-yaml alert)
+- Issue Net 変化 = 0 / 0
+- 同根再発候補 0 件 / 対症療法疑いなし
+- Security alert: critical 1 → 0 件に低減 (残り high/medium/low 15 件は次回 decision-maker 判断待ち)

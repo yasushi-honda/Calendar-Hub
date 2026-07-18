@@ -457,3 +457,110 @@ memory ファイル変更なし、スキップ。
 - Issue Net 変化 = 0 / 0
 - 同根再発候補 0 件 / 対症療法疑いなし
 - Security alert: critical 1 → 0 件に低減 (残り high/medium/low 15 件は次回 decision-maker 判断待ち)
+
+---
+
+## 2026-07-18 セッション総括 (第 11 編): js-yaml override PR 追加対応 + vite override 機能不全の発見
+
+第 10 編の条件待ち #6 (js-yaml alert #102/#103) を decision-maker の明示指示「js-yaml の override PR も作成して」を受けて即時解消。あわせて依存関係調査の過程で、既存の `vite` override が実際には機能していない (peer dependency 経由のため無効) ことを発見。
+
+### PR 一覧
+
+| PR   | 内容                                                             | 規模           | 結果                     |
+| ---- | ---------------------------------------------------------------- | -------------- | ------------------------ |
+| #178 | fix(deps): js-yaml を 5.2.1 に override して medium 脆弱性を解消 | 2 files +8/-27 | ✅ merge (CI 全 PASS 後) |
+
+### 主要成果
+
+#### M1: Dependabot alert #102/#103 (js-yaml, CVE-2026-53550, medium) を手動 override で解消
+
+`@typescript-eslint/*` → `eslint` → `@eslint/eslintrc` 経由の推移的依存 (js-yaml 4.1.1) と `firebase-tools` 経由の直接依存 (js-yaml 3.14.2) の両方が対象。`@eslint/eslintrc` の依存範囲 (`^4.1.1`) が修正版 4.2.0 以降もカバーすることを確認し、既存パターンに倣い `"js-yaml@<4.2.0": ">=4.2.0"` を追加。pnpm が範囲内最新の 5.2.1 を解決し、3.14.2/4.1.1 の重複解決も統合されて lockfile が簡素化 (-27/+8 行)。メジャーバージョン 4→5 昇格のため `pnpm lint` + `pnpm turbo type-check` の両方で動作確認。
+
+#### M2: 【重要な発見】既存の `vite` override が機能していない (次回セッション要対応)
+
+CI で「Dependabot Updates workflow: npm_and_yarn in /. for vite - Update」の失敗を検知し調査した結果:
+
+- Dependabot alert #78 (vite, **high**, CVSS v4 8.2, path traversal via Windows NTFS ADS/8.3 short name, CVE-2026-53571) と #77 (vite/launch-editor, medium, NTLM hash 漏洩, CVE-2026-53632) の脆弱性範囲は `>=8.0.0, <=8.0.15` (修正版 `8.0.16`)
+- 既存の `pnpm.overrides` には `"vite@>=8.0.0 <=8.0.4": ">=8.0.5"` があるが、これは**別の脆弱性 (8.0.0-8.0.4) 用の古いエントリ**で今回の alert 範囲 (8.0.0-8.0.15) をカバーしていない
+- `pnpm why vite` で実際のインストールバージョンを確認したところ **8.0.1 のまま** — 既存 override の範囲 (`>=8.0.0 <=8.0.4`) には該当するはずだが `>=8.0.5` へ解決されていない
+- 原因仮説: `vite` は `vitest`/`@vitest/mocker` の **peerDependency** として要求されており、pnpm の `overrides` は通常の dependency 解決には効くが peer dependency 解決には別ロジックが働き、無効化されている可能性がある (未検証、仮説段階)
+- **本番ランタイムには影響しない** (vite は vitest 経由の devDependency のみ) が、CVSS 8.2 の high severity かつ既存の防御機構が実効性を持っていないという構造的問題
+
+### 同根再発スキャン (§ 4.6)
+
+本セッション修正 PR: PR #178 (`fix(deps):`) 1 件。
+
+- 本セッション内の同根候補: PR #176 (websocket-driver) と PR #178 (js-yaml) は同一手法 (`pnpm.overrides` 追加) だが、対象パッケージ・CVE が異なる独立した脆弱性対応であり、バグの同根再発ではなく体系的な守り対応の繰り返し適用と判断
+- ただし M2 の vite override 機能不全は、「同じ機構 (pnpm.overrides) が特定の依存形態 (peer dependency) で無効化されるケースがある」という**構造的な弱点候補**であり、次回セッションでの検証が必要
+- 過去 7 日 archive を `js-yaml` / `websocket-driver` / `pnpm.overrides` / `CVE-2026` で grep → ヒットなし
+
+→ **バグとしての同根再発候補 0 件** ✅ (ただし M2 の構造的弱点は条件待ちへ計上)
+
+### 対症療法判定 (§ 4.7)
+
+| #   | 基準                                              | 判定 (PR #178)                                                             |
+| --- | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ `pnpm.overrides` によるバージョン強制固定 (構造的対応)                  |
+| 2   | WebSearch / changelog 確認なし                    | ❌ CVE 詳細確認済み (CVE-2026-53550, `@eslint/eslintrc` 依存範囲確認)      |
+| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ js-yaml 個別の override は初                                            |
+| 4   | smoke のみで構造的検証なし                        | ❌ `pnpm why` で依存解決確認 + `pnpm lint`/`pnpm turbo type-check` 全 PASS |
+
+→ **対症療法疑いなし** ✅ (PR #178 自体は構造的対応。M2 の vite 問題は未解決のまま次回持ち越しであり対症療法ではなく「未着手」)
+
+### グローバル memory scope (§ 4.5)
+
+memory ファイル変更なし、スキップ。
+
+### 構造的整合性 (§ 4)
+
+`package.json` (`pnpm.overrides`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
+
+### Issue Net 変化 (第 11 編)
+
+- Close 数: 0 件
+- 起票数: 0 件
+- **Net: 0**
+
+### 次のアクション (第 11 編 update)
+
+#### 即着手タスク
+
+なし。本セッションで decision-maker 指示の js-yaml override PR 作成・マージまで完了。
+
+#### 条件待ち (明示 trigger 付き) — 第 10 編の 6 件は変化なし、新規 1 件追加
+
+| #   | 項目                                                                                                               | trigger                                                   | trigger 充足時のタスク                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1-6 | (第 10 編から継続、内容変化なし: C1 拡張 / gRPC-web fallback / ADR Future Work / Issue #145 / desktop UI レビュー) | 各項目個別 (LATEST.md 第 9-10 編参照)                     | 各項目個別                                                                                                                                                                                                  |
+| 7   | **vite override 機能不全 (M2) の原因調査 + 修正**                                                                  | decision-maker の対応要否判断 (high severity CVE 2件対象) | `pnpm why vite` で peer dependency 解決経路を再検証、`.npmrc` の `auto-install-peers`/`resolve-peers-from-workspace-root` 等の設定確認、必要なら `vitest` 自体のバージョンアップ or override 記法変更を検討 |
+
+#### 却下候補 (記録のみ)
+
+第 9-10 編の却下候補は変化なし。
+
+### 再開可能性判定 (第 11 編)
+
+| 項目                    | 状態                                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (PR #178 merge 済)                                                                          |
+| active Issue            | 0 件 ✅                                                                                             |
+| Git clean               | ✅                                                                                                  |
+| 残留プロセス            | ✅ なし                                                                                             |
+| Security alert          | critical 0・high 10・medium 2・low 1 (前セッションから medium 2 件減、high 中に vite CVE 2件を含む) |
+| 構造的整合性            | ⏭️ スキップ (設定ファイルのみ)                                                                      |
+| 同根再発 (バグとして)   | ✅ なし                                                                                             |
+| 対症療法疑い            | ✅ なし                                                                                             |
+| グローバル memory scope | ⏭️ 変更なし                                                                                         |
+| **要注意**              | ⚠️ 既存 vite override が peer dependency 経由で無効化されている可能性 (M2 参照、次回検証必要)       |
+
+---
+
+## 最終結論 (第 11 編)
+
+✅ **セッション終了可** — decision-maker 指示の js-yaml override PR (#178) 作成・マージ完了
+
+- OPEN PR ゼロ、active Issue ゼロ、Git clean
+- 即着手タスク = 0 / 条件待ち = 7 件 (全 decision-maker 領分、うち新規 1 件: vite override 機能不全の調査)
+- Issue Net 変化 = 0 / 0
+- 同根再発候補 0 件 (バグとして) / 対症療法疑いなし
+- ⚠️ **次回優先確認事項**: 既存の `vite` override (`pnpm.overrides`) が peer dependency 経由のため無効化されている可能性を発見。対象は high severity (CVSS 8.2) の Windows path traversal 脆弱性 (alert #78) 含む 2 件。本番ランタイム非依存 (dev のみ) だが、構造的な防御漏れの可能性がありセッション終了前に明記

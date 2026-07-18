@@ -9,5 +9,5 @@ export {
   type UpdateEventInput,
 } from './types.js';
 export { GoogleCalendarAdapter } from './adapters/google.js';
-export { TimeTreeAdapter } from './adapters/timetree.js';
+export { TimeTreeAdapter, TimeTreeSessionExpiredError } from './adapters/timetree.js';
 export type { TimeTreeSession, TimeTreeReLoginFn } from './adapters/timetree.js';

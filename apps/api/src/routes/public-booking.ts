@@ -26,6 +26,7 @@ import {
 } from '../lib/booking-link-utils.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
+import { getConfirmedBookingEventsForOwner } from '../lib/booking-events.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -89,37 +90,6 @@ async function fetchOwnerEvents(
   });
 
   return results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value);
-}
-
-// 既存予約をダミーイベントとしてマージ（全オーナー予約を考慮し二重予約を防止）
-async function getConfirmedBookingEventsForOwner(
-  ownerUid: string,
-  timeMin: Date,
-  timeMax: Date,
-): Promise<CalendarEvent[]> {
-  const db = getDb();
-  const snap = await db
-    .collection('bookings')
-    .where('ownerUid', '==', ownerUid)
-    .where('status', '==', 'confirmed')
-    .where('slotStart', '>=', timeMin)
-    .where('slotStart', '<=', timeMax)
-    .get();
-
-  return snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      source: 'google' as const, // CalendarEvent型に合わせるためのダミー値
-      originalId: doc.id,
-      calendarId: 'booking',
-      title: 'Reserved',
-      start: data.slotStart.toDate(),
-      end: data.slotEnd.toDate(),
-      isAllDay: false,
-      status: 'confirmed' as const,
-    };
-  });
 }
 
 // --- ルート ---

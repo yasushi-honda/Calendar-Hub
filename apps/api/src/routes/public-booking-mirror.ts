@@ -18,6 +18,11 @@ import {
 } from '../lib/google-booking-mirror.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
+import {
+  buildBookingMirrorLinkFromFirestoreData,
+  excludeOverlappingSlots,
+} from '../lib/booking-mirror-link-utils.js';
+import { getConfirmedBookingEventsForOwner } from '../lib/booking-events.js';
 import type {
   BookingMirrorLink,
   BookingMirrorSlot,
@@ -38,20 +43,7 @@ async function getActiveLink(linkId: string): Promise<LinkResult> {
     return { link: null, error: 'Booking mirror link not found', statusCode: 404 };
   }
   const data = doc.data()!;
-  const link: BookingMirrorLink = {
-    id: data.id,
-    ownerUid: data.ownerUid,
-    title: data.title,
-    description: data.description ?? undefined,
-    sourceUrl: data.sourceUrl,
-    scheduleId: data.scheduleId,
-    notificationEmail: data.notificationEmail,
-    rangeDays: data.rangeDays,
-    status: data.status,
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-  };
+  const link = buildBookingMirrorLinkFromFirestoreData(data);
   if (link.status !== 'active') {
     return { link: null, error: 'This booking link is currently paused', statusCode: 400 };
   }
@@ -144,7 +136,13 @@ publicBookingMirrorRoutes.get('/:linkId/slots', async (c) => {
     throw err;
   }
 
-  const slots = toMirrorSlots(googleSlots);
+  // Calendar Hub 側で既に確定済みの予約 (mirror/非mirror問わず同一オーナー) を除外する。
+  // Google 側はこの予約を認識しないため、ここで差し引かないと同じ枠がミラーページ上に
+  // 空きとして表示され続け、次のゲストが予約しようとすると 409 になる。
+  const bookedEvents = await getConfirmedBookingEventsForOwner(link.ownerUid, now, endDate);
+  const availableSlots = excludeOverlappingSlots(googleSlots, bookedEvents);
+
+  const slots = toMirrorSlots(availableSlots);
   return c.json({ slots, title: link.title });
 });
 

@@ -11,6 +11,7 @@ import type {
   UpdateBookingMirrorLinkInput,
 } from '@calendar-hub/shared';
 import { resolveScheduleId, BookingMirrorError } from '../lib/google-booking-mirror.js';
+import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
 
 export const bookingMirrorLinkRoutes = new Hono<AppEnv>();
 
@@ -20,23 +21,6 @@ const DEFAULT_NOTIFICATION_EMAIL =
   process.env.DEFAULT_NOTIFICATION_EMAIL ?? 'hy.unimail.11@gmail.com';
 
 // --- ヘルパー ---
-
-function fromFirestoreData(data: FirebaseFirestore.DocumentData): BookingMirrorLink {
-  return {
-    id: data.id,
-    ownerUid: data.ownerUid,
-    title: data.title,
-    description: data.description ?? undefined,
-    sourceUrl: data.sourceUrl,
-    scheduleId: data.scheduleId,
-    notificationEmail: data.notificationEmail,
-    rangeDays: data.rangeDays,
-    status: data.status,
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-  };
-}
 
 function buildPatchUpdate(body: UpdateBookingMirrorLinkInput): Record<string, unknown> {
   const update: Record<string, unknown> = {};
@@ -70,7 +54,7 @@ bookingMirrorLinkRoutes.get('/', requireAuth, async (c) => {
     .where('ownerUid', '==', user.uid)
     .orderBy('createdAt', 'desc')
     .get();
-  const links = snap.docs.map((d) => fromFirestoreData(d.data()));
+  const links = snap.docs.map((d) => buildBookingMirrorLinkFromFirestoreData(d.data()));
   return c.json({ links });
 });
 
@@ -154,7 +138,7 @@ bookingMirrorLinkRoutes.get('/:linkId', requireAuth, async (c) => {
   if (data.ownerUid !== user.uid) {
     return c.json({ error: 'Forbidden' }, 403);
   }
-  return c.json({ link: fromFirestoreData(data) });
+  return c.json({ link: buildBookingMirrorLinkFromFirestoreData(data) });
 });
 
 // 更新
@@ -197,7 +181,7 @@ bookingMirrorLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
   await ref.update(update);
 
   const updated = await ref.get();
-  return c.json({ link: fromFirestoreData(updated.data()!) });
+  return c.json({ link: buildBookingMirrorLinkFromFirestoreData(updated.data()!) });
 });
 
 // 削除

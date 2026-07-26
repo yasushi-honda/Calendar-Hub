@@ -18,6 +18,9 @@ import {
 } from '../lib/google-booking-mirror.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
+import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
+import { excludeOverlappingSlots } from '../lib/booking-mirror-slots.js';
+import { getConfirmedBookingEventsForOwner } from '../lib/booking-events.js';
 import type {
   BookingMirrorLink,
   BookingMirrorSlot,
@@ -38,20 +41,7 @@ async function getActiveLink(linkId: string): Promise<LinkResult> {
     return { link: null, error: 'Booking mirror link not found', statusCode: 404 };
   }
   const data = doc.data()!;
-  const link: BookingMirrorLink = {
-    id: data.id,
-    ownerUid: data.ownerUid,
-    title: data.title,
-    description: data.description ?? undefined,
-    sourceUrl: data.sourceUrl,
-    scheduleId: data.scheduleId,
-    notificationEmail: data.notificationEmail,
-    rangeDays: data.rangeDays,
-    status: data.status,
-    expiresAt: data.expiresAt?.toDate?.() ?? null,
-    createdAt: data.createdAt?.toDate?.() ?? new Date(),
-    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
-  };
+  const link = buildBookingMirrorLinkFromFirestoreData(data);
   if (link.status !== 'active') {
     return { link: null, error: 'This booking link is currently paused', statusCode: 400 };
   }
@@ -128,10 +118,19 @@ publicBookingMirrorRoutes.get('/:linkId/slots', async (c) => {
     return c.json({ error: 'Failed to resolve schedule id', slots: [] }, 502);
   }
 
-  let googleSlots: GoogleSlot[];
-  try {
-    googleSlots = await fetchAvailableSlots(scheduleId, startUnix, endUnix);
-  } catch (err) {
+  // fetchAvailableSlots (Google gRPC, 最大8s) と getConfirmedBookingEventsForOwner
+  // (Firestore) は互いに独立しているため並列実行する。
+  // 後者は Calendar Hub 側で既に確定済みの予約 (mirror/非mirror問わず同一オーナー) を
+  // 除外するために使う。Google 側はこの予約を認識しないため、ここで差し引かないと
+  // 同じ枠がミラーページ上に空きとして表示され続け、次のゲストが予約しようとすると
+  // 409 になる。
+  const [slotsResult, bookedResult] = await Promise.allSettled([
+    fetchAvailableSlots(scheduleId, startUnix, endUnix),
+    getConfirmedBookingEventsForOwner(link.ownerUid, now, endDate),
+  ]);
+
+  if (slotsResult.status === 'rejected') {
+    const err = slotsResult.reason;
     if (err instanceof BookingMirrorError) {
       console.error(
         `[booking-mirror] fetchAvailableSlots ${err.kind}/${err.subKind} for link ${link.id}: ${err.message}`,
@@ -144,7 +143,16 @@ publicBookingMirrorRoutes.get('/:linkId/slots', async (c) => {
     throw err;
   }
 
-  const slots = toMirrorSlots(googleSlots);
+  if (bookedResult.status === 'rejected') {
+    console.error(
+      `[booking-mirror] getConfirmedBookingEventsForOwner failed for link ${link.id}:`,
+      bookedResult.reason,
+    );
+    return c.json({ error: 'Failed to check existing bookings', slots: [] }, 502);
+  }
+
+  const availableSlots = excludeOverlappingSlots(slotsResult.value, bookedResult.value);
+  const slots = toMirrorSlots(availableSlots);
   return c.json({ slots, title: link.title });
 });
 

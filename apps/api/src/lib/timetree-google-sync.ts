@@ -28,6 +28,82 @@ export function computeSyncGap(input: {
 }
 
 /**
+ * 何らかの理由 (プロセスクラッシュ等) でリースが解放されなかった場合のフェイルセーフ。
+ * 通常の同期処理時間を十分に超える値を取り、放置されたリースが後続の同期を
+ * 永久にブロックしないようにする。
+ */
+export const SYNC_LEASE_STALE_MS = 10 * 60 * 1000; // 10分
+
+/**
+ * syncConfig 単位でリース(実行中フラグ)を取得してよいかを判定する純粋関数。
+ *
+ * 従来の `lastSyncedAt` 経過時間チェックのみでは check-then-act になっており、
+ * Cloud Scheduler の再試行や並列呼び出し時に同一 syncConfig が二重処理され
+ * うるレースコンディションがあった (Issue #196)。インターバル未経過に加えて
+ * 「有効なリースが既に存在する (＝他の実行が処理中)」場合も取得不可とする。
+ */
+export function shouldAcquireSyncLease(params: {
+  lastSyncedAtMs: number | undefined;
+  syncIntervalMinutes: number | undefined;
+  syncLeaseAtMs: number | undefined;
+  nowMs: number;
+}): boolean {
+  const intervalMs = (params.syncIntervalMinutes ?? 5) * 60_000;
+  if (params.nowMs - (params.lastSyncedAtMs ?? 0) < intervalMs) {
+    return false;
+  }
+  if (
+    params.syncLeaseAtMs !== undefined &&
+    params.nowMs - params.syncLeaseAtMs < SYNC_LEASE_STALE_MS
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * syncConfig document 単位でリースをトランザクションで取得する。判定
+ * (`shouldAcquireSyncLease`) とリース書き込みを同一トランザクション内で行う
+ * ことで、読み取り〜更新の間に他の実行が割り込む check-then-act を防ぐ。
+ * 取得できた場合のみ true を返し、呼び出し元は同期処理本体を開始してよい。
+ */
+export async function acquireSyncLease(ownerUid: string, docId: string): Promise<boolean> {
+  const db = getDb();
+  const configRef = db.collection('users').doc(ownerUid).collection('syncConfig').doc(docId);
+
+  return db.runTransaction(async (tx) => {
+    const doc = await tx.get(configRef);
+    if (!doc.exists) return false;
+    const data = doc.data()!;
+
+    const acquired = shouldAcquireSyncLease({
+      lastSyncedAtMs: data.lastSyncedAt?.toDate?.().getTime(),
+      syncIntervalMinutes: data.syncIntervalMinutes,
+      syncLeaseAtMs: data.syncLeaseAt?.toDate?.().getTime(),
+      nowMs: Date.now(),
+    });
+    if (!acquired) return false;
+
+    tx.update(configRef, { syncLeaseAt: FieldValue.serverTimestamp() });
+    return true;
+  });
+}
+
+/**
+ * 同期処理完了 (成功/失敗いずれも) 後にリースを解放する。失敗時は呼び出し元が
+ * `lastSyncedAt` を更新しないため、次回インターバル判定で再試行対象になる。
+ */
+export async function releaseSyncLease(ownerUid: string, docId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .collection('users')
+    .doc(ownerUid)
+    .collection('syncConfig')
+    .doc(docId)
+    .update({ syncLeaseAt: FieldValue.delete() });
+}
+
+/**
  * TimeTreeからイベント取得。
  * 全カレンダーの全イベントを集約。
  */

@@ -9,6 +9,8 @@ import {
   executeSyncActions,
   recordSyncLog,
   computeSyncGap,
+  acquireSyncLease,
+  releaseSyncLease,
 } from '../lib/timetree-google-sync.js';
 import { nanoid } from 'nanoid';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -63,10 +65,11 @@ syncRoutes.post('/timetree-to-google', async (c) => {
     let failureCount = 0;
 
     for (const { docId, ownerUid, data: config } of configs) {
-      // syncIntervalMinutes に基づく経過時間チェック
-      const lastSyncedAt = config.lastSyncedAt?.getTime() ?? 0;
-      const intervalMs = (config.syncIntervalMinutes ?? 5) * 60_000;
-      if (Date.now() - lastSyncedAt < intervalMs) {
+      // syncIntervalMinutes に基づく経過時間チェック + リース取得をトランザクションで
+      // 原子的に行う (Issue #196: 従来の check-then-act な判定は並列/再試行実行時に
+      // 同一設定を二重処理しうるレースコンディションがあった)。
+      const leaseAcquired = await acquireSyncLease(ownerUid, docId);
+      if (!leaseAcquired) {
         continue;
       }
 
@@ -117,13 +120,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         const status = stats.skipped > 0 ? 'partial' : 'success';
         await recordSyncLog(docId, ownerUid, status, stats, Date.now() - configStartTime);
 
-        // lastSyncedAt を更新
+        // lastSyncedAt を更新 (リースも解放)
         await db
           .collection('users')
           .doc(ownerUid)
           .collection('syncConfig')
           .doc(docId)
-          .update({ lastSyncedAt: FieldValue.serverTimestamp() });
+          .update({ lastSyncedAt: FieldValue.serverTimestamp(), syncLeaseAt: FieldValue.delete() });
 
         console.log(
           `Sync completed for ${ownerUid}/${config.googleCalendarId}: ${stats.created} created, ${stats.updated} updated, ${stats.deleted} deleted`,
@@ -140,6 +143,12 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           Date.now() - configStartTime,
           getErrorMessage(err),
         ).catch((e) => console.error('Failed to record sync log:', e));
+
+        // 失敗時もリースは解放する (lastSyncedAt は更新しないため、次回インターバル
+        // 判定で再試行対象になる。状態復旧を最優先し独立したtry-catchで囲む)
+        await releaseSyncLease(ownerUid, docId).catch((e) =>
+          console.error('Failed to release sync lease:', e),
+        );
       }
     }
 

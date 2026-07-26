@@ -3,6 +3,8 @@ import {
   buildSyncActions,
   executeSyncActions,
   computeSyncGap,
+  shouldAcquireSyncLease,
+  SYNC_LEASE_STALE_MS,
 } from '../lib/timetree-google-sync.js';
 import type { CalendarEvent } from '@calendar-hub/shared';
 import type { CalendarAdapter } from '@calendar-hub/calendar-sdk';
@@ -624,6 +626,90 @@ describe('Sync Logic', () => {
       const minus1 = computeSyncGap({ ttCount: 9, taggedBefore: 10, created: 0, deleted: 0 });
       expect(minus1.hasGap).toBe(true);
       expect(minus1.diff).toBe(-1);
+    });
+  });
+
+  describe('shouldAcquireSyncLease - リース取得可否判定 (Issue #196: 二重処理防止)', () => {
+    const now = new Date('2026-08-01T12:00:00Z').getTime();
+
+    it('初回同期 (lastSyncedAt未設定) かつリースなしなら取得できる', () => {
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: undefined,
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: undefined,
+        nowMs: now,
+      });
+      expect(acquired).toBe(true);
+    });
+
+    it('インターバル未経過なら取得できない', () => {
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 4 * 60_000, // 4分前 (5分インターバル未経過)
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: undefined,
+        nowMs: now,
+      });
+      expect(acquired).toBe(false);
+    });
+
+    it('インターバルがちょうど経過した境界では取得できる', () => {
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 5 * 60_000, // ちょうど5分前
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: undefined,
+        nowMs: now,
+      });
+      expect(acquired).toBe(true);
+    });
+
+    it('有効なリースが存在する場合は取得できない (他の実行が処理中)', () => {
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 10 * 60_000,
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: now - 1 * 60_000, // 1分前に取得されたリース (10分の失効猶予内)
+        nowMs: now,
+      });
+      expect(acquired).toBe(false);
+    });
+
+    it('リースが失効済み (SYNC_LEASE_STALE_MSを超過) なら取得できる (クラッシュ復旧)', () => {
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 10 * 60_000,
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: now - SYNC_LEASE_STALE_MS - 1, // 失効猶予をわずかに超過
+        nowMs: now,
+      });
+      expect(acquired).toBe(true);
+    });
+
+    it('リースの失効境界ちょうどでは、失効済み (経過側) とみなし取得できる', () => {
+      // インターバル境界 (「ちょうど経過した境界では取得できる」) と同じ扱い:
+      // 「ちょうど」は経過側とみなす (hasOverlappingEvent等と同じ境界規約)
+      const acquired = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 10 * 60_000,
+        syncIntervalMinutes: 5,
+        syncLeaseAtMs: now - SYNC_LEASE_STALE_MS, // ちょうど失効猶予分前
+        nowMs: now,
+      });
+      expect(acquired).toBe(true);
+    });
+
+    it('syncIntervalMinutes未指定時はデフォルト5分として判定する', () => {
+      const tooSoon = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 3 * 60_000,
+        syncIntervalMinutes: undefined,
+        syncLeaseAtMs: undefined,
+        nowMs: now,
+      });
+      expect(tooSoon).toBe(false);
+
+      const elapsed = shouldAcquireSyncLease({
+        lastSyncedAtMs: now - 6 * 60_000,
+        syncIntervalMinutes: undefined,
+        syncLeaseAtMs: undefined,
+        nowMs: now,
+      });
+      expect(elapsed).toBe(true);
     });
   });
 });

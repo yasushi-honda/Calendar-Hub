@@ -1,460 +1,6 @@
-# Calendar Hub ハンドオフ (2026-07-19, 第 13 編まで)
+# Calendar Hub ハンドオフ (2026-07-26, 第 15 編まで)
 
-> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。LATEST.md は第 10 編以降のみ保持する。
-
-## 2026-07-18 セッション総括 (第 10 編): catchup 新規検出 — Dependabot critical alert 修正 + PR 3 件マージ
-
-catchup 実行時に新規検出された「守り (修正)」候補 2 件 (第 9 編却下候補 #7 の後継) を decision-maker 承認を得て解消。critical severity の脆弱性 alert が 1 件 → 0 件になった。
-
-### PR 一覧
-
-| PR   | 内容                                                                        | 規模          | 結果                         |
-| ---- | --------------------------------------------------------------------------- | ------------- | ---------------------------- |
-| #173 | chore(deps): bump actions/setup-java from 4 to 5                            | 1 file        | ✅ merge (CI green 確認済み) |
-| #174 | chore(deps): bump actions/checkout from 6 to 7                              | 2 files       | ✅ merge (CI green 確認済み) |
-| #175 | chore(deps): bump actions/cache from 4 to 6                                 | 1 file        | ✅ merge (CI green 確認済み) |
-| #176 | fix(deps): websocket-driver を 0.7.5 に override して critical 脆弱性を解消 | 2 files +6/-4 | ✅ merge (CI 全 PASS 後)     |
-
-### 主要成果
-
-#### M1: Dependabot critical alert #104 (websocket-driver, CVE-2026-54466, CVSS v4 9.2) を手動 override で解消
-
-`firebase-admin`(devDependency) → `@firebase/database-compat` → `@firebase/database` → `faye-websocket` → `websocket-driver 0.7.4` の推移的依存が対象。Dependabot の自動修正 PR は alert 作成時点 (2026-07-16) で `security_update_not_possible` により失敗していたが、調査の結果、修正版 `websocket-driver@0.7.5` は既に npm に存在し `faye-websocket` の依存範囲 (`>=0.5.1`) にも収まることを確認。既存の `pnpm.overrides` パターン (14 件既存) に倣い `"websocket-driver@<0.7.5": ">=0.7.5"` を追加して解決。scope は development のみ (本番ランタイム非依存)。
-
-#### M2: open Dependabot PR 3 件 (GitHub Actions バージョン bump) をマージ
-
-17 日間放置されていた #173/#174/#175 (いずれも CI green・mergeable 確認済み) を番号単位の明示認可を得てマージ。setup-java v5 は内部で Node 24 へのアップグレードという breaking change を含むが、CI (quality/e2e) が green であることをマージ前に確認済み。
-
-### 検証
-
-- `pnpm install` 実行 → `pnpm why websocket-driver` で 0.7.5 への解決を確認
-- `pnpm turbo type-check` 全パッケージ PASS (8/8 successful)
-- pre-commit hook (husky + lint-staged) 通過確認
-- PR #176 の CI (quality / e2e / GitGuardian / CodeRabbit) 全 PASS を確認してからマージ
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #176 (`fix(deps):`) 1 件。
-
-- 本セッション内の同根候補: PR #173-175 は `chore(deps):` の GitHub Actions バージョン bump で、root cause が異なる (npm パッケージ脆弱性 vs Actions バージョン管理) ため同根ではない
-- 過去 7 日 archive を `websocket-driver` / `dependabot` / `CVE-2026` / `security alert` で grep → ヒットなし
-
-→ **同根再発候補 0 件** ✅
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定 (PR #176)                                                                        |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ `pnpm.overrides` によるバージョン強制固定 (構造的対応、既存パターンに準拠)         |
-| 2   | WebSearch / changelog 確認なし                    | ❌ CVE 詳細確認済み (CVE-2026-54466, 公開日 2026-07-15, 修正版 0.7.5 存在確認)        |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ websocket-driver 個別の override は初 (類似パターン 14 件はあるが対象パッケージ別) |
-| 4   | smoke のみで構造的検証なし                        | ❌ `pnpm why` で依存解決確認 + `pnpm turbo type-check` 全 PASS                        |
-
-→ **対症療法疑いなし** ✅
-
-### グローバル memory scope (§ 4.5)
-
-memory ファイル変更なし、スキップ。
-
-### 構造的整合性 (§ 4)
-
-`package.json` (`pnpm.overrides`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
-
-### Issue Net 変化 (第 10 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0**（Issue の起票・close は本セッションで発生せず、Dependabot alert/PR での対応のみ）
-
-### 次のアクション (第 10 編 update)
-
-#### 即着手タスク
-
-なし。本セッションで catchup 新規検出の 2 項目 (critical alert 対応 + PR 3 件マージ) を全解消。OPEN PR ゼロ。
-
-#### 条件待ち (明示 trigger 付き) — 第 9 編の 5 件は変化なし、新規 1 件追加
-
-| #   | 項目                                                                                           | trigger                                                                                                                                                              | trigger 充足時のタスク                                                                       |
-| --- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加)                                       | decision-maker から「C1 着手」明示指示                                                                                                                               | spec §9.1 末尾参照 (第 9 編から継続)                                                         |
-| 2   | gRPC-web API 仕様変更時の運用 fallback                                                         | Google 側で `internal` namespace 変更 / API Key 失効                                                                                                                 | `parseSlotResponse` の structured log alert 化 (第 9 編から継続)                             |
-| 3   | ADR-010 Future Work 3 件 + ADR-009 既存ロジック強化 3 件                                       | decision-maker 起点指示                                                                                                                                              | 該当 ADR 参照 (第 9 編から継続)                                                              |
-| 4   | Issue #145 の 3 連続 PASS 厳密化                                                               | 万一 main 上で flaky 再発                                                                                                                                            | diagnostic PR 起動 (第 9 編から継続)                                                         |
-| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                                                 | decision-maker 起点指示                                                                                                                                              | モバイル改修は desktop 非 touch (第 9 編から継続)                                            |
-| 6   | Dependabot alert #102/#103 (js-yaml, medium, CVE-2026-53550, DoS via merge-key) の対応要否判断 | decision-maker の対応要否判断 (修正版 4.2.0 以降が既に存在、devDependency `@typescript-eslint/*` → `eslint` → `@eslint/eslintrc` → `js-yaml 4.1.1` 経由の推移的依存) | `pnpm.overrides` に `"js-yaml@<4.2.0": ">=4.2.0"` 追加を検討 (websocket-driver と同パターン) |
-
-#### 却下候補 (記録のみ)
-
-第 9 編の却下候補 1-7 は変化なし (#7「GitHub 脆弱性アラート 21 件の追加対応」は本セッションで critical 1 件を解消したため部分的に消化、残り high/medium/low は #6 条件待ちとして分離)。#8 (global memory 化見送り) も継続。
-
-### 再開可能性判定 (第 10 編)
-
-| 項目                    | 状態                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (PR #173/#174/#175/#176 merge 済、本 handoff PR が最後)           |
-| active Issue            | 0 件 ✅                                                                   |
-| Git clean               | ✅ (本 handoff PR commit 後)                                              |
-| 残留プロセス            | ✅ なし                                                                   |
-| Security alert          | critical 1 → 0 件 ✅ / high 10・medium 4・low 1 は残存 (js-yaml 2 件含む) |
-| 構造的整合性            | ⏭️ スキップ (設定ファイルのみ、型・API 影響なし)                          |
-| 同根再発                | ✅ なし                                                                   |
-| 対症療法疑い            | ✅ なし                                                                   |
-| グローバル memory scope | ⏭️ 変更なし                                                               |
-
----
-
-## 最終結論 (第 10 編)
-
-✅ **セッション終了可** — catchup 新規検出 2 項目 (Dependabot critical alert #104 修正 + PR 3 件マージ) を decision-maker 承認を得て全解消
-
-- OPEN PR ゼロ (PR #173/#174/#175/#176 merge 済、本 handoff PR が最後)
-- active Issue ゼロ
-- Git clean
-- 即着手タスク = 0 / 条件待ち = 6 件 (全 decision-maker 領分、うち 1 件新規: js-yaml alert)
-- Issue Net 変化 = 0 / 0
-- 同根再発候補 0 件 / 対症療法疑いなし
-- Security alert: critical 1 → 0 件に低減 (残り high/medium/low 15 件は次回 decision-maker 判断待ち)
-
----
-
-## 2026-07-18 セッション総括 (第 11 編): js-yaml override PR 追加対応 + vite override 機能不全の発見
-
-第 10 編の条件待ち #6 (js-yaml alert #102/#103) を decision-maker の明示指示「js-yaml の override PR も作成して」を受けて即時解消。あわせて依存関係調査の過程で、既存の `vite` override が実際には機能していない (peer dependency 経由のため無効) ことを発見。
-
-### PR 一覧
-
-| PR   | 内容                                                             | 規模           | 結果                     |
-| ---- | ---------------------------------------------------------------- | -------------- | ------------------------ |
-| #178 | fix(deps): js-yaml を 5.2.1 に override して medium 脆弱性を解消 | 2 files +8/-27 | ✅ merge (CI 全 PASS 後) |
-
-### 主要成果
-
-#### M1: Dependabot alert #102/#103 (js-yaml, CVE-2026-53550, medium) を手動 override で解消
-
-`@typescript-eslint/*` → `eslint` → `@eslint/eslintrc` 経由の推移的依存 (js-yaml 4.1.1) と `firebase-tools` 経由の直接依存 (js-yaml 3.14.2) の両方が対象。`@eslint/eslintrc` の依存範囲 (`^4.1.1`) が修正版 4.2.0 以降もカバーすることを確認し、既存パターンに倣い `"js-yaml@<4.2.0": ">=4.2.0"` を追加。pnpm が範囲内最新の 5.2.1 を解決し、3.14.2/4.1.1 の重複解決も統合されて lockfile が簡素化 (-27/+8 行)。メジャーバージョン 4→5 昇格のため `pnpm lint` + `pnpm turbo type-check` の両方で動作確認。
-
-#### M2: 【重要な発見】既存の `vite` override が機能していない (次回セッション要対応)
-
-CI で「Dependabot Updates workflow: npm_and_yarn in /. for vite - Update」の失敗を検知し調査した結果:
-
-- Dependabot alert #78 (vite, **high**, CVSS v4 8.2, path traversal via Windows NTFS ADS/8.3 short name, CVE-2026-53571) と #77 (vite/launch-editor, medium, NTLM hash 漏洩, CVE-2026-53632) の脆弱性範囲は `>=8.0.0, <=8.0.15` (修正版 `8.0.16`)
-- 既存の `pnpm.overrides` には `"vite@>=8.0.0 <=8.0.4": ">=8.0.5"` があるが、これは**別の脆弱性 (8.0.0-8.0.4) 用の古いエントリ**で今回の alert 範囲 (8.0.0-8.0.15) をカバーしていない
-- `pnpm why vite` で実際のインストールバージョンを確認したところ **8.0.1 のまま** — 既存 override の範囲 (`>=8.0.0 <=8.0.4`) には該当するはずだが `>=8.0.5` へ解決されていない
-- 原因仮説: `vite` は `vitest`/`@vitest/mocker` の **peerDependency** として要求されており、pnpm の `overrides` は通常の dependency 解決には効くが peer dependency 解決には別ロジックが働き、無効化されている可能性がある (未検証、仮説段階)
-- **本番ランタイムには影響しない** (vite は vitest 経由の devDependency のみ) が、CVSS 8.2 の high severity かつ既存の防御機構が実効性を持っていないという構造的問題
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #178 (`fix(deps):`) 1 件。
-
-- 本セッション内の同根候補: PR #176 (websocket-driver) と PR #178 (js-yaml) は同一手法 (`pnpm.overrides` 追加) だが、対象パッケージ・CVE が異なる独立した脆弱性対応であり、バグの同根再発ではなく体系的な守り対応の繰り返し適用と判断
-- ただし M2 の vite override 機能不全は、「同じ機構 (pnpm.overrides) が特定の依存形態 (peer dependency) で無効化されるケースがある」という**構造的な弱点候補**であり、次回セッションでの検証が必要
-- 過去 7 日 archive を `js-yaml` / `websocket-driver` / `pnpm.overrides` / `CVE-2026` で grep → ヒットなし
-
-→ **バグとしての同根再発候補 0 件** ✅ (ただし M2 の構造的弱点は条件待ちへ計上)
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定 (PR #178)                                                             |
-| --- | ------------------------------------------------- | -------------------------------------------------------------------------- |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ `pnpm.overrides` によるバージョン強制固定 (構造的対応)                  |
-| 2   | WebSearch / changelog 確認なし                    | ❌ CVE 詳細確認済み (CVE-2026-53550, `@eslint/eslintrc` 依存範囲確認)      |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ js-yaml 個別の override は初                                            |
-| 4   | smoke のみで構造的検証なし                        | ❌ `pnpm why` で依存解決確認 + `pnpm lint`/`pnpm turbo type-check` 全 PASS |
-
-→ **対症療法疑いなし** ✅ (PR #178 自体は構造的対応。M2 の vite 問題は未解決のまま次回持ち越しであり対症療法ではなく「未着手」)
-
-### グローバル memory scope (§ 4.5)
-
-memory ファイル変更なし、スキップ。
-
-### 構造的整合性 (§ 4)
-
-`package.json` (`pnpm.overrides`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
-
-### Issue Net 変化 (第 11 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0**
-
-### 次のアクション (第 11 編 update)
-
-#### 即着手タスク
-
-なし。本セッションで decision-maker 指示の js-yaml override PR 作成・マージまで完了。
-
-#### 条件待ち (明示 trigger 付き) — 第 10 編の 6 件は変化なし、新規 1 件追加
-
-| #   | 項目                                                                                                               | trigger                                                   | trigger 充足時のタスク                                                                                                                                                                                      |
-| --- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1-6 | (第 10 編から継続、内容変化なし: C1 拡張 / gRPC-web fallback / ADR Future Work / Issue #145 / desktop UI レビュー) | 各項目個別 (LATEST.md 第 9-10 編参照)                     | 各項目個別                                                                                                                                                                                                  |
-| 7   | **vite override 機能不全 (M2) の原因調査 + 修正**                                                                  | decision-maker の対応要否判断 (high severity CVE 2件対象) | `pnpm why vite` で peer dependency 解決経路を再検証、`.npmrc` の `auto-install-peers`/`resolve-peers-from-workspace-root` 等の設定確認、必要なら `vitest` 自体のバージョンアップ or override 記法変更を検討 |
-
-#### 却下候補 (記録のみ)
-
-第 9-10 編の却下候補は変化なし。
-
-### 再開可能性判定 (第 11 編)
-
-| 項目                    | 状態                                                                                                |
-| ----------------------- | --------------------------------------------------------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (PR #178 merge 済)                                                                          |
-| active Issue            | 0 件 ✅                                                                                             |
-| Git clean               | ✅                                                                                                  |
-| 残留プロセス            | ✅ なし                                                                                             |
-| Security alert          | critical 0・high 10・medium 2・low 1 (前セッションから medium 2 件減、high 中に vite CVE 2件を含む) |
-| 構造的整合性            | ⏭️ スキップ (設定ファイルのみ)                                                                      |
-| 同根再発 (バグとして)   | ✅ なし                                                                                             |
-| 対症療法疑い            | ✅ なし                                                                                             |
-| グローバル memory scope | ⏭️ 変更なし                                                                                         |
-| **要注意**              | ⚠️ 既存 vite override が peer dependency 経由で無効化されている可能性 (M2 参照、次回検証必要)       |
-
----
-
-## 最終結論 (第 11 編)
-
-✅ **セッション終了可** — decision-maker 指示の js-yaml override PR (#178) 作成・マージ完了
-
-- OPEN PR ゼロ、active Issue ゼロ、Git clean
-- 即着手タスク = 0 / 条件待ち = 7 件 (全 decision-maker 領分、うち新規 1 件: vite override 機能不全の調査)
-- Issue Net 変化 = 0 / 0
-- 同根再発候補 0 件 (バグとして) / 対症療法疑いなし
-- ⚠️ **次回優先確認事項**: 既存の `vite` override (`pnpm.overrides`) が peer dependency 経由のため無効化されている可能性を発見。対象は high severity (CVSS 8.2) の Windows path traversal 脆弱性 (alert #78) 含む 2 件。本番ランタイム非依存 (dev のみ) だが、構造的な防御漏れの可能性がありセッション終了前に明記
-
----
-
-## 2026-07-19 セッション総括 (第 12 編): vite override 機能不全の根本解決 + Dependabot alert 20→0 完全解消
-
-catchup の推奨に従い、第 11 編 M2 で発見された vite override 機能不全（条件待ち #7）を含む全 Dependabot open alert（high 13 / medium 6 / low 1 = 20 件）に順次対応。3 PR に分割して段階検証し、全件解消。
-
-### PR 一覧
-
-| PR   | 内容                                                                       | 規模              | 結果                                              |
-| ---- | -------------------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| #180 | fix(deps): vite を devDependencies に直接固定して peer override 不全を解消 | 2 files +150/-117 | ✅ merge (CI 全 PASS 後)                          |
-| #181 | fix(deps): esbuild/ws/grpc-js/form-data/qs/uuid の脆弱バージョンを解消     | 2 files +148/-207 | ✅ merge (CI 全 PASS 後)                          |
-| #182 | fix(deps): tar を firebase-tools 配下含め >=7.5.16 に override             | 2 files +5/-66    | ✅ merge (CI 全 PASS 後、Deploy success 確認済み) |
-
-### 主要成果
-
-#### M1: 【第 11 編 M2 の根本原因確定】pnpm.overrides はグラフ内で peerDependency としてのみ出現するパッケージには適用されない
-
-第 11 編で「未検証、仮説段階」としていた peer dependency 仮説を、公式 docs (pnpm.io/settings#overrides) + 既知 issue (`pnpm/pnpm#9913`, `vitest-dev/vitest#7520`) で確認。`pnpm why vite` で override 適用後も 8.0.1 のまま解決されないことを実測確認し、根本原因を特定。
-
-**対処法**: 該当パッケージ（vite, esbuild）を `pnpm.overrides` ではなく `devDependencies` に直接固定することで、peer 解決ロジックを経由せず確実に patched バージョンを強制。esbuild は vite/tsx 双方の peer/固定依存として出現しており、同一パターンで発見・修正（tsx 側のネスト pin には併せて override も追加）。
-
-#### M2: Dependabot open alert 20 件 → 0 件（完全解消）
-
-| パッケージ    | 修正内容                                    | 対象 alert                             |
-| ------------- | ------------------------------------------- | -------------------------------------- |
-| vite          | 8.0.1 → 8.1.5（devDependency 直接固定）     | #19,#20,#21,#77,#78 (high×3, medium×2) |
-| esbuild       | 0.27.4 → 0.28.1（同上 + tsx 配下 override） | #75 (low)                              |
-| ws            | 8.19.0 (@google/genai runtime) → 8.21.1     | #92,#66 (high, medium)                 |
-| @grpc/grpc-js | <1.9.16 → 1.14.3                            | #73,#74 (high×2)                       |
-| form-data     | 2.5.5 (@types/request配下) → 4.0.6          | #88 (high)                             |
-| qs            | 6.15.0/6.15.1 → 6.15.3                      | #63 (medium)                           |
-| uuid          | 8.3.2/9.0.1 → 11.1.1/14.0.1                 | #62 (medium)                           |
-| tar           | 6.2.1 (firebase-tools直接依存) → 7.5.16     | #94-#100 (high×6, medium×1)            |
-
-tar は firebase-tools の emulator バイナリ展開に使われる dev ツール依存のため他 6 件と PR を分離し、`firebase emulators:start --only firestore,auth` の実起動（jar ダウンロード・展開含む "All emulators ready!" まで）で個別に安全性を検証してからマージ。
-
-#### M3:【守り(検出)】既存 override 全件の同型弱点スイープ
-
-M1 の発見を受け、既存 20 件の override エントリ全てについて「対象パッケージが peer 経由で無効化されていないか」を `pnpm why` で検出のみ実施。picomatch/yaml は peer 経由で出現するが、実際の resolved バージョンは override target を満たしており、他に無効化されている override は検出されず。
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #180 / #181 / #182 の 3 件（いずれも `fix(deps):`）。
-
-- **同根確定**: PR #180 (vite) と PR #181 内の esbuild 修正は、第 11 編 M2 で仮説段階だった「pnpm.overrides が peerDependency 専有パッケージに無効」という**同一の構造的root causeによる再発**。今回 WebFetch/WebSearch で根本原因を確定させ、同一手法（devDependencies 直接固定）で両方解決したため、根本解決とみなす。
-- PR #181 内の ws/@grpc/grpc-js/form-data/qs/uuid、PR #182 の tar は通常の transitive dependency バージョン更新であり、vite/esbuild とは異なる（override が通常通り機能するケース）。相互に同根ではない。
-- 過去 7 日 archive を `vite` / `override` / `peer` で grep → 第 11 編（本リポジトリ内、7 日以内）に M2 として記録済み、今回はその直接の解決編。新規の別セッション同根なし。
-
-→ **同根再発 1 件（vite/esbuild、第 11 編 M2 の予告どおり）を根本解決** ✅。M3 のスイープで他の潜伏同根は検出されず。
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定                                                                                                                  |
-| --- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ pnpm.overrides / devDependency 直接固定による構造的対応                                                            |
-| 2   | WebSearch / changelog 確認なし                    | ❌ pnpm 公式 docs + `pnpm/pnpm#9913` + `vitest-dev/vitest#7520` を WebFetch/WebSearch で確認、根本原因を実測特定      |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ⚠️ 該当（vite/esbuild は同根）だが、今回で根本原因を確定し解決したため「再発」ではなく「解決編」と判定                |
-| 4   | smoke のみで構造的検証なし                        | ❌ 全 PR で test/type-check/lint/build 全通過 + tar は emulator 実起動、pnpm-lock diff の無関係変更混入なしを個別確認 |
-
-→ **対症療法疑いなし** ✅（基準3 はヒットするが、今回のセッションで根本原因を確定させ構造的に解決したため、この基準が意図する「原因不明のまま再発を繰り返す」パターンには該当しない）
-
-### グローバル memory scope (§ 4.5)
-
-memory ファイル変更なし、スキップ。
-
-### 構造的整合性 (§ 4)
-
-`package.json` (`pnpm.overrides` / `devDependencies`) + `pnpm-lock.yaml` の設定ファイル変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ。
-
-### Issue Net 変化 (第 12 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0**
-
-### 次のアクション (第 12 編 update)
-
-#### 即着手タスク
-
-なし。
-
-#### 条件待ち (明示 trigger 付き) — 第 10-11 編の項目のうち #7 (vite override 機能不全) を解消、残り 6 件は変化なし
-
-| #   | 項目                                                                                                                 | trigger                               | trigger 充足時のタスク |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ---------------------- |
-| 1-6 | (第 9-10 編から継続、内容変化なし: C1 拡張 / gRPC-web fallback / ADR Future Work / Issue #145 / desktop UI レビュー) | 各項目個別 (LATEST.md 第 9-10 編参照) | 各項目個別             |
-
-第 11 編の条件待ち #7（vite override 機能不全）は本セッションで根本解決・完了のため削除。
-
-#### 却下候補 (記録のみ)
-
-第 9-10 編の却下候補は変化なし。
-
-### 再開可能性判定 (第 12 編)
-
-| 項目                        | 状態                                                                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| OPEN PR                     | 0 件 ✅ (PR #180/#181/#182 merge 済)                                                                                       |
-| active Issue                | 0 件 ✅                                                                                                                    |
-| Git clean                   | ✅                                                                                                                         |
-| 残留プロセス                | ⚠️ あり（別プロジェクト sanwa-houkai-app の next dev、本プロジェクト非依存・マシン全体チェックの検出。停止は条件待ち扱い） |
-| Security alert (Dependabot) | **0 件**（critical 0・high 0・medium 0・low 0、前セッションから 20 件全解消）                                              |
-| Deploy CI                   | ✅ success（#180/#181/#182 の 3 回とも success 確認済み）                                                                  |
-| 構造的整合性                | ⏭️ スキップ (設定ファイルのみ)                                                                                             |
-| 同根再発                    | ✅ 1 件検出・根本解決済み（vite/esbuild）                                                                                  |
-| 対症療法疑い                | ✅ なし                                                                                                                    |
-| グローバル memory scope     | ⏭️ 変更なし                                                                                                                |
-
----
-
-## 最終結論 (第 12 編)
-
-✅ **セッション終了可** — catchup 推奨事項（vite override 機能不全 + Dependabot alert 内訳増加）を両方とも根本解決
-
-- OPEN PR ゼロ、active Issue ゼロ、Git clean
-- 即着手タスク = 0 / 条件待ち = 6 件（すべて decision-maker 領分、前セッションの vite override 項目は解消済みで削除）
-- Issue Net 変化 = 0 / 0
-- Dependabot open alert: **20 件 → 0 件**（critical/high/medium/low 全解消、Deploy CI 3 回とも success）
-- 同根再発候補 1 件検出・根本解決済み（vite/esbuild の peer override 不全、pnpm 既知issue で原因確定）／対症療法疑いなし
-- ⚠️ 残留プロセスは別プロジェクト（sanwa-houkai-app）の node dev サーバーのみ検出、本プロジェクト非依存につき条件待ち扱い（停止は明示指示があれば対応）
-
-## 2026-07-19 セッション総括 (第 13 編): ADR-009 既存ロジック強化 3 件実装 (PR #184)
-
-catchup 実行時、積み残しタスク・active Issue 共に 0 件で一旦セッション終了推奨だったが、条件待ち 6 件のうち decision-maker が着手可能な 4 件（C1 拡張 / ADR-010 Future Work / ADR-009 既存ロジック強化 / desktop UI レビュー）を提示し、本番 GCP 変更を伴わず TDD で完結できる「ADR-009 既存ロジック強化 3 件」を推奨・選定して実装した。
-
-### PR 一覧
-
-| PR   | 内容                                                                                | 規模            | 結果                     |
-| ---- | ----------------------------------------------------------------------------------- | --------------- | ------------------------ |
-| #184 | fix(calendar-sdk): TimeTreeAdapter の 401/400/403 エラー分類と reLogin 観測性を改善 | 3 files +103/-8 | ✅ merge (CI 全 PASS 後) |
-
-### 主要成果
-
-ADR-009 (`docs/adr/009-timetree-session-management.md`) の「既存ロジックの強化候補」3 件を全て解消:
-
-1. reLogin 後 retry の `res.ok` 検証追加 + `[TT-SESSION-RELOGIN-INEFFECTIVE]` ログ追加
-2. 400/401/403 のエラー分類精緻化（401 のみ reLogin 対象、400/403 は permanent 即返却、`rules/error-handling.md §3` 準拠）
-3. reLoginFn 不在時の 401 を `TimeTreeSessionExpiredError`（新規 public エラークラス、`packages/calendar-sdk` からexport）で明示 throw
-
-TDD (Red→Green) で実装: 既存の 400/401/403 混在パラメタライズテストを分割し、新規 4 テストを追加（400/403 で reLogin 未実行確認、401 の `TimeTreeSessionExpiredError` throw 確認、reLogin 後 retry 失敗時の INEFFECTIVE ログ確認）。本番の `adapter-factory.ts` は現状 `reLoginFn` を注入しておらず、既存の呼び出し元・エラーハンドリング（`apps/api/src/routes/sync.ts` の汎用 catch、文字列マッチなし）への影響はないことを Explore agent の事前調査で確認済み。
-
-### 検証
-
-- `pnpm --filter @calendar-hub/calendar-sdk vitest run timetree-adapter` — 35 tests PASS
-- `pnpm turbo type-check` — 8/8 packages PASS
-- `pnpm lint` — 全 PASS
-- `pnpm test`（モノレポ全体） — 246 tests PASS
-- `/code-review low` 実施 — findings 0 件
-- PR #184 の CI (quality/e2e/GitGuardian/CodeRabbit) 全 PASS を確認後、番号単位の明示認可を得てマージ
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #184 (`fix(calendar-sdk):`) 1 件。
-
-- 本セッション内の同根候補: 他に修正 PR なし
-- 過去 7 日 archive を `TimeTreeAdapter` / `reLoginFn` / `TT-SESSION` / `ADR-009` で grep → `archive/2026-06-26_to_27-vol7-to-vol9.md` のみヒット（ADR-009 自体の過去記録であり、バグ再発ではなく ADR に事前記録された改善候補の計画的解消）
-
-→ **同根再発候補 0 件（計画的 debt 解消のため対象外）** ✅
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定 (PR #184)                                                                                        |
-| --- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ transient/permanent 分類の構造的変更 (`rules/error-handling.md §3` 準拠) + 新規エラークラス導入    |
-| 2   | WebSearch / changelog 確認なし                    | ⏭️ 該当なし（外部要因起因のバグ修正ではなく、ADR-009 に事前記録済みの設計改善の計画的実装のため不要） |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ❌ TimeTreeAdapter のエラー分類変更は初                                                               |
-| 4   | smoke のみで構造的検証なし                        | ❌ TDD 新規 4 テスト + 型チェック + lint + 全体テスト (246 件) PASS                                   |
-
-→ **対症療法疑いなし** ✅
-
-### グローバル memory scope (§ 4.5)
-
-memory ファイル変更なし、スキップ。
-
-### 構造的整合性 (§ 4)
-
-`packages/calendar-sdk`（共有ロジック）の変更。正式な `/impact-analysis` スキルは未実行だが、Explore agent で `apps/api` の呼び出し元・エラーハンドリングへの影響を個別調査済み（`adapter-factory.ts` は reLoginFn 未注入、`sync.ts` は汎用 catch でエラーメッセージの文字列マッチなし）→ 影響なしを確認。
-
-### Issue Net 変化 (第 13 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0**（ADR 記載済みタスクの実装のため Issue 起票不要）
-
-### 次のアクション (第 13 編 update)
-
-#### 即着手タスク
-
-なし。
-
-#### 条件待ち (明示 trigger 付き) — 第 12 編の 6 件のうち ADR-009 既存ロジック強化 3 件を解消、残り 5 件は変化なし
-
-| #   | 項目                                                                    | trigger                                                        | trigger 充足時のタスク                                           |
-| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加)                | decision-maker から「C1 着手」明示指示                         | spec §9.1 末尾参照 (第 9 編から継続)                             |
-| 2   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効           | `parseSlotResponse` の structured log alert 化 (第 9 編から継続) |
-| 3   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須） | ADR-010 実装フェーズ §4-5 参照                                   |
-| 4   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発                                      | diagnostic PR 起動 (第 9 編から継続)                             |
-| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                        | モバイル改修は desktop 非 touch (第 9 編から継続)                |
-
-ADR-009 既存ロジック強化 3 件（旧項目 3 の一部）は本セッションで PR #184 により完全解消。
-
-#### 却下候補 (記録のみ)
-
-第 9-10 編の却下候補は変化なし。
-
-### 再開可能性判定 (第 13 編)
-
-| 項目                    | 状態                                                  |
-| ----------------------- | ----------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (PR #184 merge 済)                            |
-| active Issue            | 0 件 ✅                                               |
-| Git clean               | ✅                                                    |
-| 残留プロセス            | ✅ なし                                               |
-| 構造的整合性            | ✅ 確認済み（Explore agent による手動調査、影響なし） |
-| 同根再発                | ✅ なし（計画的 debt 解消）                           |
-| 対症療法疑い            | ✅ なし                                               |
-| グローバル memory scope | ⏭️ 変更なし                                           |
-
----
-
-## 最終結論 (第 13 編)
-
-✅ **セッション終了可** — ADR-009 既存ロジック強化 3 件を PR #184 で完全解消、CI 全 PASS・マージ済み・Git clean
-
-- OPEN PR ゼロ、active Issue ゼロ、Git clean
-- 即着手タスク = 0 / 条件待ち = 5 件（全て decision-maker 領分または外部 trigger 待ち、ADR-009 分は本セッションで解消済みのため削除）
-- Issue Net 変化 = 0 / 0
-- 同根再発候補 0 件（計画的 debt 解消）／対症療法疑いなし
-- 残留プロセスなし
-
----
+> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。第 10〜13 編は `archive/2026-07-18_to_19-vol10-to-vol13.md` に分離 (2026-07-26 第 15 編で実施、60KB 超過のため)。LATEST.md は第 14 編以降のみ保持する。
 
 ## 2026-07-25/26 セッション総括 (第 14 編): Dependabot alert 完全解消 (16→0) + pnpm.overrides 陳腐化パターンの構造的発見・是正
 
@@ -592,3 +138,133 @@ tar/js-yaml/postcss/brace-expansion の 4 件で共通して「override 追加�
 - Issue Net 変化 = 0 / 0
 - **同根再発 1 件検出**（pnpm.overrides 陳腐化、第 10〜12 編から続く 4 セッション目の再発）— 対症療法では終わらせず、次回 catchup から Dependabot alert 横断確認を定例化する仕組み（CLAUDE.md「Dependency Security」節）まで構築
 - 次回セッション以降、同パターンが解消されたか（catchup で Dependabot alert 0 件を維持できているか）を注視ポイントとして引き継ぐ
+
+---
+
+## 2026-07-26 セッション総括 (第 15 編): C1 拡張着手 → PR1 完了 + Codex 全コードベース監査 → Issue 5 件起票 + P1 1 件修正
+
+catchup で条件待ち第 13 編 #1「C1 拡張 (booking-mirror に Google Calendar 自動登録追加)」の trigger「decision-maker から『C1 着手』明示指示」が本セッションで充足。plan mode でフル計画を策定 → Plan エージェントによる敵対的レビューで Cloud Run CPU throttling・キャンセル後始末欠如・silent failure 検出欠如等 20 件超のリスクを発見し、計画を大幅改訂。PR1 (OAuth 非依存の先行修正) と PR2 (C1 本体、OAuth 前提) に分割し、PR1 を完了。続けて decision-maker の選択で Codex (`/codex review`, 全コードベース監査) を実行し、10 件の指摘のうち 5 件をコード直接確認で検証、Issue として起票。うち P1 の 1 件 (#194) をその場で修正・マージした。
+
+### PR 一覧
+
+| PR   | 内容                                                             | 規模              | 結果                                                                                  |
+| ---- | ---------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------- |
+| #193 | fix(booking-mirror): mirror の空き枠から自前の確定予約を差し引く | 9 files, +497/-70 | ✅ merge (`/code-review high` 6 件対応後、e2e/quality/GitGuardian/CodeRabbit 全 PASS) |
+| #199 | fix(free-time): 終日予定を空き時間計算で busy 扱いにする         | 2 files, +30/-5   | ✅ merge (Issue #194 を Closes、e2e/quality/GitGuardian/CodeRabbit 全 PASS)           |
+
+### 主要成果
+
+#### M1: C1 拡張の設計調査 → Plan エージェントの敵対的レビューで計画を全面改訂
+
+booking-mirror の spec (`docs/specs/2026-06-26-booking-mirror-v2-grpc-design.md` §9.1) と現状実装を調査した上で plan mode に入り、フル計画を作成。Plan エージェントに批判的レビューを依頼した結果、以下の構造的リスクが発覚:
+
+- `infra/deploy-api.sh` に `--no-cpu-throttling` がなく `--min-instances=0` → **レスポンス返却後の非同期処理は完走保証がない**。当初「block event 作成は非同期でよい」と判断していたが、この事実により撤回し同期実行に変更
+- mirror の `GET /slots` が Google の生データをそのまま返し、自前の確定予約を差し引いていなかった (別の、OAuth 非依存で先に直せる不整合)
+- `PATCH /bookings/:bookingId/cancel` は mirror にも効くが block event の削除には触れない → C1 導入後に「空いているのに永久に埋まって見える」逆方向の障害が新規発生する
+- `createEvent` の戻り値 id は `google_` プレフィックス付きだが `deleteEvent` は素の id を要求 → 後始末実装時に踏む潜在バグ
+- OAuth consent screen が Testing のままだと refresh token が 7 日で失効する (公式ドキュメント確認)
+
+これを受け、C1 は **PR1 (mirror slots のローカル差し引き、OAuth 非依存)** と **PR2 (block event 本体、OAuth 前提)** に分割。PR2 は Phase 0 (OAuth 再連携可否・Testing mode 確認・Busy 動作の実測検証) が decision-maker 側で未完了のため、計画のみ確定 (`~/.claude/plans/iterative-riding-hummingbird.md`) し、`docs/handoff/GOAL.md` にセッション横断ゴールとして登録した。
+
+#### M2: PR1 実装 → `/code-review high` の指摘 6 件を全て対応
+
+`getConfirmedBookingEventsForOwner` を `booking-events.ts` に抽出し非ミラー版・ミラー版で共通化、`BookingMirrorLink` の Firestore mapper (2 箇所に手書き重複) を `buildBookingMirrorLinkFromFirestoreData` に一本化。`/code-review high main...HEAD` 実行後、以下 6 件を検証・対応:
+
+1. **[correctness/High]** `slotStart >= timeMin` 条件により進行中の予約 (開始済み・未終了) が除外され、このPRの目的そのものを部分的に再発させる欠陥 → 24h lookback + `end > timeMin` の app-level filter で修正 (`toOverlappingBookingEvents` として切り出し回帰テスト追加)
+2. **[robustness/Medium]** 新規 Firestore 呼び出しにエラーハンドリングがなく直前の `fetchAvailableSlots` と不揃い → 502 で統一
+3. **[efficiency/Low-Medium]** 2 つの独立呼び出しが逐次 await → `Promise.allSettled` で並列化
+4. **[altitude/Low]** `excludeOverlappingSlots` が `BookingMirrorLink` 専用ファイルに誤配置 → `booking-mirror-slots.ts` に分離
+5. **[simplification/Low]** mapper を spread パターン化 (description の null→undefined 変換は既存挙動を壊さないよう明示維持)
+6. **[test-coverage/Low-Medium]** 正確性バグの回帰テスト追加
+
+#### M3: Codex `/codex review` (全コードベース監査, MCP版, effort=high) → 5 件を検証し Issue 起票
+
+セカンドオピニオンの要否を相談された際、PR1 は既にレビュー済みのため限界効用は低いが「PR2 実装後に `/codex review`」を提案 → decision-maker はその場で `/codex review` (MCP版) を選択し実行。10 件の指摘のうち以下 5 件をコードを直接読んで検証 (残り 5 件は未検証のまま記録のみ、Issue 化せず):
+
+| Issue                                                            | 内容                                                                            | 重大度                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------- |
+| [#194](https://github.com/yasushi-honda/Calendar-Hub/issues/194) | 終日予定が空き時間計算から除外され二重予約になる                                | P1 (本セッションで修正・クローズ) |
+| [#195](https://github.com/yasushi-honda/Calendar-Hub/issues/195) | 通常予約API(POST /:linkId/book)が予約直前に外部カレンダーとの重複を再検証しない | P1                                |
+| [#196](https://github.com/yasushi-honda/Calendar-Hub/issues/196) | sync.ts の lastSyncedAt 判定が非原子的で二重処理されうる                        | P1                                |
+| [#197](https://github.com/yasushi-honda/Calendar-Hub/issues/197) | 予約重複チェックが下限なしで全件スキャンする                                    | P2                                |
+| [#198](https://github.com/yasushi-honda/Calendar-Hub/issues/198) | 空き時間表示が当日の過去時間帯の枠を含む                                        | P2                                |
+
+#### M4: Issue #194 を TDD で修正・マージ
+
+`calculateFreeSlots` の `.filter((e) => !e.isAllDay)` を削除。既存の日次クリッピングロジックがそのまま単日・複数日の終日予定を正しくブロックすることを確認し、境界値テスト 3 件 (単日ブロック・複数日ブロック・通常予定との混在) を追加。影響範囲 (booking-links / AI提案 ai.ts の全呼び出し元) を grep で確認済み。
+
+### Issue Net 変化
+
+- Close 数: 1 件 (#194)
+- 起票数: 5 件 (#194, #195, #196, #197, #198)
+- Net: -4 件
+
+**Net が負であることの理由**: 起票した 5 件は全て Codex review (全コードベース監査) で発見され、うち検証対象とした 5 件はコードを直接読んで実バグ・実害を確認済み (triage 基準「実バグ/実害」を満たす)。恒常的な Issue 積み増しではなく、1 回の監査で複数の独立した実バグが同時に発覚したことによる一時的な増加であり、うち最重要度の 1 件はその場で解消済み。
+
+### 構造的整合性チェック
+
+`packages/shared/src/free-time.ts` (共有ロジック) と `packages/shared/src/booking-mirror-types.ts` (共有型) を変更したため、本来 `/impact-analysis` の実行対象。**⚠️未確認 (正式実行なし)** — ただし全呼び出し元 (`calculateFreeSlots`: `public-booking.ts`, `ai.ts`。`BookingMirrorLink` mapper: `booking-mirror-links.ts`, `public-booking-mirror.ts`) は grep で手動確認済み、型チェック・全テストも PASS。
+
+### 同根再発スキャン (§4.6)
+
+過去 7 日の handoff archive に "二重予約"/"calculateFreeSlots"/"free-time" を含むファイルは 2026-06-25/26 (原設計期) のもののみで、直近 7 日以内の同根再発候補は 0 件。PR #193 と PR #199 は同一セッション内だが異なるコードパス (Firestore クエリの下限欠如 vs `isAllDay` フィルタ) であり、機構的に同根ではない。ただし **テーマ的な傾向**として、今回の Codex 全コードベース監査で「予約可否判定ロジック」領域に独立した欠陥が計 5 件見つかっており (#194〜#198)、この領域が構造的に脆弱である可能性は留意点として記録する (新規対応の提案はしない、decision-maker 判断待ち)。
+
+### 対症療法判定 (§4.7)
+
+判定基準 1-3 は非該当 (retry/fallback ではなく根本原因への直接修正、過去 30 日以内の同一ファイルへの他 PR なし)。基準 4 (単体テストのみでの検証) は形式的に該当するが、両修正とも外部依存・ライブラリバージョンが原因ではない自社コードの original defect (Codex review で発見された潜在バグ) であり、「外部要因による回帰」という前提が成立しないため WebSearch によるエスカレーションは実施しなかった (retry/fallback ではなく直接のロジック修正である点で、起源インシデントの「floating dependency tag」パターンとは性質が異なると判断)。
+
+### 次のアクション (第 15 編)
+
+#### 即着手タスク
+
+| #   | タスク                                 | ROI                                                                                                             | 想定工数           | 完了条件                                                                                                                                                                                        | 関連ファイル / コマンド                                        |
+| --- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 1   | Issue #198 (過去枠表示) 修正           | 今回の #194 と同一ファイル・同一パターンで低コスト。UX 劣化の解消                                               | 30分               | `packages/shared/src/free-time.ts` の日次ループ初日 cursor を `max(dayStart, rangeStart)` に変更、回帰テスト追加、`pnpm test && pnpm lint && pnpm turbo type-check && pnpm turbo build` 全 PASS | `packages/shared/src/free-time.ts:76`                          |
+| 2   | Issue #197 (重複判定全件スキャン) 修正 | PR #193 で実施した lookback bound パターンの横展開、スコープ確定済み                                            | 45分               | `public-booking.ts` の overlap query に時間下限追加。mirror 側の同等パスも要横断確認                                                                                                            | `apps/api/src/routes/public-booking.ts:241-245`                |
+| 3   | Issue #195 (予約直前再検証欠如) 修正   | 二重予約リスクに直結する P1、mirror 側の既存パターンを移植するだけで実現可能                                    | 1-2時間            | POST `/:linkId/book` に `fetchOwnerEvents` 再検証を追加                                                                                                                                         | `apps/api/src/routes/public-booking.ts` (POST `/:linkId/book`) |
+| 4   | Issue #196 (sync.ts 排他制御なし) 修正 | 二重同期・競合更新の実害防止。ただしロック機構の設計判断が先に必要 (2-4ファイル設計 → インライン軽量プラン推奨) | 2-3時間 (設計込み) | syncConfig document 単位で lease/実行中フラグをトランザクション取得してから処理開始する設計に変更                                                                                               | `apps/api/src/routes/sync.ts:65-126`                           |
+
+#### 条件待ち (明示 trigger 付き)
+
+| #   | 項目                                                                    | trigger（充足条件）                                                                                               | 充足時のタスク                                                             | 充足確認方法                                          |
+| --- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 1   | [GOAL.md] PR2 (C1 本体: block event 自動作成) 実装                      | Phase 0 完了 (OAuth 連携可否・Testing mode 確認・Busy 動作実測検証、いずれも decision-maker のブラウザ操作を伴う) | `docs/handoff/GOAL.md` の「進行中の tasks」PR2-a〜f を順次実行             | `docs/handoff/GOAL.md` の完了の定義チェックリスト参照 |
+| 2   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効                                                              | `parseSlotResponse` の structured log alert 化 (第 9 編から継続、変化なし) | Cloud Monitoring アラート発火時                       |
+| 3   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須）                                                    | ADR-010 実装フェーズ §4-5 参照（第 9 編から継続、変化なし）                | decision-maker の明示指示                             |
+| 4   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発                                                                                         | diagnostic PR 起動（第 9 編から継続、変化なし）                            | CI 失敗の観測                                         |
+| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                                                                           | モバイル改修は desktop 非 touch（第 9 編から継続、変化なし）               | decision-maker の明示指示                             |
+
+#### 却下候補（記録のみ）
+
+| #   | 項目                                                                                                                                                                                         | 検討経緯                                                                            | 着手しない理由                                           | 参照条件                                                |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| 1   | Codex review 未検証の残り 5 件 (timetree同期の所有権判定 `timetree-google-sync.ts:189/221`、fire-and-forget耐障害性、booking-links入力検証不足、AI提案API無制限実行、通知設定の型安全性なし) | Codex `/codex review` (2026-07-26) で指摘されたが、セッション内で検証しきれず未実施 | 実バグとして未検証、triage 基準（実バグ/実害確認）未充足 | decision-maker からの明示指示、または次回検証セッション |
+
+第 9-10 編の却下候補は変化なし。
+
+### 再開可能性判定 (第 15 編)
+
+| 項目                    | 状態                                                              |
+| ----------------------- | ----------------------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (#193, #199 とも merge 済)                                |
+| active Issue            | 4 件 (#195, #196, #197, #198。いずれも即着手候補として上表に記載) |
+| Git clean               | ✅                                                                |
+| 残留プロセス            | ✅ なし                                                           |
+| Deploy CI               | ✅ 進行中 (#199 マージに伴う自動デプロイ、正常フロー)             |
+| 構造的整合性            | ⚠️未確認（`/impact-analysis` 未実行、手動 grep で代替確認済み）   |
+| 同根再発                | ✅ 候補 0 件（過去7日以内）、テーマ的傾向のみ記録                 |
+| 対症療法疑い            | ✅ 基準4形式該当も外部要因なしと判断、エスカレーション不要と判定  |
+| グローバル memory scope | ⏭️ スキップ（本セッション memory 変更なし）                       |
+| GOAL.md                 | ✅ 新規作成（C1 拡張、plan mode 承認済み計画を登録）              |
+
+---
+
+## 最終結論 (第 15 編)
+
+⚠️ **セッション終了前に要対応なし、次アクションは即着手タスク 4 件が候補として残る状態でセッション終了**
+
+- OPEN PR ゼロ・Git clean・残留プロセスなし
+- active Issue 4 件 (#195〜#198) はいずれも即着手タスクとして具体化済み、番号単位の認可で次セッション着手可能
+- C1 (PR2) は GOAL.md 経由でセッション横断ゴールとして引き継ぎ、trigger (Phase 0) 未充足のため条件待ちのまま
+- 同根再発候補 0 件・対症療法疑いなし（判断根拠を明記済み）
+- 次セッションは「Issue #195-198 のどれから着手するか」の番号単位認可、または Phase 0 (OAuth) の進捗確認から開始するのが妥当

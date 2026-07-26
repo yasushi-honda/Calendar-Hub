@@ -64,12 +64,20 @@ async function getOwnerDisplayName(ownerUid: string): Promise<string> {
   return pickOwnerDisplayName(doc.data());
 }
 
+/**
+ * `options.failClosed` が true の場合、いずれかのアカウントの取得が失敗したら
+ * (握りつぶさず) 例外を投げる。`/slots` の表示用途はベストエフォート (fail-open)
+ * で問題ないが、予約確定直前の安全装置として使う場合、取得失敗を「空き」と
+ * 誤判定すると二重予約防止という目的そのものが無効化されるため fail-closed にする
+ * (mirror側の fetchAvailableSlots 失敗時 502 と同じ考え方)。
+ */
 async function fetchOwnerEvents(
   ownerUid: string,
   accountIds: string[],
   calendarIdsFilter: string[] | null,
   timeMin: Date,
   timeMax: Date,
+  options: { failClosed?: boolean } = {},
 ): Promise<CalendarEvent[]> {
   const results = await Promise.allSettled(
     accountIds.map(async (accountId) => {
@@ -83,11 +91,17 @@ async function fetchOwnerEvents(
     }),
   );
 
+  let hasFailure = false;
   results.forEach((r, i) => {
     if (r.status === 'rejected') {
+      hasFailure = true;
       console.error(`Booking: calendar fetch failed for account ${accountIds[i]}:`, r.reason);
     }
   });
+
+  if (options.failClosed && hasFailure) {
+    throw new Error('EXTERNAL_CALENDAR_FETCH_FAILED');
+  }
 
   return results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value);
 }
@@ -236,13 +250,19 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
 
   // 予約直前に外部カレンダー (Google/TimeTree) を再取得し、選択 slot が依然空きであることを
   // 確認する (mirror側の fetchAvailableSlots 再検証と同様のパターン。Codex review P1, Issue #195)
-  const externalEvents = await fetchOwnerEvents(
-    link.ownerUid,
-    link.accountIds,
-    link.calendarIdsForAvailability,
-    slotStart,
-    slotEnd,
-  );
+  let externalEvents: CalendarEvent[];
+  try {
+    externalEvents = await fetchOwnerEvents(
+      link.ownerUid,
+      link.accountIds,
+      link.calendarIdsForAvailability,
+      slotStart,
+      slotEnd,
+      { failClosed: true },
+    );
+  } catch {
+    return c.json({ error: 'Failed to verify slot availability, please try again' }, 502);
+  }
   if (hasOverlappingEvent(externalEvents, slotStart, slotEnd)) {
     return c.json({ error: 'This time slot is no longer available' }, 409);
   }

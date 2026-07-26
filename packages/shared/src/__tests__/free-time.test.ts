@@ -65,11 +65,36 @@ describe('calculateFreeSlots', () => {
     expect(slots[1].start.getHours()).toBe(12);
   });
 
-  it('should skip all-day events', () => {
+  it('should treat all-day events as busy for the entire day (Issue #194: 終日予定を空き扱いすると二重予約になる)', () => {
     const events = [makeEvent('2026-03-21T00:00:00', '2026-03-22T00:00:00', { isAllDay: true })];
     const slots = calculateFreeSlots(events, dayStart, dayEnd);
-    expect(slots).toHaveLength(1); // All-day events are filtered out
+    expect(slots).toHaveLength(0);
+  });
+
+  it('should block only the days actually covered by a multi-day all-day event', () => {
+    const rangeEnd = new Date('2026-03-24T00:00:00'); // 21, 22, 23日の3日分
+    // Google Calendar の all-day event 仕様: end.date は exclusive なので
+    // 21日〜22日の2日間の終日予定は end が23日になる
+    const events = [makeEvent('2026-03-21T00:00:00', '2026-03-23T00:00:00', { isAllDay: true })];
+    const slots = calculateFreeSlots(events, dayStart, rangeEnd);
+    // 21日・22日はブロックされ、23日のみ終日空き
+    expect(slots).toHaveLength(1);
+    expect(slots[0].start.getDate()).toBe(23);
     expect(slots[0].durationMinutes).toBe(14 * 60);
+  });
+
+  it('should combine all-day event blocking with timed events on other days', () => {
+    const rangeEnd = new Date('2026-03-23T00:00:00'); // 21, 22日の2日分
+    const events = [
+      makeEvent('2026-03-21T00:00:00', '2026-03-22T00:00:00', { isAllDay: true }), // 21日を終日ブロック
+      makeEvent('2026-03-22T10:00:00', '2026-03-22T11:00:00'), // 22日の通常予定
+    ];
+    const slots = calculateFreeSlots(events, dayStart, rangeEnd);
+    // 21日は0件、22日は 8-10, 11-22 の2件
+    expect(slots).toHaveLength(2);
+    expect(slots[0].start.getDate()).toBe(22);
+    expect(slots[0].end.getHours()).toBe(10);
+    expect(slots[1].start.getHours()).toBe(11);
   });
 
   it('should respect custom dayStartHour and dayEndHour', () => {

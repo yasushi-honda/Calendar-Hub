@@ -68,9 +68,9 @@ export function calculateFreeSlots(
   const { dayStartHour = 8, dayEndHour = 22, minSlotMinutes = 30, timezoneOffsetMinutes } = options;
 
   const slots: FreeSlot[] = [];
-  const sortedEvents = [...events]
-    .filter((e) => !e.isAllDay)
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  // 終日予定 (休暇・出張等) も busy として扱う。除外すると、その日が丸ごと
+  // 「空き」と判定され二重予約を招くため (Issue #194)。
+  const sortedEvents = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
 
   // 日ごとに計算
   let current = startOfDayUTC(rangeStart, timezoneOffsetMinutes);

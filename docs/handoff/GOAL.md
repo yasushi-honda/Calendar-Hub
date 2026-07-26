@@ -17,7 +17,7 @@ Google Appointment Schedule の空き枠をミラーする booking-mirror 機能
 - [x] Phase 0 完了: 対象 Google アカウント(`yasushi.honda@aozora-cg.com`)の OAuth 再連携完了、consent screen の publishing status が本番環境(Testing でない)であることを確認、実機で Busy イベントによる枠消失を確認
 - [x] PR2 実装完了: `BookingMirrorLink` に `blockCalendarId`/`blockAccountId`/`autoCreateBlockEvent` 追加、POST `/book` で `createBlockEvent` を同期実行、silent failure 検出(`created`/`created_unverified`/`failed` の3値記録)、キャンセル時の block event 削除を含む(証明: `pnpm test && pnpm lint && pnpm turbo type-check && pnpm turbo build` 全 PASS、PR #206 マージ済み)
 - [x] 実機で予約すると Google 予約ページから当該枠が消え、`blockEventStatus='created'` になる(証明: 実機で `yasushi.honda@aozora-cg.com` のカレンダーへ block event 作成 → 実際の Google 予約ページで該当枠消失を確認済み、2026-07-26)
-- [ ] 予約をキャンセルすると block event が削除され枠が Google 予約ページに戻る(証明: cancel API 実行 → 実際の Google 予約ページで該当枠の復活を確認。コードレビューでは実装済みを確認済み(`booking-links.ts`)だが実機未検証。`PATCH /bookings/:bookingId/cancel` は `requireAuth` のオーナー専用 API(PR #41 由来、ゲストの自己キャンセルは方針として不可・今回変更なし)で、`apps/web` にはオーナー向けキャンセル UI も一切存在しない(今回の C1 スコープにも含まれず、新規 UI 追加は未認可)。検証には decision-maker 自身が認証済みセッションで API を直接呼ぶ以外の手段がない)
+- [ ] 予約をキャンセルすると block event が削除され枠が Google 予約ページに戻る(**ペンディング — decision-maker 明示判断、2026-07-27**。コードレビューでは実装済みを確認済み(`booking-links.ts`)だが実機未検証。`PATCH /bookings/:bookingId/cancel` は `requireAuth` のオーナー専用 API(PR #41 由来、ゲストの自己キャンセルは方針として不可・変更なし)で、UI(ゲスト向け・オーナー向けとも)は一切存在しない。decision-maker からの明示再開指示があるまで着手不要)
 
 ## 進行中の tasks
 
@@ -27,8 +27,8 @@ Google Appointment Schedule の空き枠をミラーする booking-mirror 機能
 - [x] 実機検証で発覚した「相互共有カレンダーによる accountId 取り違えバグ」を `calendar-dedup.ts` で修正
 - [x] `/code-review medium` 指摘3件(タイムアウト時の重複イベント・PATCH partial update テスト不足・レイテンシ直列化)を修正済み
 - [x] API p99 レイテンシアラートの閾値を新しい設計(block event 同期作成で正常系 2〜3秒)に合わせて 3000ms→10000ms へ調整済み
-- [ ] AC-8 実機検証: 予約キャンセル → block event 削除 → Google 予約ページで枠復活の確認(キャンセル UI 自体が存在しないため、decision-maker が API を直接呼ぶ場合のみ検証可能。優先度低、対応不要も許容)
+- [ ] AC-8 実機検証: 予約キャンセル → block event 削除 → Google 予約ページで枠復活の確認 — **ペンディング(decision-maker 明示、2026-07-27)。明示再開指示があるまで着手不要**
 
 ## 🔄 中断点(in-flight)
 
-なし。PR2 は実装・実機検証(作成側)・レビュー・マージ・本番デプロイまで完了。残るのはキャンセル側(AC-8)の実機検証のみで、キャンセル UI(ゲスト向け・オーナー向けとも)は今回のスコープ外のため存在せず、decision-maker が認証済みセッションで API を直接呼ぶ場合のみ検証可能。優先度低のため無期限の条件待ちで構わない。
+なし。PR2 は実装・実機検証(作成側)・レビュー・マージ・本番デプロイまで完了。キャンセル側(AC-8)の実機検証は decision-maker の明示判断によりペンディング(2026-07-27)。次セッションは明示の再開指示があるまで着手不要。

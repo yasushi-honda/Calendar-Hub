@@ -43,6 +43,7 @@ describe('createBlockEvent', () => {
     expect(createEvent).toHaveBeenCalledWith(
       'cal1',
       expect.objectContaining({ transparency: 'opaque', title: '予定あり' }),
+      { signal: expect.any(AbortSignal) },
     );
   });
 
@@ -95,17 +96,28 @@ describe('createBlockEvent', () => {
     expect(createEvent).toHaveBeenCalledTimes(3);
   });
 
-  it('タイムアウトは failed (レスポンス無応答で /book が永久に返らないことを防ぐ)', async () => {
-    const createEvent = vi.fn().mockImplementation(() => new Promise(() => {})); // 永久に解決しない
+  it('タイムアウト(abort)は transient として再試行し、最終的に failed (レスポンス無応答で /book が永久に返らないことを防ぐ)', async () => {
+    // 実際に signal.aborted を見て reject するモックにすることで、
+    // withTimeout の見せかけタイムアウトではなく、実際に下層リクエストを
+    // abort する経路であることを検証する (Codex review 指摘の回帰防止)。
+    const createEvent = vi.fn().mockImplementation((_calendarId, _event, options) => {
+      if (options?.signal?.aborted) {
+        return Promise.reject(options.signal.reason);
+      }
+      return new Promise(() => {}); // signal が渡っていなければ永久に解決しない
+    });
+    // createTimeoutSignal を「即座に abort 済みの signal」にすり替え、
+    // 実時間のタイムアウト待ちなしにタイムアウト経路を再現する
+    const createTimeoutSignal = () =>
+      AbortSignal.abort(new DOMException('timed out', 'TimeoutError'));
 
-    const params = buildParams({ createEvent });
-    // withTimeout の setTimeout を実時間で待つと遅いのでフェイクタイマーを使う
-    vi.useFakeTimers();
-    const resultPromise = createBlockEvent(params);
-    await vi.advanceTimersByTimeAsync(8_000 * 3 + 1_000); // create timeout × 最大試行回数分
-    const result = await resultPromise;
-    vi.useRealTimers();
+    const result = await createBlockEvent({
+      ...buildParams({ createEvent }),
+      createTimeoutSignal,
+    });
 
     expect(result.status).toBe('failed');
+    // 初回 + 再試行2回 = 最大3回
+    expect(createEvent).toHaveBeenCalledTimes(3);
   });
 });

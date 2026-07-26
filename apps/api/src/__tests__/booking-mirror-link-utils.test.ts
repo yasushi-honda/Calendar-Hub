@@ -5,6 +5,7 @@ import {
   applyBookingMirrorLinkDefaults,
   shouldCreateBlockEvent,
   validateBookingMirrorLinkInvariant,
+  buildBookingMirrorLinkPatchUpdate,
 } from '../lib/booking-mirror-link-utils.js';
 
 // Firestore Timestamp のダミー実装 (toDate() のみ持てば十分)
@@ -260,5 +261,57 @@ describe('validateBookingMirrorLinkInvariant', () => {
       blockAccountId: 'acc1',
     });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('buildBookingMirrorLinkPatchUpdate (Partial Update: 更新対象外フィールドは含めない)', () => {
+  it('title のみ指定 → update に title のみ含まれる', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({ title: 'new' });
+    expect(Object.keys(update)).toEqual(['title']);
+    expect(update.title).toBe('new');
+  });
+
+  it('autoCreateBlockEvent のみ指定 → 他フィールドは update に含まれない', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({ autoCreateBlockEvent: true });
+    expect(Object.keys(update)).toEqual(['autoCreateBlockEvent']);
+    expect(update.autoCreateBlockEvent).toBe(true);
+    expect(update.blockCalendarId).toBeUndefined();
+    expect(update.blockAccountId).toBeUndefined();
+    expect(update.title).toBeUndefined();
+    expect(update.status).toBeUndefined();
+  });
+
+  it('blockCalendarId のみ指定 → 他フィールドは update に含まれない', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({ blockCalendarId: 'cal1' });
+    expect(Object.keys(update)).toEqual(['blockCalendarId']);
+    expect(update.autoCreateBlockEvent).toBeUndefined();
+    expect(update.blockAccountId).toBeUndefined();
+  });
+
+  it('description: null を明示指定 → update.description は null (undefined とは区別する)', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({ description: null });
+    expect(Object.keys(update)).toEqual(['description']);
+    expect(update.description).toBeNull();
+  });
+
+  it('expiresAt: null を明示指定 → update.expiresAt は null', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({ expiresAt: null });
+    expect(Object.keys(update)).toEqual(['expiresAt']);
+    expect(update.expiresAt).toBeNull();
+  });
+
+  it('何も指定しない → update は空オブジェクト (Firestore 側の既存値を一切変更しない)', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({});
+    expect(update).toEqual({});
+  });
+
+  it('複数フィールド指定 → 指定分のみ含まれ、他は含まれない', () => {
+    const update = buildBookingMirrorLinkPatchUpdate({
+      status: 'paused',
+      autoCreateBlockEvent: false,
+    });
+    expect(Object.keys(update).sort()).toEqual(['autoCreateBlockEvent', 'status']);
+    expect(update.title).toBeUndefined();
+    expect(update.blockCalendarId).toBeUndefined();
   });
 });

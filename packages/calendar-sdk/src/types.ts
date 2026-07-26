@@ -39,6 +39,11 @@ export interface UpdateEventInput {
   transparency?: 'opaque' | 'transparent';
 }
 
+export interface CreateEventOptions {
+  /** 中断すると実際に下層の HTTP リクエストを abort する (google-booking-mirror.ts の fetchWithTimeout と同じ方針) */
+  signal?: AbortSignal;
+}
+
 export interface CalendarAdapter {
   readonly provider: CalendarProvider;
 
@@ -53,6 +58,7 @@ export interface CalendarAdapter {
   createEvent(
     calendarId: string,
     event: CreateEventInput,
+    options?: CreateEventOptions,
   ): Promise<import('@calendar-hub/shared').CalendarEvent>;
 
   updateEvent(

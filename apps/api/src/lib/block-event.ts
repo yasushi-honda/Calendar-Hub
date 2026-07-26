@@ -31,56 +31,52 @@ export interface CreateBlockEventParams {
   fetchSlots?: (scheduleId: string, startUnix: number, endUnix: number) => Promise<GoogleSlot[]>;
   /** テスト用 DI。省略時は実際に待機する */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * テスト用 DI。省略時は `AbortSignal.timeout(CREATE_TIMEOUT_MS)` を使う。
+   * google-booking-mirror.ts の fetchWithTimeout と同じく、タイムアウト時に
+   * 下層の HTTP リクエストを実際に abort するため (Promise.race による見せかけの
+   * タイムアウトだと、タイムアウト後もリクエストが裏で成功し重複イベントが
+   * 作られる恐れがある)。
+   */
+  createTimeoutSignal?: () => AbortSignal;
 }
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 429/503/タイムアウトは再試行可能 (transient)、それ以外 (401/403/404 等) は即失敗 (permanent) */
+/** 429/503/タイムアウト(abort)は再試行可能 (transient)、それ以外 (401/403/404 等) は即失敗 (permanent) */
 function isTransientError(err: unknown): boolean {
   const code = (err as { code?: number })?.code;
   const status = (err as { status?: number })?.status;
   if (code === 429 || code === 503 || status === 429 || status === 503) return true;
-  if (err instanceof Error && /timed out|timeout/i.test(err.message)) return true;
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+    return true;
+  }
+  if (err instanceof Error && /timed out|timeout|abort/i.test(err.message)) return true;
   return false;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`block event creation timed out after ${ms}ms`));
-    }, ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
 }
 
 export async function createBlockEvent(params: CreateBlockEventParams): Promise<BlockEventResult> {
   const { adapter, calendarId, scheduleId, slotStart, slotEnd } = params;
   const fetchSlots = params.fetchSlots ?? fetchAvailableSlots;
   const sleep = params.sleep ?? defaultSleep;
+  const createTimeoutSignal =
+    params.createTimeoutSignal ?? (() => AbortSignal.timeout(CREATE_TIMEOUT_MS));
 
   let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_TRANSIENT_RETRIES; attempt++) {
     try {
-      const event = await withTimeout(
-        adapter.createEvent(calendarId, {
+      const event = await adapter.createEvent(
+        calendarId,
+        {
           title: '予定あり',
           start: slotStart,
           end: slotEnd,
           isAllDay: false,
           transparency: 'opaque',
-        }),
-        CREATE_TIMEOUT_MS,
+        },
+        { signal: createTimeoutSignal() },
       );
       return await verifySlotGone(
         event.originalId,

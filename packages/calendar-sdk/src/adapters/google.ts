@@ -1,6 +1,12 @@
 import { google, type calendar_v3 } from 'googleapis';
 import type { CalendarEvent } from '@calendar-hub/shared';
-import type { Calendar, CalendarAdapter, CreateEventInput, UpdateEventInput } from '../types.js';
+import type {
+  Calendar,
+  CalendarAdapter,
+  CreateEventInput,
+  CreateEventOptions,
+  UpdateEventInput,
+} from '../types.js';
 
 export class GoogleCalendarAdapter implements CalendarAdapter {
   readonly provider = 'google' as const;
@@ -38,11 +44,15 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     return (res.data.items ?? []).map((item) => this.toCalendarEvent(item, calendarId));
   }
 
-  async createEvent(calendarId: string, event: CreateEventInput): Promise<CalendarEvent> {
-    const res = await this.calendar.events.insert({
-      calendarId,
-      requestBody: this.toGoogleEvent(event),
-    });
+  async createEvent(
+    calendarId: string,
+    event: CreateEventInput,
+    options?: CreateEventOptions,
+  ): Promise<CalendarEvent> {
+    const res = await this.calendar.events.insert(
+      { calendarId, requestBody: this.toGoogleEvent(event) },
+      { signal: options?.signal },
+    );
     return this.toCalendarEvent(res.data, calendarId);
   }
 

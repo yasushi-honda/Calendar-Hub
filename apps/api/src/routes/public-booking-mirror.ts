@@ -283,18 +283,14 @@ publicBookingMirrorRoutes.post('/:linkId/book', async (c) => {
   // block event 作成は booking doc の確定 (orphan event 防止) の後、レスポンス返却の前に
   // 同期実行する。Cloud Run が --no-cpu-throttling 無しの min-instances=0 で動いているため、
   // レスポンス返却後の非同期処理は完走が保証されない (計画書参照)。
-  let blockEventResult: BlockEventResult | null = null;
-  if (shouldCreateBlockEvent(link)) {
-    blockEventResult = await createAndRecordBlockEvent(
-      link,
-      bookingId,
-      scheduleId,
-      slotStart,
-      slotEnd,
-    );
-  }
-
-  const ownerDisplayName = await getOwnerDisplayName(link.ownerUid);
+  // getOwnerDisplayName (Firestore 読み取り) は block event 作成結果に依存しないため、
+  // 並列実行して最大 25〜33 秒かかりうる block event フェーズにこれ以上レイテンシを積まない。
+  const [blockEventResult, ownerDisplayName] = await Promise.all([
+    shouldCreateBlockEvent(link)
+      ? createAndRecordBlockEvent(link, bookingId, scheduleId, slotStart, slotEnd)
+      : Promise.resolve(null as BlockEventResult | null),
+    getOwnerDisplayName(link.ownerUid),
+  ]);
   sendBookingNotificationsAsync(
     link,
     bookingId,

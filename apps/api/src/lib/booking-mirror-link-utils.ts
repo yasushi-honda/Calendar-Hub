@@ -1,5 +1,5 @@
 import type { DocumentData } from 'firebase-admin/firestore';
-import type { BookingMirrorLink } from '@calendar-hub/shared';
+import type { BookingMirrorLink, UpdateBookingMirrorLinkInput } from '@calendar-hub/shared';
 import { validateCalendarTargetInvariant } from './calendar-target-invariant.js';
 
 /**
@@ -74,4 +74,29 @@ export function validateBookingMirrorLinkInvariant(input: {
     };
   }
   return result;
+}
+
+/**
+ * PATCH リクエスト body から Firestore update object を構築する (Partial Update)。
+ * undefined フィールドは update に含めず、Firestore 側で既存値を保持させる
+ * (非mirror版 buildBookingLinkPatchUpdate と同じ方針)。
+ */
+export function buildBookingMirrorLinkPatchUpdate(
+  body: UpdateBookingMirrorLinkInput,
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {};
+  if (body.title !== undefined) update.title = body.title;
+  if (body.description !== undefined) update.description = body.description ?? null;
+  if (body.notificationEmail !== undefined) update.notificationEmail = body.notificationEmail;
+  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
+  if (body.status !== undefined) update.status = body.status;
+  if (body.expiresAt !== undefined) {
+    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  }
+  if (body.autoCreateBlockEvent !== undefined) {
+    update.autoCreateBlockEvent = body.autoCreateBlockEvent;
+  }
+  if (body.blockCalendarId !== undefined) update.blockCalendarId = body.blockCalendarId;
+  if (body.blockAccountId !== undefined) update.blockAccountId = body.blockAccountId;
+  return update;
 }

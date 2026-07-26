@@ -13,6 +13,7 @@ import type {
 import { resolveScheduleId, BookingMirrorError } from '../lib/google-booking-mirror.js';
 import {
   buildBookingMirrorLinkFromFirestoreData,
+  buildBookingMirrorLinkPatchUpdate,
   validateBookingMirrorLinkInvariant,
 } from '../lib/booking-mirror-link-utils.js';
 
@@ -24,23 +25,6 @@ const DEFAULT_NOTIFICATION_EMAIL =
   process.env.DEFAULT_NOTIFICATION_EMAIL ?? 'hy.unimail.11@gmail.com';
 
 // --- ヘルパー ---
-
-function buildPatchUpdate(body: UpdateBookingMirrorLinkInput): Record<string, unknown> {
-  const update: Record<string, unknown> = {};
-  if (body.title !== undefined) update.title = body.title;
-  if (body.description !== undefined) update.description = body.description ?? null;
-  if (body.notificationEmail !== undefined) update.notificationEmail = body.notificationEmail;
-  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
-  if (body.status !== undefined) update.status = body.status;
-  if (body.expiresAt !== undefined) {
-    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
-  }
-  if (body.autoCreateBlockEvent !== undefined)
-    update.autoCreateBlockEvent = body.autoCreateBlockEvent;
-  if (body.blockCalendarId !== undefined) update.blockCalendarId = body.blockCalendarId;
-  if (body.blockAccountId !== undefined) update.blockAccountId = body.blockAccountId;
-  return update;
-}
 
 function validateStatus(value: unknown): value is BookingMirrorLinkStatus {
   return value === 'active' || value === 'paused';
@@ -215,7 +199,7 @@ bookingMirrorLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     return c.json({ error: patchInvariant.error }, 400);
   }
 
-  const update = buildPatchUpdate(body);
+  const update = buildBookingMirrorLinkPatchUpdate(body);
   update.updatedAt = FieldValue.serverTimestamp();
   await ref.update(update);
 

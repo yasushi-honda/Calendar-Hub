@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
+import type { BookingMirrorLink } from '@calendar-hub/shared';
+import {
+  buildBookingMirrorLinkFromFirestoreData,
+  applyBookingMirrorLinkDefaults,
+  shouldCreateBlockEvent,
+  validateBookingMirrorLinkInvariant,
+} from '../lib/booking-mirror-link-utils.js';
 
 // Firestore Timestamp のダミー実装 (toDate() のみ持てば十分)
 function fakeTimestamp(date: Date) {
@@ -154,5 +160,105 @@ describe('buildBookingMirrorLinkFromFirestoreData', () => {
 
     expect(link.createdAt).toBeInstanceOf(Date);
     expect(link.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('applyBookingMirrorLinkDefaults', () => {
+  it('既存 document に autoCreateBlockEvent が無ければ false (稼働中リンクが突然書き込みを始めない)', () => {
+    const result = applyBookingMirrorLinkDefaults({ title: 'old-link' });
+    expect(result.autoCreateBlockEvent).toBe(false);
+  });
+
+  it('既存 document に blockCalendarId/blockAccountId が無ければ両方 null', () => {
+    const result = applyBookingMirrorLinkDefaults({});
+    expect(result.blockCalendarId).toBeNull();
+    expect(result.blockAccountId).toBeNull();
+  });
+
+  it('明示的に true が指定されていれば true を返す', () => {
+    const result = applyBookingMirrorLinkDefaults({ autoCreateBlockEvent: true });
+    expect(result.autoCreateBlockEvent).toBe(true);
+  });
+});
+
+function buildMirrorLink(overrides: Partial<BookingMirrorLink>): BookingMirrorLink {
+  return {
+    id: 'link1',
+    ownerUid: 'u1',
+    title: 't',
+    sourceUrl: 'https://calendar.app.google/abc',
+    scheduleId: 'sched1',
+    notificationEmail: 'owner@example.com',
+    rangeDays: 30,
+    status: 'active',
+    expiresAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    autoCreateBlockEvent: false,
+    blockCalendarId: null,
+    blockAccountId: null,
+    ...overrides,
+  };
+}
+
+describe('shouldCreateBlockEvent', () => {
+  it('autoCreateBlockEvent が false なら false', () => {
+    expect(shouldCreateBlockEvent(buildMirrorLink({ autoCreateBlockEvent: false }))).toBe(false);
+  });
+
+  it('autoCreateBlockEvent が true でも blockCalendarId が無ければ false', () => {
+    const link = buildMirrorLink({
+      autoCreateBlockEvent: true,
+      blockCalendarId: null,
+      blockAccountId: 'acc1',
+    });
+    expect(shouldCreateBlockEvent(link)).toBe(false);
+  });
+
+  it('autoCreateBlockEvent が true でも blockAccountId が無ければ false', () => {
+    const link = buildMirrorLink({
+      autoCreateBlockEvent: true,
+      blockCalendarId: 'cal1',
+      blockAccountId: null,
+    });
+    expect(shouldCreateBlockEvent(link)).toBe(false);
+  });
+
+  it('3条件が全て揃えば true', () => {
+    const link = buildMirrorLink({
+      autoCreateBlockEvent: true,
+      blockCalendarId: 'cal1',
+      blockAccountId: 'acc1',
+    });
+    expect(shouldCreateBlockEvent(link)).toBe(true);
+  });
+});
+
+describe('validateBookingMirrorLinkInvariant', () => {
+  it('autoCreateBlockEvent=false なら blockCalendarId/blockAccountId が null でも ok', () => {
+    const result = validateBookingMirrorLinkInvariant({
+      autoCreateBlockEvent: false,
+      blockCalendarId: null,
+      blockAccountId: null,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('autoCreateBlockEvent=true で blockCalendarId が無ければ 400 相当のエラー', () => {
+    const result = validateBookingMirrorLinkInvariant({
+      autoCreateBlockEvent: true,
+      blockCalendarId: null,
+      blockAccountId: 'acc1',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('autoCreateBlockEvent=true で両方揃っていれば ok', () => {
+    const result = validateBookingMirrorLinkInvariant({
+      autoCreateBlockEvent: true,
+      blockCalendarId: 'cal1',
+      blockAccountId: 'acc1',
+    });
+    expect(result.ok).toBe(true);
   });
 });

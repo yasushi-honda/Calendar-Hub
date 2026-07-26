@@ -46,7 +46,14 @@ export class MockCalendarAdapter implements CalendarAdapter {
 
   async createEvent(
     calendarId: string,
-    event: { title: string; description?: string; start: Date; end: Date; isAllDay: boolean },
+    event: {
+      title: string;
+      description?: string;
+      start: Date;
+      end: Date;
+      isAllDay: boolean;
+      transparency?: 'opaque' | 'transparent';
+    },
   ): Promise<CalendarEvent> {
     const id = `mock_${nanoid(8)}`;
     return {

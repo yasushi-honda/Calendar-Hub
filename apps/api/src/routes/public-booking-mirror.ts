@@ -18,9 +18,14 @@ import {
 } from '../lib/google-booking-mirror.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
-import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
+import {
+  buildBookingMirrorLinkFromFirestoreData,
+  shouldCreateBlockEvent,
+} from '../lib/booking-mirror-link-utils.js';
 import { excludeOverlappingSlots } from '../lib/booking-mirror-slots.js';
 import { getConfirmedBookingEventsForOwner, OVERLAP_LOOKBACK_MS } from '../lib/booking-events.js';
+import { createAdapter } from '../lib/adapter-factory.js';
+import { createBlockEvent, type BlockEventResult } from '../lib/block-event.js';
 import type {
   BookingMirrorLink,
   BookingMirrorSlot,
@@ -275,6 +280,20 @@ publicBookingMirrorRoutes.post('/:linkId/book', async (c) => {
     throw err;
   }
 
+  // block event 作成は booking doc の確定 (orphan event 防止) の後、レスポンス返却の前に
+  // 同期実行する。Cloud Run が --no-cpu-throttling 無しの min-instances=0 で動いているため、
+  // レスポンス返却後の非同期処理は完走が保証されない (計画書参照)。
+  let blockEventResult: BlockEventResult | null = null;
+  if (shouldCreateBlockEvent(link)) {
+    blockEventResult = await createAndRecordBlockEvent(
+      link,
+      bookingId,
+      scheduleId,
+      slotStart,
+      slotEnd,
+    );
+  }
+
   const ownerDisplayName = await getOwnerDisplayName(link.ownerUid);
   sendBookingNotificationsAsync(
     link,
@@ -285,6 +304,7 @@ publicBookingMirrorRoutes.post('/:linkId/book', async (c) => {
     slotStart,
     slotEnd,
     ownerDisplayName,
+    blockEventResult,
   );
 
   return c.json(
@@ -296,11 +316,62 @@ publicBookingMirrorRoutes.post('/:linkId/book', async (c) => {
         guestName: body.guestName,
         linkTitle: link.title,
         ownerDisplayName,
+        blockEventStatus: blockEventResult?.status ?? 'skipped',
       },
     },
     201,
   );
 });
+
+/**
+ * block event を作成し、結果を booking doc に記録する。
+ * doc 更新の失敗 (createBlockEvent 自体は成功) は独立した try-catch で握り潰す
+ * (error-handling.md: 状態復旧 > ログ記録 > 通知の優先順)。
+ */
+async function createAndRecordBlockEvent(
+  link: BookingMirrorLink,
+  bookingId: string,
+  scheduleId: string,
+  slotStart: Date,
+  slotEnd: Date,
+): Promise<BlockEventResult> {
+  let result: BlockEventResult;
+  try {
+    const adapter = await createAdapter(link.ownerUid, link.blockAccountId!);
+    result = await createBlockEvent({
+      adapter,
+      calendarId: link.blockCalendarId!,
+      scheduleId,
+      slotStart,
+      slotEnd,
+    });
+  } catch (err) {
+    result = { status: 'failed', error: err instanceof Error ? err.message : String(err) };
+  }
+
+  if (result.status === 'created_unverified') {
+    console.error(
+      `[BLOCK-UNVERIFIED] linkId=${link.id} bookingId=${bookingId} eventId=${result.eventId}`,
+    );
+  }
+
+  try {
+    await getDb()
+      .collection('bookings')
+      .doc(bookingId)
+      .update({
+        blockEventStatus: result.status,
+        blockEventId: result.status === 'failed' ? null : result.eventId,
+        blockCalendarId: link.blockCalendarId,
+        blockAccountId: link.blockAccountId,
+        ...(result.status === 'failed' ? { blockEventError: result.error } : {}),
+      });
+  } catch (err) {
+    console.error(`Failed to record blockEventStatus for booking ${bookingId}:`, err);
+  }
+
+  return result;
+}
 
 // --- 非同期処理 ---
 
@@ -313,6 +384,7 @@ function sendBookingNotificationsAsync(
   slotStart: Date,
   slotEnd: Date,
   ownerDisplayName: string,
+  blockEventResult: BlockEventResult | null,
 ) {
   (async () => {
     const db = getDb();
@@ -354,6 +426,12 @@ function sendBookingNotificationsAsync(
     }
 
     // オーナー (= notificationEmail 宛) へ通知
+    const blockEventWarning =
+      blockEventResult?.status === 'created_unverified'
+        ? 'Google カレンダーに「予定あり」を作成しましたが、予約スケジュール側の枠消失を確認できませんでした。書き込み先カレンダーの設定をご確認ください。'
+        : blockEventResult?.status === 'failed'
+          ? 'Google カレンダーへの「予定あり」自動登録に失敗しました。下のボタンから手動で登録してください。'
+          : undefined;
     try {
       await sendEmail(auth, {
         to: link.notificationEmail,
@@ -365,6 +443,7 @@ function sendBookingNotificationsAsync(
           guestMessage,
           slotStart,
           slotEnd,
+          blockEventWarning,
         }),
         context: 'owner-notification',
       });

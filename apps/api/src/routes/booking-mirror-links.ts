@@ -11,7 +11,10 @@ import type {
   UpdateBookingMirrorLinkInput,
 } from '@calendar-hub/shared';
 import { resolveScheduleId, BookingMirrorError } from '../lib/google-booking-mirror.js';
-import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
+import {
+  buildBookingMirrorLinkFromFirestoreData,
+  validateBookingMirrorLinkInvariant,
+} from '../lib/booking-mirror-link-utils.js';
 
 export const bookingMirrorLinkRoutes = new Hono<AppEnv>();
 
@@ -32,6 +35,10 @@ function buildPatchUpdate(body: UpdateBookingMirrorLinkInput): Record<string, un
   if (body.expiresAt !== undefined) {
     update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
   }
+  if (body.autoCreateBlockEvent !== undefined)
+    update.autoCreateBlockEvent = body.autoCreateBlockEvent;
+  if (body.blockCalendarId !== undefined) update.blockCalendarId = body.blockCalendarId;
+  if (body.blockAccountId !== undefined) update.blockAccountId = body.blockAccountId;
   return update;
 }
 
@@ -79,6 +86,18 @@ bookingMirrorLinkRoutes.post('/', requireAuth, async (c) => {
     return c.json({ error: `rangeDays must be 1-${MAX_RANGE_DAYS}` }, 400);
   }
 
+  const autoCreateBlockEvent = body.autoCreateBlockEvent ?? false;
+  const blockCalendarId = body.blockCalendarId ?? null;
+  const blockAccountId = body.blockAccountId ?? null;
+  const invariant = validateBookingMirrorLinkInvariant({
+    autoCreateBlockEvent,
+    blockCalendarId,
+    blockAccountId,
+  });
+  if (!invariant.ok) {
+    return c.json({ error: invariant.error }, 400);
+  }
+
   // schedule ID を解決（失敗時は 400）
   let scheduleId: string;
   try {
@@ -108,6 +127,9 @@ bookingMirrorLinkRoutes.post('/', requireAuth, async (c) => {
     expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     createdAt: now,
     updatedAt: now,
+    autoCreateBlockEvent,
+    blockCalendarId,
+    blockAccountId,
   };
 
   const db = getDb();
@@ -174,6 +196,23 @@ bookingMirrorLinkRoutes.patch('/:linkId', requireAuth, async (c) => {
     (!Number.isInteger(body.rangeDays) || body.rangeDays < 1 || body.rangeDays > MAX_RANGE_DAYS)
   ) {
     return c.json({ error: `rangeDays must be 1-${MAX_RANGE_DAYS}` }, 400);
+  }
+
+  // 不変条件: 既存 document + リクエスト body をマージした後の状態で検証する。
+  // body だけを見ると、一覧カードから { autoCreateBlockEvent: true } だけを送るケースで素通りする。
+  const existingLink = buildBookingMirrorLinkFromFirestoreData(doc.data()!);
+  const mergedAutoCreateBlockEvent = body.autoCreateBlockEvent ?? existingLink.autoCreateBlockEvent;
+  const mergedBlockCalendarId =
+    body.blockCalendarId !== undefined ? body.blockCalendarId : existingLink.blockCalendarId;
+  const mergedBlockAccountId =
+    body.blockAccountId !== undefined ? body.blockAccountId : existingLink.blockAccountId;
+  const patchInvariant = validateBookingMirrorLinkInvariant({
+    autoCreateBlockEvent: mergedAutoCreateBlockEvent,
+    blockCalendarId: mergedBlockCalendarId,
+    blockAccountId: mergedBlockAccountId,
+  });
+  if (!patchInvariant.ok) {
+    return c.json({ error: patchInvariant.error }, 400);
   }
 
   const update = buildPatchUpdate(body);

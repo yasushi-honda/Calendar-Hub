@@ -4,6 +4,7 @@ import { FieldValue, type Query } from 'firebase-admin/firestore';
 import type { AppEnv } from '../types.js';
 import { requireAuth } from '../middleware/auth.js';
 import { getDb } from '../lib/firebase-admin.js';
+import { createAdapter } from '../lib/adapter-factory.js';
 import {
   DURATION_OPTIONS,
   BOOKING_LINK_STATUSES,
@@ -241,7 +242,8 @@ bookingLinkRoutes.patch('/bookings/:bookingId/cancel', requireAuth, async (c) =>
     return c.json({ error: 'Not found' }, 404);
   }
 
-  if (doc.data()?.status !== 'confirmed') {
+  const bookingData = doc.data()!;
+  if (bookingData.status !== 'confirmed') {
     return c.json({ error: 'Booking is not confirmed' }, 400);
   }
 
@@ -249,6 +251,18 @@ bookingLinkRoutes.patch('/bookings/:bookingId/cancel', requireAuth, async (c) =>
     status: 'cancelled_by_owner',
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  // booking-mirror C1: block event (「予定あり」) の削除。キャンセル自体は成立済みなので
+  // 削除に失敗してもログのみに留める (「空いているのに永久に埋まって見える」障害を防ぐのが
+  // 目的の後始末処理であり、失敗させて良い理由がない = 独立 try-catch で握り潰す)。
+  if (bookingData.blockEventId && bookingData.blockAccountId && bookingData.blockCalendarId) {
+    try {
+      const adapter = await createAdapter(user.uid, bookingData.blockAccountId);
+      await adapter.deleteEvent(bookingData.blockCalendarId, bookingData.blockEventId);
+    } catch (err) {
+      console.error(`Failed to delete block event for booking ${bookingId}:`, err);
+    }
+  }
 
   return c.json({ success: true });
 });

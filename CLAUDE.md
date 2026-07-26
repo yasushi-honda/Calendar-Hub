@@ -78,3 +78,7 @@ Connected account tokens are AES-256-GCM encrypted in Firestore (`users/{uid}/co
 - Branch protection on `main`: PR required, CI (quality job) must pass
 - `NEXT_PUBLIC_*` env vars are baked into Next.js at build time (Docker build args)
 - Firebase client SDK in `apps/web/src/lib/firebase.ts` guards against missing API key (for CI builds)
+
+## Dependency Security
+
+Security patches for transitive/direct dependencies are pinned via `pnpm.overrides` in the root `package.json`. These overrides only fix the CVE known at the time they were added — a newer CVE affecting the same package/version range later is not caught automatically. At session start (`/catchup`), run `gh api repos/yasushi-honda/Calendar-Hub/dependabot/alerts --paginate -q '.[] | select(.state=="open")' | jq -s 'length'` and treat any open alert as an actionable finding, including packages that already have an existing override entry (see `~/.claude/memory/reference_pnpm_overrides_staleness_pitfall.md` for the failure pattern, local to the Claude Code memory system).

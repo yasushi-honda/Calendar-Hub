@@ -1,6 +1,12 @@
 import { google, type calendar_v3 } from 'googleapis';
 import type { CalendarEvent } from '@calendar-hub/shared';
-import type { Calendar, CalendarAdapter, CreateEventInput, UpdateEventInput } from '../types.js';
+import type {
+  Calendar,
+  CalendarAdapter,
+  CreateEventInput,
+  CreateEventOptions,
+  UpdateEventInput,
+} from '../types.js';
 
 export class GoogleCalendarAdapter implements CalendarAdapter {
   readonly provider = 'google' as const;
@@ -38,11 +44,15 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     return (res.data.items ?? []).map((item) => this.toCalendarEvent(item, calendarId));
   }
 
-  async createEvent(calendarId: string, event: CreateEventInput): Promise<CalendarEvent> {
-    const res = await this.calendar.events.insert({
-      calendarId,
-      requestBody: this.toGoogleEvent(event),
-    });
+  async createEvent(
+    calendarId: string,
+    event: CreateEventInput,
+    options?: CreateEventOptions,
+  ): Promise<CalendarEvent> {
+    const res = await this.calendar.events.insert(
+      { calendarId, requestBody: this.toGoogleEvent(event) },
+      { signal: options?.signal },
+    );
     return this.toCalendarEvent(res.data, calendarId);
   }
 
@@ -89,29 +99,37 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 
   private toGoogleEvent(event: CreateEventInput | UpdateEventInput): calendar_v3.Schema$Event {
-    const body: calendar_v3.Schema$Event = {};
-    if (event.title !== undefined) body.summary = event.title;
-    if (event.description !== undefined) body.description = event.description;
-    if (event.location !== undefined) body.location = event.location;
-
-    const tz = (event as CreateEventInput).timeZone ?? 'Asia/Tokyo';
-
-    if (event.start && event.end) {
-      if (event.isAllDay) {
-        body.start = { date: toDateString(event.start, tz), dateTime: null };
-        body.end = { date: toDateString(event.end, tz), dateTime: null };
-      } else {
-        body.start = { dateTime: event.start.toISOString(), timeZone: tz, date: null };
-        body.end = { dateTime: event.end.toISOString(), timeZone: tz, date: null };
-      }
-    }
-
-    if (event.extendedProperties) {
-      body.extendedProperties = { private: event.extendedProperties.private };
-    }
-
-    return body;
+    return toGoogleEvent(event);
   }
+}
+
+/** `toDateString` と同様、純粋関数として切り出しテスト可能にする */
+export function toGoogleEvent(
+  event: CreateEventInput | UpdateEventInput,
+): calendar_v3.Schema$Event {
+  const body: calendar_v3.Schema$Event = {};
+  if (event.title !== undefined) body.summary = event.title;
+  if (event.description !== undefined) body.description = event.description;
+  if (event.location !== undefined) body.location = event.location;
+  if (event.transparency !== undefined) body.transparency = event.transparency;
+
+  const tz = (event as CreateEventInput).timeZone ?? 'Asia/Tokyo';
+
+  if (event.start && event.end) {
+    if (event.isAllDay) {
+      body.start = { date: toDateString(event.start, tz), dateTime: null };
+      body.end = { date: toDateString(event.end, tz), dateTime: null };
+    } else {
+      body.start = { dateTime: event.start.toISOString(), timeZone: tz, date: null };
+      body.end = { dateTime: event.end.toISOString(), timeZone: tz, date: null };
+    }
+  }
+
+  if (event.extendedProperties) {
+    body.extendedProperties = { private: event.extendedProperties.private };
+  }
+
+  return body;
 }
 
 export function toDateString(d: Date, timeZone: string): string {

@@ -1,11 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '../../../hooks/useRequireAuth';
-import { apiPost } from '../../../lib/api';
+import { apiGet, apiPost } from '../../../lib/api';
 import { PageShell, PageLoading } from '../../../components/PageShell';
-import type { BookingMirrorLink, CreateBookingMirrorLinkInput } from '@calendar-hub/shared';
+import { dedupeCalendarsByOwnAccount, type CalendarWithAccount } from '../../../lib/calendar-dedup';
+import type {
+  BookingMirrorLink,
+  ConnectedAccountPublic,
+  CreateBookingMirrorLinkInput,
+} from '@calendar-hub/shared';
 
 export function NewMirrorLinkContent() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -19,10 +24,45 @@ export function NewMirrorLinkContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const [googleCalendars, setGoogleCalendars] = useState<CalendarWithAccount[]>([]);
+  const [loadingCalendars, setLoadingCalendars] = useState(true);
+  const [autoCreateBlockEvent, setAutoCreateBlockEvent] = useState(false);
+  const [blockCalendarId, setBlockCalendarId] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const [calRes, accRes] = await Promise.all([
+          apiGet<{ calendars: CalendarWithAccount[] }>('/api/calendars'),
+          apiGet<{ accounts: ConnectedAccountPublic[] }>('/api/auth/accounts'),
+        ]);
+        // 相互共有カレンダーは複数アカウント経由で id が重複するため、所有アカウントに絞り込む
+        // (詳細: calendar-dedup.ts コメント)。絞り込まないと accountId の取り違えが起きる。
+        const google = dedupeCalendarsByOwnAccount(
+          calRes.calendars.filter((c) => c.provider === 'google'),
+          accRes.accounts,
+        );
+        setGoogleCalendars(google);
+        if (google.length > 0) setBlockCalendarId(google[0].id);
+      } catch (err) {
+        console.error('Failed to load calendars:', err);
+      } finally {
+        setLoadingCalendars(false);
+      }
+    })();
+  }, [user]);
+
+  const selectedBlockCalendar = googleCalendars.find((c) => c.id === blockCalendarId);
+
   const handleSubmit = async () => {
     setError('');
     if (!sourceUrl.trim()) {
       setError('Google 予約スケジュール URL は必須です');
+      return;
+    }
+    if (autoCreateBlockEvent && !selectedBlockCalendar) {
+      setError('自動登録先の Google カレンダーを設定してください');
       return;
     }
     setSubmitting(true);
@@ -33,6 +73,9 @@ export function NewMirrorLinkContent() {
         description: description.trim() || undefined,
         notificationEmail: notificationEmail.trim() || undefined,
         rangeDays,
+        autoCreateBlockEvent,
+        blockCalendarId: autoCreateBlockEvent ? selectedBlockCalendar!.id : null,
+        blockAccountId: autoCreateBlockEvent ? selectedBlockCalendar!.accountId : null,
       };
       await apiPost<{ link: BookingMirrorLink }>('/api/booking-mirror-links', input);
       router.push('/booking-mirror-links');
@@ -119,6 +162,39 @@ export function NewMirrorLinkContent() {
             </option>
           ))}
         </select>
+
+        <label style={{ ...s.checkboxItem, marginTop: '16px' }}>
+          <input
+            type="checkbox"
+            checked={autoCreateBlockEvent}
+            onChange={(e) => setAutoCreateBlockEvent(e.target.checked)}
+          />
+          <span>予約成立時に Google カレンダーへ「予定あり」を自動登録する</span>
+        </label>
+
+        {autoCreateBlockEvent &&
+          (loadingCalendars ? (
+            <span style={s.hint}>カレンダーを読み込み中...</span>
+          ) : googleCalendars.length === 0 ? (
+            <span style={s.hint}>
+              連携済みの Google カレンダーがありません。「設定」画面でアカウントを連携してください
+            </span>
+          ) : (
+            <>
+              <label style={s.label}>登録先の Google カレンダー</label>
+              <select
+                value={blockCalendarId}
+                onChange={(e) => setBlockCalendarId(e.target.value)}
+                style={s.input}
+              >
+                {googleCalendars.map((cal) => (
+                  <option key={cal.id} value={cal.id}>
+                    {cal.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          ))}
       </div>
 
       <button
@@ -198,6 +274,13 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--color-text-muted)',
     marginTop: '-2px',
     lineHeight: 1.5,
+  },
+  checkboxItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    cursor: 'pointer',
   },
   submitBtn: {
     width: '100%',

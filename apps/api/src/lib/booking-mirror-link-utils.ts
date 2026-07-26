@@ -1,5 +1,6 @@
 import type { DocumentData } from 'firebase-admin/firestore';
-import type { BookingMirrorLink } from '@calendar-hub/shared';
+import type { BookingMirrorLink, UpdateBookingMirrorLinkInput } from '@calendar-hub/shared';
+import { validateCalendarTargetInvariant } from './calendar-target-invariant.js';
 
 /**
  * Firestore document data から BookingMirrorLink を構築する。
@@ -24,5 +25,78 @@ export function buildBookingMirrorLinkFromFirestoreData(data: DocumentData): Boo
     expiresAt: data.expiresAt?.toDate?.() ?? null,
     createdAt: data.createdAt?.toDate?.() ?? new Date(),
     updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+    ...applyBookingMirrorLinkDefaults(data),
   } as BookingMirrorLink;
+}
+
+/**
+ * 既存 document (block event 拡張前に作成されたもの) に新フィールドの default を補完する。
+ * `autoCreateCalendarEvent` の非mirror版とは逆に、既定は false
+ * (稼働中リンクが突然 Google カレンダーへの書き込みを始めるのを防ぐため)。
+ */
+export function applyBookingMirrorLinkDefaults(
+  data: Record<string, unknown>,
+): Pick<BookingMirrorLink, 'autoCreateBlockEvent' | 'blockCalendarId' | 'blockAccountId'> {
+  return {
+    autoCreateBlockEvent: (data.autoCreateBlockEvent as boolean | undefined) ?? false,
+    blockCalendarId: (data.blockCalendarId as string | null | undefined) ?? null,
+    blockAccountId: (data.blockAccountId as string | null | undefined) ?? null,
+  };
+}
+
+/**
+ * 予約成立時に block event (「予定あり」) を自動作成すべきかを判定。
+ * autoCreateBlockEvent が ON で、かつ書き込み先 (blockAccountId / blockCalendarId) の
+ * 両方が設定されている場合のみ true (非mirror版 shouldCreateCalendarEvent と同じ考え方)。
+ */
+export function shouldCreateBlockEvent(link: BookingMirrorLink): boolean {
+  return link.autoCreateBlockEvent && !!link.blockAccountId && !!link.blockCalendarId;
+}
+
+/**
+ * BookingMirrorLink 作成/更新入力の不変条件をチェック。
+ * `autoCreateBlockEvent === true` のときは `blockCalendarId` と `blockAccountId` が必須。
+ */
+export function validateBookingMirrorLinkInvariant(input: {
+  autoCreateBlockEvent: boolean;
+  blockCalendarId: string | null | undefined;
+  blockAccountId: string | null | undefined;
+}): { ok: true } | { ok: false; error: string } {
+  const result = validateCalendarTargetInvariant({
+    enabled: input.autoCreateBlockEvent,
+    calendarId: input.blockCalendarId,
+    accountId: input.blockAccountId,
+  });
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: 'blockCalendarId and blockAccountId are required when autoCreateBlockEvent is true',
+    };
+  }
+  return result;
+}
+
+/**
+ * PATCH リクエスト body から Firestore update object を構築する (Partial Update)。
+ * undefined フィールドは update に含めず、Firestore 側で既存値を保持させる
+ * (非mirror版 buildBookingLinkPatchUpdate と同じ方針)。
+ */
+export function buildBookingMirrorLinkPatchUpdate(
+  body: UpdateBookingMirrorLinkInput,
+): Record<string, unknown> {
+  const update: Record<string, unknown> = {};
+  if (body.title !== undefined) update.title = body.title;
+  if (body.description !== undefined) update.description = body.description ?? null;
+  if (body.notificationEmail !== undefined) update.notificationEmail = body.notificationEmail;
+  if (body.rangeDays !== undefined) update.rangeDays = body.rangeDays;
+  if (body.status !== undefined) update.status = body.status;
+  if (body.expiresAt !== undefined) {
+    update.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  }
+  if (body.autoCreateBlockEvent !== undefined) {
+    update.autoCreateBlockEvent = body.autoCreateBlockEvent;
+  }
+  if (body.blockCalendarId !== undefined) update.blockCalendarId = body.blockCalendarId;
+  if (body.blockAccountId !== undefined) update.blockAccountId = body.blockAccountId;
+  return update;
 }

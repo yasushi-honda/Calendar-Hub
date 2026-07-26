@@ -267,8 +267,11 @@ export function buildBookingNotificationHtml(params: {
   guestMessage?: string;
   slotStart: Date;
   slotEnd: Date;
+  /** booking-mirror C1: block event が作成できたが枠消失を確認できなかった場合の警告文 */
+  blockEventWarning?: string;
 }): string {
-  const { linkTitle, guestName, guestEmail, guestMessage, slotStart, slotEnd } = params;
+  const { linkTitle, guestName, guestEmail, guestMessage, slotStart, slotEnd, blockEventWarning } =
+    params;
   const startStr = formatJstDateTime(slotStart);
   const endStr = formatJstTime(slotEnd);
 
@@ -294,6 +297,12 @@ export function buildBookingNotificationHtml(params: {
     details: detailsLines.join('\n'),
   });
 
+  const blockWarningHtml = blockEventWarning
+    ? `<div style="border:1px solid #f0ad4e;background:#fff8e6;border-radius:8px;padding:12px 16px;margin:16px 0;">
+    <p style="margin:0;font-size:13px;color:#8a6116;">⚠️ ${escapeHtml(blockEventWarning)}</p>
+  </div>`
+    : '';
+
   return `
 <!DOCTYPE html>
 <html>
@@ -307,6 +316,7 @@ export function buildBookingNotificationHtml(params: {
     <p style="margin:4px 0;font-size:14px;"><strong>日時:</strong> ${escapeHtml(startStr)} 〜 ${escapeHtml(endStr)}</p>
     ${messageHtml}
   </div>
+  ${blockWarningHtml}
   <div style="text-align:center;margin:20px 0;">
     <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;background:#1a73e8;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
       📅 Google カレンダーに追加

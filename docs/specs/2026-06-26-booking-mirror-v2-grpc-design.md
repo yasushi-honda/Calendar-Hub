@@ -249,28 +249,25 @@ link 情報の public-safe subset を返す (タイトル / 説明 / 受付状�
 
 ## 9. スコープ外 / 将来課題
 
-| 項目                                     | 理由                                              |
-| ---------------------------------------- | ------------------------------------------------- |
-| Google Calendar への event 自動作成 (C1) | C2 採用により本リリースでは実装しない (§9.1 参照) |
-| 独自ドメイン                             | 既存方針通り                                      |
-| spam 対策 (hCaptcha 等)                  | 既存方針通り                                      |
-| 既存 v1 bookingLink との移行ツール       | v1 廃止方針なので不要                             |
+| 項目                                     | 理由                           |
+| ---------------------------------------- | ------------------------------ |
+| Google Calendar への event 自動作成 (C1) | C2 → C1 へ移行済み (§9.1 参照) |
+| 独自ドメイン                             | 既存方針通り                   |
+| spam 対策 (hCaptcha 等)                  | 既存方針通り                   |
+| 既存 v1 bookingLink との移行ツール       | v1 廃止方針なので不要          |
 
-### 9.1 二重予約リスクの取り扱い (C2 採用)
+### 9.1 二重予約リスクの取り扱い (C2 → C1 移行済み)
 
 Codex review (2026-06-26) で指摘された High リスク: Calendar Hub フォームで予約完了しても Google Appointment Schedule には予約が入らない。その枠は Google 公開ページ上では空いたままで、同枠を Google 経由で別ゲストが予約すると二重予約になる。
 
-本リリースでは **C2 = 個人運用としてリスク受容** を本田様判断で採用。理由:
+初回リリースでは **C2 = 個人運用としてリスク受容** を採用していたが、2026-07-26 に本田様の明示指示で **C1 (Google Calendar への block event 書き込み)** へ移行した。予約成立時に `apps/api/src/lib/block-event.ts` の `createBlockEvent` が指定カレンダーへ「予定あり」(Busy) の event を同期作成する。実装詳細は `~/.claude/plans/iterative-riding-hummingbird.md` の PR2 参照。
 
-- オーナー 1 名運用、ターゲット限定の予約系
-- Google 予約スケジュール側と CalendarHub mirror 側で公開先を分離する運用は可能
-- C1 (Google Calendar への block event 書き込み) には `yasushi.honda@aozora-cg.com` 等の OAuth 連携 + `calendar.events` write 権限が必要だが、本田様の方針で当該連携を削除済
+**C1 は二重予約リスクを解消ではなく縮小する**点に注意 (「永続的に空いたまま」→「event 作成 + 枠消失検証にかかる数秒〜十数秒の間だけ空いたまま」)。残存リスクを正確に記載する:
 
-将来 C2 から C1 に移行する場合の拡張点:
-
-1. 対象カレンダーを CalendarHub に OAuth 連携
-2. `BookingMirrorLink` に `blockCalendarId` / `blockAccountId` フィールド追加
-3. POST `/book` 処理に `createBlockEvent` を追加
+- Google 予約ページ経由の予約は Calendar Hub の `bookings` collection に入らないため、非ミラーの `bookingLink` の空き判定には反映されない。この非対称性は C1 では解決しない
+- block event 作成の効果は Google 側の「空き時間を確認するカレンダー」設定 (対象スケジュールの conflict check calendars) に依存し、API からは事前検証できない。`createBlockEvent` は作成後に `fetchAvailableSlots` で枠消失を再確認し、確認できない場合は `blockEventStatus='created_unverified'` として記録 + オーナー宛メールで警告する間接検出で補う
+- block event 作成が transient エラー (429/503/timeout) で失敗し続けた場合、`/book` の応答が最大 25〜33 秒程度ブロックされうる (booking 自体は block event 呼び出しより先に確定済み)。個人運用規模では transient エラー自体が稀という前提で許容し、実機運用で頻度を見て必要なら再検討する (2026-07-26 decision-maker 判断)
+- Phase 0 (OAuth 再連携・Busy 動作の実機検証) は `yasushi.honda@aozora-cg.com` の再連携完了まで完了。実機での枠消失・キャンセル時の枠復活確認は継続実施中
 
 ### 9.2 Codex review 反映の technical 改善点
 

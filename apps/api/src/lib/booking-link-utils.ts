@@ -1,5 +1,6 @@
 import type { DocumentData } from 'firebase-admin/firestore';
 import type { BookingLink } from '@calendar-hub/shared';
+import { validateCalendarTargetInvariant } from './calendar-target-invariant.js';
 
 /**
  * Firestore document data に新フィールドの default を補完するためのロジック。
@@ -110,12 +111,17 @@ export function validateBookingLinkInvariant(input: {
   calendarIdForEvent: string | null | undefined;
   accountIdForEvent: string | null | undefined;
 }): { ok: true } | { ok: false; error: string } {
-  if (input.autoCreateCalendarEvent && (!input.calendarIdForEvent || !input.accountIdForEvent)) {
+  const result = validateCalendarTargetInvariant({
+    enabled: input.autoCreateCalendarEvent,
+    calendarId: input.calendarIdForEvent,
+    accountId: input.accountIdForEvent,
+  });
+  if (!result.ok) {
     return {
       ok: false,
       error:
         'calendarIdForEvent and accountIdForEvent are required when autoCreateCalendarEvent is true',
     };
   }
-  return { ok: true };
+  return result;
 }

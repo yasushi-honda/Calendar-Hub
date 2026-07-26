@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '../../hooks/useRequireAuth';
 import { apiGet, apiDelete, apiPatch } from '../../lib/api';
 import { PageShell, PageLoading } from '../../components/PageShell';
-import type { BookingMirrorLink } from '@calendar-hub/shared';
+import { dedupeCalendarsByOwnAccount, type CalendarWithAccount } from '../../lib/calendar-dedup';
+import type { BookingMirrorLink, ConnectedAccountPublic } from '@calendar-hub/shared';
 
 export function BookingMirrorLinksContent() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -13,6 +14,7 @@ export function BookingMirrorLinksContent() {
   const [links, setLinks] = useState<BookingMirrorLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [googleCalendars, setGoogleCalendars] = useState<CalendarWithAccount[]>([]);
 
   const loadLinks = useCallback(async () => {
     try {
@@ -28,6 +30,70 @@ export function BookingMirrorLinksContent() {
   useEffect(() => {
     if (user) loadLinks();
   }, [user, loadLinks]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const [calRes, accRes] = await Promise.all([
+          apiGet<{ calendars: CalendarWithAccount[] }>('/api/calendars'),
+          apiGet<{ accounts: ConnectedAccountPublic[] }>('/api/auth/accounts'),
+        ]);
+        // 相互共有カレンダーは複数アカウント経由で id が重複するため、所有アカウントに絞り込む
+        // (詳細: calendar-dedup.ts コメント)。絞り込まないと accountId の取り違えが起きる。
+        setGoogleCalendars(
+          dedupeCalendarsByOwnAccount(
+            calRes.calendars.filter((c) => c.provider === 'google'),
+            accRes.accounts,
+          ),
+        );
+      } catch (err) {
+        console.error('Failed to load calendars:', err);
+      }
+    })();
+  }, [user]);
+
+  const handleToggleBlockEvent = async (link: BookingMirrorLink) => {
+    const enabling = !link.autoCreateBlockEvent;
+    if (enabling && googleCalendars.length === 0) {
+      setMessage('連携済みの Google カレンダーがありません');
+      return;
+    }
+    const calendarId = link.blockCalendarId ?? googleCalendars[0]?.id ?? null;
+    // ON にする際は必ず (重複解消済みの) googleCalendars から accountId を再計算する。
+    // 保存済みの blockAccountId をそのまま使うと、重複解消ロジックの修正前に保存された
+    // 誤った accountId (相互共有で別アカウント経由の calendarId と紐付いていた) が
+    // 修正後も永続してしまう。
+    const accountId = enabling
+      ? (googleCalendars.find((c) => c.id === calendarId)?.accountId ?? null)
+      : link.blockAccountId;
+    try {
+      const res = await apiPatch<{ link: BookingMirrorLink }>(
+        `/api/booking-mirror-links/${link.id}`,
+        {
+          autoCreateBlockEvent: enabling,
+          blockCalendarId: enabling ? calendarId : link.blockCalendarId,
+          blockAccountId: enabling ? accountId : link.blockAccountId,
+        },
+      );
+      setLinks((prev) => prev.map((l) => (l.id === link.id ? res.link : l)));
+    } catch {
+      setMessage('更新に失敗しました');
+    }
+  };
+
+  const handleChangeBlockCalendar = async (link: BookingMirrorLink, calendarId: string) => {
+    const accountId = googleCalendars.find((c) => c.id === calendarId)?.accountId ?? null;
+    try {
+      const res = await apiPatch<{ link: BookingMirrorLink }>(
+        `/api/booking-mirror-links/${link.id}`,
+        { blockCalendarId: calendarId, blockAccountId: accountId },
+      );
+      setLinks((prev) => prev.map((l) => (l.id === link.id ? res.link : l)));
+    } catch {
+      setMessage('更新に失敗しました');
+    }
+  };
 
   const handleToggleStatus = async (link: BookingMirrorLink) => {
     const newStatus = link.status === 'active' ? 'paused' : 'active';
@@ -114,6 +180,30 @@ export function BookingMirrorLinksContent() {
               </div>
 
               {link.description && <p style={s.cardDesc}>{link.description}</p>}
+
+              <div style={s.blockEventSection}>
+                <label style={s.checkboxItem}>
+                  <input
+                    type="checkbox"
+                    checked={link.autoCreateBlockEvent}
+                    onChange={() => handleToggleBlockEvent(link)}
+                  />
+                  <span>予約成立時に Google カレンダーへ「予定あり」を自動登録する</span>
+                </label>
+                {link.autoCreateBlockEvent && (
+                  <select
+                    value={link.blockCalendarId ?? ''}
+                    onChange={(e) => handleChangeBlockCalendar(link, e.target.value)}
+                    style={s.blockCalendarSelect}
+                  >
+                    {googleCalendars.map((cal) => (
+                      <option key={cal.id} value={cal.id}>
+                        {cal.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
               <div style={s.cardActions}>
                 <button onClick={() => handleCopyLink(link.id)} style={s.actionBtn}>
@@ -216,6 +306,31 @@ const s: Record<string, React.CSSProperties> = {
     color: 'var(--color-text-muted)',
     lineHeight: 1.5,
     marginBottom: '12px',
+  },
+  blockEventSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '12px 0',
+    borderTop: '1px solid var(--color-border)',
+  },
+  checkboxItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  blockCalendarSelect: {
+    padding: '8px 12px',
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '8px',
+    color: 'var(--color-text)',
+    fontSize: '13px',
+    fontFamily: 'inherit',
+    outline: 'none',
+    marginLeft: '24px',
   },
   cardActions: {
     display: 'flex',

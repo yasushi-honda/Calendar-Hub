@@ -22,6 +22,12 @@ export interface BookingMirrorLink {
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** 予約成立時に Google カレンダーへ block event (「予定あり」) を自動作成するか。既存 document では false */
+  autoCreateBlockEvent: boolean;
+  /** block event の書き込み先 calendar ID */
+  blockCalendarId: string | null;
+  /** block event の書き込みに使う連携アカウント ID */
+  blockAccountId: string | null;
 }
 
 /** 公開ページに返す safe subset (ownerUid / scheduleId 等を隠す) */
@@ -41,6 +47,9 @@ export interface CreateBookingMirrorLinkInput {
   notificationEmail?: string;
   rangeDays?: number;
   expiresAt?: string | null;
+  autoCreateBlockEvent?: boolean;
+  blockCalendarId?: string | null;
+  blockAccountId?: string | null;
 }
 
 /** PATCH /api/booking-mirror-links/:linkId 入力 */
@@ -51,6 +60,9 @@ export interface UpdateBookingMirrorLinkInput {
   rangeDays?: number;
   status?: BookingMirrorLinkStatus;
   expiresAt?: string | null;
+  autoCreateBlockEvent?: boolean;
+  blockCalendarId?: string | null;
+  blockAccountId?: string | null;
 }
 
 /** 公開 slots API レスポンス 1 件 */

@@ -47,6 +47,9 @@ export interface PublicBookingLinkInfo {
   status: BookingLinkStatus;
 }
 
+/** block event (「予定あり」) 自動作成の結果。'skipped' = autoCreateBlockEvent が無効 */
+export type BlockEventStatus = 'skipped' | 'created' | 'created_unverified' | 'failed';
+
 export interface Booking {
   id: string;
   linkId: string;
@@ -61,6 +64,15 @@ export interface Booking {
   notificationSentToOwner: boolean;
   notificationSentToGuest: boolean;
   createdAt: Date;
+  /** block event 自動作成の結果。非mirrorリンクの予約や旧document では undefined */
+  blockEventStatus?: BlockEventStatus;
+  /** 作成された Google event の素の id (google_ プレフィックスなし)。delete に使う */
+  blockEventId?: string | null;
+  /** block event 書き込み先の calendar ID (link からのスナップショット) */
+  blockCalendarId?: string | null;
+  /** block event 書き込みに使った連携アカウント ID (link からのスナップショット) */
+  blockAccountId?: string | null;
+  blockEventError?: string;
 }
 
 /** Public-safe booking confirmation */

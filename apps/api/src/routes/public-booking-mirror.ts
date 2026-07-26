@@ -20,7 +20,7 @@ import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
 import { buildBookingMirrorLinkFromFirestoreData } from '../lib/booking-mirror-link-utils.js';
 import { excludeOverlappingSlots } from '../lib/booking-mirror-slots.js';
-import { getConfirmedBookingEventsForOwner } from '../lib/booking-events.js';
+import { getConfirmedBookingEventsForOwner, OVERLAP_LOOKBACK_MS } from '../lib/booking-events.js';
 import type {
   BookingMirrorLink,
   BookingMirrorSlot,
@@ -233,10 +233,14 @@ publicBookingMirrorRoutes.post('/:linkId/book', async (c) => {
   const bookingId = nanoid(12);
 
   try {
+    // slotStart に下限を付けず全期間をスキャンすると、予約件数の増加に比例して
+    // 読み取り件数・レイテンシが線形に悪化する (Issue #197、非mirror版と同一パターン)。
+    const overlapQueryLowerBound = new Date(slotStart.getTime() - OVERLAP_LOOKBACK_MS);
     const overlapQuery = db
       .collection('bookings')
       .where('ownerUid', '==', link.ownerUid)
       .where('status', '==', 'confirmed')
+      .where('slotStart', '>=', overlapQueryLowerBound)
       .where('slotStart', '<', slotEnd);
 
     await db.runTransaction(async (tx) => {

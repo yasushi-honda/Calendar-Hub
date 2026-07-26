@@ -9,6 +9,8 @@ import {
   executeSyncActions,
   recordSyncLog,
   computeSyncGap,
+  acquireSyncLease,
+  releaseSyncLease,
 } from '../lib/timetree-google-sync.js';
 import { nanoid } from 'nanoid';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -63,10 +65,22 @@ syncRoutes.post('/timetree-to-google', async (c) => {
     let failureCount = 0;
 
     for (const { docId, ownerUid, data: config } of configs) {
-      // syncIntervalMinutes に基づく経過時間チェック
-      const lastSyncedAt = config.lastSyncedAt?.getTime() ?? 0;
-      const intervalMs = (config.syncIntervalMinutes ?? 5) * 60_000;
-      if (Date.now() - lastSyncedAt < intervalMs) {
+      // syncIntervalMinutes に基づく経過時間チェック + リース取得をトランザクションで
+      // 原子的に行う (Issue #196: 従来の check-then-act な判定は並列/再試行実行時に
+      // 同一設定を二重処理しうるレースコンディションがあった)。
+      // 従来の判定は同期的で例外を投げないプロパティ読み取りだったが、Firestore
+      // トランザクションは一時的なエラーで reject しうるため、この呼び出し自体を
+      // ループ本体の try/catch とは独立して捕捉する。捕捉しないと1件のFirestore
+      // エラーがジョブ全体 (残り全configs) を中断させてしまう (/code-review medium指摘)。
+      let leaseAcquired: boolean;
+      try {
+        leaseAcquired = await acquireSyncLease(ownerUid, docId);
+      } catch (err) {
+        failureCount++;
+        console.error(`Failed to acquire sync lease for ${ownerUid}/${docId}:`, err);
+        continue;
+      }
+      if (!leaseAcquired) {
         continue;
       }
 
@@ -117,13 +131,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         const status = stats.skipped > 0 ? 'partial' : 'success';
         await recordSyncLog(docId, ownerUid, status, stats, Date.now() - configStartTime);
 
-        // lastSyncedAt を更新
+        // lastSyncedAt を更新 (リースも解放)
         await db
           .collection('users')
           .doc(ownerUid)
           .collection('syncConfig')
           .doc(docId)
-          .update({ lastSyncedAt: FieldValue.serverTimestamp() });
+          .update({ lastSyncedAt: FieldValue.serverTimestamp(), syncLeaseAt: FieldValue.delete() });
 
         console.log(
           `Sync completed for ${ownerUid}/${config.googleCalendarId}: ${stats.created} created, ${stats.updated} updated, ${stats.deleted} deleted`,
@@ -131,6 +145,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
       } catch (err) {
         failureCount++;
         console.error(`Sync failed for ${ownerUid}:`, err);
+
+        // 状態復旧 (リース解放) を最優先で行う (rules/error-handling.md §1:
+        // 状態復旧 > ログ記録 > 通知の優先順)。lastSyncedAt は更新しないため、
+        // 次回インターバル判定で再試行対象になる。独立したtry-catchで囲む。
+        await releaseSyncLease(ownerUid, docId).catch((e) =>
+          console.error('Failed to release sync lease:', e),
+        );
 
         await recordSyncLog(
           docId,

@@ -7,8 +7,11 @@ import type { CalendarEvent } from '@calendar-hub/shared';
  * 巻き戻し幅。個人運用規模の予約枠として現実的にありえない長さ (24時間) を
  * 十分に超える値を取り、真の重複判定は `toOverlappingBookingEvents` の
  * `end > timeMin` フィルタで行う。
+ *
+ * `public-booking.ts` / `public-booking-mirror.ts` の POST `/:linkId/book` に
+ * ある予約確定直前の overlap query (Issue #197) でも同じ下限として再利用する。
  */
-const OVERLAP_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+export const OVERLAP_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 interface RawBookingDoc {
   id: string;

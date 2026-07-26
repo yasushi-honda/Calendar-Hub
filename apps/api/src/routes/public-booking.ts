@@ -26,7 +26,7 @@ import {
 } from '../lib/booking-link-utils.js';
 import { assertE2EMockSafe } from '../lib/e2e-guard.js';
 import { pickOwnerDisplayName } from '../lib/owner-display-name.js';
-import { getConfirmedBookingEventsForOwner } from '../lib/booking-events.js';
+import { getConfirmedBookingEventsForOwner, hasOverlappingEvent } from '../lib/booking-events.js';
 
 export const publicBookingRoutes = new Hono();
 
@@ -232,6 +232,19 @@ publicBookingRoutes.post('/:linkId/book', async (c) => {
     !link.availableDays.includes(slotDay)
   ) {
     return c.json({ error: 'Slot is outside available hours/days' }, 400);
+  }
+
+  // 予約直前に外部カレンダー (Google/TimeTree) を再取得し、選択 slot が依然空きであることを
+  // 確認する (mirror側の fetchAvailableSlots 再検証と同様のパターン。Codex review P1, Issue #195)
+  const externalEvents = await fetchOwnerEvents(
+    link.ownerUid,
+    link.accountIds,
+    link.calendarIdsForAvailability,
+    slotStart,
+    slotEnd,
+  );
+  if (hasOverlappingEvent(externalEvents, slotStart, slotEnd)) {
+    return c.json({ error: 'This time slot is no longer available' }, 409);
   }
 
   const db = getDb();

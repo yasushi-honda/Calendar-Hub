@@ -68,7 +68,18 @@ syncRoutes.post('/timetree-to-google', async (c) => {
       // syncIntervalMinutes に基づく経過時間チェック + リース取得をトランザクションで
       // 原子的に行う (Issue #196: 従来の check-then-act な判定は並列/再試行実行時に
       // 同一設定を二重処理しうるレースコンディションがあった)。
-      const leaseAcquired = await acquireSyncLease(ownerUid, docId);
+      // 従来の判定は同期的で例外を投げないプロパティ読み取りだったが、Firestore
+      // トランザクションは一時的なエラーで reject しうるため、この呼び出し自体を
+      // ループ本体の try/catch とは独立して捕捉する。捕捉しないと1件のFirestore
+      // エラーがジョブ全体 (残り全configs) を中断させてしまう (/code-review medium指摘)。
+      let leaseAcquired: boolean;
+      try {
+        leaseAcquired = await acquireSyncLease(ownerUid, docId);
+      } catch (err) {
+        failureCount++;
+        console.error(`Failed to acquire sync lease for ${ownerUid}/${docId}:`, err);
+        continue;
+      }
       if (!leaseAcquired) {
         continue;
       }
@@ -135,6 +146,13 @@ syncRoutes.post('/timetree-to-google', async (c) => {
         failureCount++;
         console.error(`Sync failed for ${ownerUid}:`, err);
 
+        // 状態復旧 (リース解放) を最優先で行う (rules/error-handling.md §1:
+        // 状態復旧 > ログ記録 > 通知の優先順)。lastSyncedAt は更新しないため、
+        // 次回インターバル判定で再試行対象になる。独立したtry-catchで囲む。
+        await releaseSyncLease(ownerUid, docId).catch((e) =>
+          console.error('Failed to release sync lease:', e),
+        );
+
         await recordSyncLog(
           docId,
           ownerUid,
@@ -143,12 +161,6 @@ syncRoutes.post('/timetree-to-google', async (c) => {
           Date.now() - configStartTime,
           getErrorMessage(err),
         ).catch((e) => console.error('Failed to record sync log:', e));
-
-        // 失敗時もリースは解放する (lastSyncedAt は更新しないため、次回インターバル
-        // 判定で再試行対象になる。状態復旧を最優先し独立したtry-catchで囲む)
-        await releaseSyncLease(ownerUid, docId).catch((e) =>
-          console.error('Failed to release sync lease:', e),
-        );
       }
     }
 

@@ -8,30 +8,27 @@ booking-mirror C1 拡張(予約成立時に Google カレンダーへ block even
 
 ## 背景・why
 
-Google Appointment Schedule の空き枠をミラーする booking-mirror 機能では、Calendar Hub 経由の予約が Google 側に反映されず、同じ枠が Google 経由で別予約されると二重予約になるリスクがある(仕様書 `docs/specs/2026-06-26-booking-mirror-v2-grpc-design.md` §9.1 で C2=リスク受容として意図的に未実装)。2026-07-26 セッションで decision-maker が「C1 着手」を明示指示。
-
-C1 実装には対象 Google アカウントの OAuth 再連携(`calendar.events` write 権限)が前提だが、本田様の方針で当該連携は削除済み。この前提確認(Phase 0)が完了するまで PR2(C1 本体)は着手できない。
+Google Appointment Schedule の空き枠をミラーする booking-mirror 機能では、Calendar Hub 経由の予約が Google 側に反映されず、同じ枠が Google 経由で別予約されると二重予約になるリスクがある(仕様書 `docs/specs/2026-06-26-booking-mirror-v2-grpc-design.md` §9.1 で C2=リスク受容として意図的に未実装だったが、2026-07-26 に C1 へ移行済み)。
 
 計画全文: `~/.claude/plans/iterative-riding-hummingbird.md`(PR1/PR2 分割・Phase 0 手順・Acceptance Criteria を含む)。
 
 ## 完了の定義
 
-- [ ] Phase 0 完了: 対象 Google アカウントの OAuth 再連携(`calendar.events` write 権限)、consent screen の publishing status が Testing でないこと、Busy イベントで Google 予約ページの枠が消えることを確認済み(証明: 本田様による手動確認 + `curl .../slots` を手動イベント作成の前後で実行し該当枠が消えることを確認)
-- [ ] PR2 実装完了: `BookingMirrorLink` に `blockCalendarId`/`blockAccountId`/`autoCreateBlockEvent` 追加、POST `/book` で `createBlockEvent` を同期実行、silent failure 検出(`created`/`created_unverified`/`failed` の3値記録)、キャンセル時の block event 削除を含む(証明: `pnpm test && pnpm lint && pnpm turbo type-check && pnpm turbo build` 全 PASS)
-- [ ] 実機で予約すると Google 予約ページから当該枠が消え、`blockEventStatus='created'` になる(証明: `curl .../slots` を予約の前後で実行 → 該当 `start` が消える + Firestore document 確認)
-- [ ] 予約をキャンセルすると block event が削除され枠が Google 予約ページに戻る(証明: cancel API 実行 → `curl .../slots` で該当 `start` が復活)
+- [x] Phase 0 完了: 対象 Google アカウント(`yasushi.honda@aozora-cg.com`)の OAuth 再連携完了、consent screen の publishing status が本番環境(Testing でない)であることを確認、実機で Busy イベントによる枠消失を確認
+- [x] PR2 実装完了: `BookingMirrorLink` に `blockCalendarId`/`blockAccountId`/`autoCreateBlockEvent` 追加、POST `/book` で `createBlockEvent` を同期実行、silent failure 検出(`created`/`created_unverified`/`failed` の3値記録)、キャンセル時の block event 削除を含む(証明: `pnpm test && pnpm lint && pnpm turbo type-check && pnpm turbo build` 全 PASS、PR #206 マージ済み)
+- [x] 実機で予約すると Google 予約ページから当該枠が消え、`blockEventStatus='created'` になる(証明: 実機で `yasushi.honda@aozora-cg.com` のカレンダーへ block event 作成 → 実際の Google 予約ページで該当枠消失を確認済み、2026-07-26)
+- [ ] 予約をキャンセルすると block event が削除され枠が Google 予約ページに戻る(証明: cancel API 実行 → 実際の Google 予約ページで該当枠の復活を確認。コードレビューでは実装済みを確認済み(`booking-links.ts`)だが実機未検証。API 呼び出しには認証が必要で、現状 `apps/web` にキャンセル UI が無いため、decision-maker 自身の操作 or 別途手段が必要)
 
 ## 進行中の tasks
 
 - [x] PR1: mirror の空き枠から自前の確定予約を差し引く + Firestore mapper 一本化(PR #193 マージ済み、2026-07-26)
-- [ ] Phase 0: OAuth 連携可否・Testing mode 確認・Busy 動作の実測検証 — decision-maker 作業(ブラウザでの認証操作を伴う)
-- [ ] PR2-a: データモデル追加(`BookingMirrorLink`/`Booking` 型拡張)、`CreateEventInput`/`UpdateEventInput` への `transparency` 追加
-- [ ] PR2-b: `createBlockEvent` ロジック実装(transient/permanent エラー分類、adapter DI 可能な形での切り出し)
-- [ ] PR2-c: POST `/book` への同期組み込み + silent failure 検出(実行時 slot 再検証)
-- [ ] PR2-d: キャンセル時の block event 削除
-- [ ] PR2-e: 管理画面 UI(新規作成フォーム + 一覧カードへの設定追加)
-- [ ] PR2-f: テスト・ドキュメント更新(仕様書 §9.1 の C2→C1 移行記録)
+- [x] Phase 0: OAuth 連携可否・Testing mode 確認・Busy 動作の実測検証(2026-07-26 完了)
+- [x] PR2-a〜g: データモデル拡張・`createBlockEvent`(transient/permanent エラー分類・`AbortSignal` によるタイムアウト)・POST `/book` 同期組み込み・キャンセル時削除・管理画面 UI・テスト・仕様書更新(PR #206、2026-07-26 マージ済み)
+- [x] 実機検証で発覚した「相互共有カレンダーによる accountId 取り違えバグ」を `calendar-dedup.ts` で修正
+- [x] `/code-review medium` 指摘3件(タイムアウト時の重複イベント・PATCH partial update テスト不足・レイテンシ直列化)を修正済み
+- [x] API p99 レイテンシアラートの閾値を新しい設計(block event 同期作成で正常系 2〜3秒)に合わせて 3000ms→10000ms へ調整済み
+- [ ] AC-8 実機検証: 予約キャンセル → block event 削除 → Google 予約ページで枠復活の確認(decision-maker 側の操作が必要)
 
 ## 🔄 中断点(in-flight)
 
-なし(PR2 は未着手。Phase 0 が decision-maker 側の確認待ちのため、自然な区切りでセッションを終えている)
+なし。PR2 は実装・実機検証(作成側)・レビュー・マージ・本番デプロイまで完了。残るのはキャンセル側(AC-8)の実機検証のみで、decision-maker 側の作業(認証を伴う API 呼び出し、または今後 UI 追加)待ち。

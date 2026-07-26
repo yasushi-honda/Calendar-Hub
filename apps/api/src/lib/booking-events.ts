@@ -38,6 +38,21 @@ export function toOverlappingBookingEvents(docs: RawBookingDoc[], timeMin: Date)
 }
 
 /**
+ * 予約確定直前に再取得した外部カレンダーイベントが、選択された slot と重なるかを判定する。
+ *
+ * 重なり判定は `start < slotEnd && end > slotStart` (区間の共通部分が存在するか)。
+ * 境界がちょうど接するだけ (隣接) は重複として扱わない。mirror側の
+ * `excludeOverlappingSlots` と同一ロジック。
+ */
+export function hasOverlappingEvent(
+  events: { start: Date; end: Date }[],
+  slotStart: Date,
+  slotEnd: Date,
+): boolean {
+  return events.some((event) => event.start < slotEnd && event.end > slotStart);
+}
+
+/**
  * 指定オーナーの確定済み予約 (`bookings` collection, status='confirmed') を
  * ダミーイベントとしてマージするための変換。
  *

@@ -84,8 +84,10 @@ export function calculateFreeSlots(
       return e.start < dayEnd && e.end > dayStart;
     });
 
-    // イベント間の空きを計算
-    let cursor = dayStart;
+    // イベント間の空きを計算。cursor は dayStart と rangeStart の遅い方から始める
+    // (当日分は rangeStart 以前の、既に過ぎた時間帯を空き枠として出さないため。Issue #198)。
+    // rangeStart は日をまたいでも不変なので、2日目以降は自然に dayStart が優先される。
+    let cursor = dayStart < rangeStart ? rangeStart : dayStart;
     for (const event of dayEvents) {
       const eventStart = event.start < dayStart ? dayStart : event.start;
       const eventEnd = event.end > dayEnd ? dayEnd : event.end;

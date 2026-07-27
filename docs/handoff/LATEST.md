@@ -1,145 +1,6 @@
-# Calendar Hub ハンドオフ (2026-07-26, 第 15 編まで)
+# Calendar Hub ハンドオフ (2026-07-27, 第 17 編まで)
 
-> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。第 10〜13 編は `archive/2026-07-18_to_19-vol10-to-vol13.md` に分離 (2026-07-26 第 15 編で実施、60KB 超過のため)。LATEST.md は第 14 編以降のみ保持する。
-
-## 2026-07-25/26 セッション総括 (第 14 編): Dependabot alert 完全解消 (16→0) + pnpm.overrides 陳腐化パターンの構造的発見・是正
-
-catchup が新規検出した「fast-uri の Dependabot Updates workflow 失敗」を発端に段階的に調査範囲を拡大し、最終的に open Dependabot alert 16 件を全解消。過程で `pnpm.overrides` が時間経過で静かに陳腐化する構造的パターンを 4 パッケージ連続で発見し、§4.6 同根再発スキャンで第 10〜12 編との連続性を確認。再発防止のプロセス改善（memory 化 + CLAUDE.md 明記）まで実施した。
-
-### PR 一覧
-
-| PR   | 内容                                                                  | 規模              | 結果                                              |
-| ---- | --------------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| #186 | chore(deps): bump @hono/node-server from 1.19.13 to 2.0.10            | 2 files           | ✅ merge (CI green 確認済み)                      |
-| #188 | fix(deps): fast-uri を pnpm.overrides で >=3.1.4 に固定               | 2 files +6/-4     | ✅ merge (CI 全 PASS 後)                          |
-| #189 | fix(deps): tar/js-yaml/@hono/node-server の陳腐化した override を更新 | 2 files +18/-26   | ✅ merge (CI 全 PASS 後)                          |
-| #190 | fix(deps): next/postcss/sharp/brace-expansion の脆弱性を解消          | 3 files +233/-197 | ✅ merge (large tier → `/code-review low` 実施後) |
-| #191 | docs(claude-md): catchup 時の Dependabot alert 横断確認を明記         | 1 file +5/-1      | ✅ merge (CI 全 PASS 後)                          |
-
-### 主要成果
-
-#### M1: catchup 起点 — Dependabot open alert 16 件 → 0 件の完全解消
-
-catchup が検出した fast-uri（`security_update_not_possible`）の調査を起点に、`gh api dependabot/alerts` で全件を横断確認しながら段階的に対応範囲を拡大。最終的に 5 PR で以下を解消:
-
-| package                       | 問題                                                                    | 対応                                         |
-| ----------------------------- | ----------------------------------------------------------------------- | -------------------------------------------- |
-| @hono/node-server             | apps/api 直接依存が 1.19.13 で fix 版未満                               | 2.0.10 へ更新 (PR #186)                      |
-| fast-uri                      | devDependency (firebase-tools 配下) が 3.1.2 で fix 版未満              | override 追加 (PR #188)                      |
-| tar                           | 既存 override target (第 12 編で追加) が新規 CVE 未カバー               | target 引き上げ (PR #189)                    |
-| js-yaml                       | 既存 override target (第 10-11 編で追加) が 5.x 系の別 CVE を誘発       | 単一ルールへ統合し target 引き上げ (PR #189) |
-| @hono/node-server(transitive) | `@google/genai` → MCP SDK peer 経由の別インスタンスが未解消             | override 追加 (PR #189)                      |
-| next                          | apps/web 直接依存の lockfile が古いまま (override 無関係の単純ドリフト) | `pnpm update next`（PR #190）                |
-| postcss                       | 既存 override target が新規 CVE 未カバー                                | target 引き上げ (PR #190)                    |
-| sharp                         | next の optionalDependencies が旧バージョンに固定                       | override 新規追加 (PR #190)                  |
-| brace-expansion               | 既存 override target が新規 CVE 未カバー                                | target 引き上げ (PR #190)                    |
-
-#### M2:【重要な発見】pnpm.overrides の構造的陳腐化パターン（同根再発、詳細は § 4.6）
-
-tar/js-yaml/postcss/brace-expansion の 4 件で共通して「override 追加時点の CVE は解消したが、後発の新規 CVE には自動追随しない」パターンを検出。js-yaml では上限なし `>=X.Y.Z` ターゲットが「その時点の latest」に解決されるため別 major の新規 CVE を誘発する挙動、および pnpm のローカル metadata cache（`~/Library/Caches/pnpm/metadata-v1.3/`）が古い `dist-tags.latest` を保持し override 修正後も解決結果が変わらないケースを実測で確認・解消した。
-
-#### M3: 再発防止のプロセス改善
-
-- memory 化: `reference_pnpm_overrides_staleness_pitfall.md`（`platform-pitfalls-index.md` にインデックス追加）
-- decision-maker に AskUserQuestion で再発防止策を確認 → 「catchup 時に Dependabot alert 横断確認を追加」を採用
-- `CLAUDE.md` に「Dependency Security」節を新設（PR #191）。次回以降の `/catchup` で既存 override のあるパッケージも横断確認対象に含める運用を明記
-
-### 検証
-
-- 各 PR で `pnpm turbo build` / `pnpm lint` / `pnpm turbo type-check` / `pnpm test`（246 tests）全 PASS を個別確認
-- 各 PR の CI（quality/e2e/GitGuardian/CodeRabbit）全 green を fresh 確認後、番号単位の明示認可を得てマージ
-- PR #190 は diff 規模（+233/-197、3 files）が hook の large tier 判定に該当し `/code-review low package.json apps/web/package.json pnpm-lock.yaml` を実施（findings 0 件、sharp の Node 要求バージョン変更を CI/Docker 双方で Node 22 が満たすことを個別確認）
-- 全 5 PR のマージ後デプロイ（`deploy.yml`）を `gh run view` で fresh 確認し、5 回とも success
-- 最終状態: `gh api dependabot/alerts` で open 件数 **0**（fresh 確認、複数回計測して回帰なし）
-
-### 同根再発スキャン (§ 4.6)
-
-本セッション修正 PR: PR #188 / #189 / #190（いずれも `fix(deps):`）。
-
-- **同根確定（4 セッションにまたがる構造的パターン）**: 「pnpm.overrides は追加時点の CVE のみ固定し、再監査の仕組みがない」という根本原因が、第 10-11 編（websocket-driver/js-yaml override 新規追加）→ 第 12 編（tar override 新規追加、M3 で peer-dependency 無効化パターンのスイープ実施も target 陳腐化は未検知）→ 本セッション（tar/js-yaml の再陳腐化 + postcss/brace-expansion の新規陳腐化発覚）と繰り返し発症
-  - 第 12 編の M3 スイープは「override が peer dependency 経由で無効化されていないか」のみを検出対象としており、「override target 自体が最新 CVE データに対して十分か」は検証範囲外だった。これが今回の見逃しの直接要因
-  - 根本原因仮説（3 つ）: ① override はワンショットの point-in-time 対応で、CI 上に「既存 override target が最新 Dependabot データを満たしているか」を継続検証する仕組みがない ② 上限なし `>=` ターゲットは pnpm のローカル metadata cache 次第で解決結果が変動しうる（実測確認済み） ③ direct dependency（next）は override 機構と無関係に、単純な `pnpm update` 未実施でも同様にドリフトする
-  - 「もう 1 件同根が出るとしたら」: 既存 override 全 23 件（第 12 編時点）のうち今回検証しなかった残り約 19 件（websocket-driver / esbuild / ws / @grpc/grpc-js / form-data / qs / uuid / node-forge / minimatch / picomatch / yaml / lodash 等）のいずれかに、今後新規 CVE が公開された際に同じ形で再発しうる
-- 過去 7 日 archive を `override` / `Dependabot` / `pnpm.overrides` で grep → 第 11-12 編（本ファイル内）に直接該当。新規の別セッション同根なし（既知の継続パターンとして扱う）
-
-→ **同根再発 1 件（override 陳腐化パターン、4 セッション目の再発）を検出。今回は個別パッケージの target 修正に加えて、根本原因（再監査プロセスの欠如）に対するプロセス改善（CLAUDE.md 明記 + memory 化）まで実施し、対症療法で終わらせなかった** ✅
-
-### 対症療法判定 (§ 4.7)
-
-| #   | 基準                                              | 判定                                                                                                                                                                                                                           |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | retry/timeout/fallback/文言修正のみで調査ログなし | ❌ `pnpm why` によるバージョン解決経路の実測確認 + CVE の `first_patched_version` 照合を全パッケージで実施                                                                                                                     |
-| 2   | WebSearch / changelog 確認なし                    | ⚠️ 該当（基準 3 がヒットしたため § 4.7 手順に従い WebSearch を実施。pnpm エコシステムの公式見解として「override は定期的な再監査・クリーンアップが必要」というベストプラクティスを確認、外部要因として構造的に説明可能と判定） |
-| 3   | 同症状 PR が過去 30 日に 1 件以上                 | ✅ 該当（tar: 第 12 編 PR #182 → 本セッション PR #189、js-yaml: 第 11 編 PR #178 → 本セッション PR #189）                                                                                                                      |
-| 4   | smoke のみで構造的検証なし                        | ❌ 全 PR で build/lint/type-check/test/CI/Deploy を個別 fresh 確認、metadata cache 陳腐化の根本原因まで実測特定                                                                                                                |
-
-→ **対症療法ではないが、外部要因（エコシステム共通のベストプラクティスギャップ）による構造的再発と判定** ⚠️。基準 3 がヒットした際の § 4.7 の要求に従い、個別パッケージ修正だけで終わらせず M3（memory 化 + CLAUDE.md プロセス明記）で再発防止まで実施済み
-
-### グローバル memory scope (§ 4.5)
-
-- 新規作成: `reference_pnpm_overrides_staleness_pitfall.md`（type: reference）
-- 既存類似 grep 実施 → 該当なし（新規作成が妥当と判定）
-- スコープ判定: 汎用的な pnpm/エコシステムの技術的知見であり、Why 欄に PR 番号・プロジェクト名・人名は含めず一般化して記述 → グローバル配置が適切
-- `platform-pitfalls-index.md` にインデックス追加済み
-
-### 構造的整合性 (§ 4)
-
-`package.json`（`pnpm.overrides`/`devDependencies`）+ `pnpm-lock.yaml` + `apps/web/package.json` + `CLAUDE.md` の設定・doc 変更のみ。型・共有ロジック・API 変更なし → ⏭️ スキップ
-
-### Issue Net 変化 (第 14 編)
-
-- Close 数: 0 件
-- 起票数: 0 件
-- **Net: 0**（全て PR ベースの対応で Issue 起票不要な軽微修正のため）
-
-### 次のアクション (第 14 編 update)
-
-#### 即着手タスク
-
-なし。
-
-#### 条件待ち (明示 trigger 付き) — 第 13 編の 5 件、内容変化なし
-
-| #   | 項目                                                                    | trigger                                                        | trigger 充足時のタスク                                           |
-| --- | ----------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | C1 拡張 (booking-mirror に Google Calendar 自動登録追加)                | decision-maker から「C1 着手」明示指示                         | spec §9.1 末尾参照 (第 9 編から継続)                             |
-| 2   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効           | `parseSlotResponse` の structured log alert 化 (第 9 編から継続) |
-| 3   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須） | ADR-010 実装フェーズ §4-5 参照                                   |
-| 4   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発                                      | diagnostic PR 起動 (第 9 編から継続)                             |
-| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                        | モバイル改修は desktop 非 touch (第 9 編から継続)                |
-
-#### 却下候補 (記録のみ)
-
-第 9-10 編の却下候補は変化なし。
-
-### 再開可能性判定 (第 14 編)
-
-| 項目                       | 状態                                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| OPEN PR                    | 0 件 ✅ (PR #186/#188/#189/#190/#191 merge 済)                                                                |
-| active Issue               | 0 件 ✅                                                                                                       |
-| Git clean                  | ✅                                                                                                            |
-| 残留プロセス               | ✅ なし                                                                                                       |
-| Security alert(Dependabot) | **0 件**（前セッションから 16 件全解消、fresh 確認済み）                                                      |
-| Deploy CI                  | ✅ success（5 PR とも fresh 確認で success）                                                                  |
-| 構造的整合性               | ⏭️ スキップ (設定ファイル + doc のみ)                                                                         |
-| 同根再発                   | ⚠️ 1 件検出（override 陳腐化、4 セッション目の再発）。個別修正 + プロセス改善（CLAUDE.md/memory）まで実施済み |
-| 対症療法疑い               | ⚠️ 外部要因による構造的再発と判定、再発防止プロセスを追加済み                                                 |
-| グローバル memory scope    | ✅ 新規 1 件、スコープ判定済み                                                                                |
-
----
-
-## 最終結論 (第 14 編)
-
-✅ **セッション終了可** — Dependabot open alert 16 件 → 0 件を完全解消、同根再発パターンの根本原因分析と再発防止プロセス（CLAUDE.md 明記 + memory 化）まで実施済み
-
-- OPEN PR ゼロ、active Issue ゼロ、Git clean、残留プロセスなし
-- 即着手タスク = 0 / 条件待ち = 5 件（すべて decision-maker 領分または外部 trigger 待ち、第 13 編から変化なし）
-- Issue Net 変化 = 0 / 0
-- **同根再発 1 件検出**（pnpm.overrides 陳腐化、第 10〜12 編から続く 4 セッション目の再発）— 対症療法では終わらせず、次回 catchup から Dependabot alert 横断確認を定例化する仕組み（CLAUDE.md「Dependency Security」節）まで構築
-- 次回セッション以降、同パターンが解消されたか（catchup で Dependabot alert 0 件を維持できているか）を注視ポイントとして引き継ぐ
-
----
+> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。第 10〜13 編は `archive/2026-07-18_to_19-vol10-to-vol13.md` に分離 (2026-07-26 第 15 編で実施、60KB 超過のため)。第 14 編は `archive/2026-07-25_to_26-vol14.md` に分離 (2026-07-27 第 17 編で実施、60KB 超過のため)。LATEST.md は第 15 編以降のみ保持する。
 
 ## 2026-07-26 セッション総括 (第 15 編): C1 拡張着手 → PR1 完了 + Codex 全コードベース監査 → Issue 5 件起票 + P1 1 件修正
 
@@ -370,3 +231,112 @@ PR #203 は PR #193(第 15 編、`getConfirmedBookingEventsForOwner` への 24h 
 - Issue Net 変化(遡及記録分) = +4（Close 4 / 起票 0）
 - 本編は記録の遡及補完が目的であり、次セッションへの新規引き継ぎ事項はなし
 - 次セッションは Phase 0 (OAuth 再連携) の進捗共有、または条件待ち 5 件への decision-maker からの明示指示があれば再開可能
+
+---
+
+## 2026-07-27 セッション総括 (第 17 編): compact 跨ぎ整合性確認 + `/handoff` ドキュメント記述の 3 件補強(PR #207〜#209)
+
+前セッションの `/handoff` 実行中に compact が発生。decision-maker から「抜け落ちなど問題ないか」と確認を受け、compact 前後の内容を PR #206 の実装ファイル・git 履歴・`pnpm test`(316件)で実測突き合わせし欠落なしを確認した上で `/handoff` を完了(GOAL.md の Phase 0/PR2/実機検証(作成側)を `[x]` 化)。その後、decision-maker からの 2 件の指摘(spec の記述矛盾、AC-8 の性質の誤解)を受けて追加のドキュメント整合性修正を実施し、最終的に decision-maker から「キャンセル機能はペンディングです」との明示判断を得て GOAL.md に反映した。コード変更は一切なし、全て docs のみ。
+
+### PR 一覧
+
+| PR   | 内容                                                                                          | 規模             | 結果                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| #207 | docs(handoff): booking-mirror C1 実機検証(作成側)完了を GOAL.md/spec に反映                   | 2 files, +19/-21 | ✅ merge (quality/e2e/GitGuardian/CodeRabbit 全 PASS)                                |
+| #208 | docs(handoff): AC-8 はキャンセル UI 不在のため API 直接呼び出し以外の検証手段がないことを明記 | 1 file, +3/-3    | ✅ merge (必須チェック `quality` PASS。e2e は既知の flaky で non-required、詳細後述) |
+| #209 | docs(handoff): AC-8 実機検証を decision-maker 明示判断によりペンディングに変更                | 1 file, +3/-3    | ✅ merge (`quality` PASS)                                                            |
+
+### 主要成果
+
+#### M1: compact 跨ぎの内容欠落なしを実測確認
+
+decision-maker の「handoff 途中に compact が走った。抜け落ちなど問題ないか？」という問いに対し、要約に記載された実装ファイル(`block-event.ts`/`calendar-target-invariant.ts`/`calendar-dedup.ts` 等)の実在、PR #206 のコミットメッセージ、`booking-links.ts` のキャンセルハンドラの実装内容を git 履歴・grep で直接突き合わせ、`pnpm test`(316件 PASS)も fresh 実行して裏付けた。全て要約の記述と一致し、欠落は確認されなかった。
+
+#### M2: spec doc §9 の記述矛盾を修正(PR #207)
+
+`docs/specs/2026-06-26-booking-mirror-v2-grpc-design.md` の「9. スコープ外 / 将来課題」テーブルに、実装済みの C1(Google Calendar への event 自動作成)の行が「理由: C2 → C1 へ移行済み」として矛盾したまま残っていた。テーブルから除外し、実装済みである旨を注記として追加。
+
+#### M3: AC-8(キャンセル実機検証)の性質を明確化(PR #208)
+
+decision-maker から「AC-8 実機検証とは？キャンセルボタンの出現などしない方針になったのでは？」との指摘を受け、`apps/web` を grep して「キャンセル」に関する UI コードが一切存在しない(ゲスト向け・オーナー向けとも)ことを確認。`PATCH /bookings/:bookingId/cancel` は PR #41(初期の予約リンク機能)由来の既存 API で、今回の C1 では block event 削除ロジックを追加しただけであることを確認した上で GOAL.md の記述を補強した。ゲストの自己キャンセル不可の方針は不変であることを明記。
+
+#### M4: e2e flaky の発生と、既存トラッキング済みパターンとの照合(PR #208 マージ時)
+
+PR #208 のマージ前チェックで e2e が 2 回連続失敗(`booking-success.spec.ts`/`booking-polling.spec.ts`、いずれも `getByTestId('slot-btn-2026-07-27T05:00:00.000Z')` が見つからない)。原因調査の結果、e2e ヘルパー `nextDay14JST()`(`apps/web/e2e/fixtures/seed.ts:157`)が CI ランナーの **UTC** wall-clock を基準に「翌日 14:00 JST」を計算する設計で、UTC 深夜帯(JST 早朝)の実行時に UTC/JST の日付境界がずれて slot が見つからなくなる構造的フレークと判明。該当テストファイル自身のコメントが既存 Issue #145(条件待ち #4、「万一 main 上で flaky 再発」)を参照しており、新規の問題ではなく既知パターンの再現と判断。branch protection の必須チェックは `quality` のみ(e2e は non-required)で、`quality` は 2 回とも PASS していたため、PR #207/#209 の差分がいずれも docs のみでこの e2e とは無関係であることを確認した上でマージした。
+
+#### M5: AC-8 のステータスを「条件待ち」→「ペンディング」に変更(PR #209)
+
+decision-maker から「キャンセル機能はペンディングです」との明示判断を受け、GOAL.md の AC-8 関連 3 箇所(完了の定義・進行中の tasks・中断点)を「decision-maker が API を直接呼べば検証可能」という条件待ちの書き方から、「decision-maker の明示判断によりペンディング、次セッションは明示の再開指示があるまで着手不要」という書き方に変更した。
+
+### Issue Net 変化
+
+- Close 数: 0 件
+- 起票数: 0 件
+- Net: 0(docs のみのセッションのため Issue 操作なし)
+
+### 構造的整合性チェック
+
+型・共有ロジック・API・設定ファイルの変更なし(docs のみ)。→ ⏭️ スキップ
+
+### 同根再発スキャン (§4.6)
+
+本セッションの PR は全て `docs(handoff):` プレフィックスであり、`fix:`/`hotfix:` プレフィックスの修正 PR は 0 件。§4.6 の発動条件(修正 PR 1 件以上)を満たさないため詳細スキャンは非該当。ただし M4 で遭遇した e2e flaky は、既存の条件待ち項目(第 9 編から継続の Issue #145)と同一の root cause(`nextDay14JST()` の UTC 基準日付計算)であることを本セッションで具体的に特定した。新規の同根ではなく、既知パターンの再確認。
+
+### 対症療法判定 (§4.7)
+
+本セッションに修正 PR(`fix:`)が存在しないため非該当。e2e flaky への対応は「原因調査の上で non-required チェックであることを確認してマージ」であり、flaky 自体の修正は行っていない(修正は条件待ち #4 の trigger 充足時に別途対応する既存の合意通り)。
+
+### グローバル memory scope (§4.5)
+
+本セッション memory 変更なし → ⏭️ スキップ。
+
+### 次のアクション (第 17 編)
+
+#### 即着手タスク
+
+なし。
+
+#### 条件待ち (明示 trigger 付き) — 第 15 編の項目、AC-8 のみステータス変更
+
+| #   | 項目                                                                    | trigger（充足条件）                                                                            | 充足時のタスク                                                                                                  |
+| --- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 1   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効                                           | `parseSlotResponse` の structured log alert 化 (第 9 編から継続、変化なし)                                      |
+| 2   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須）                                 | ADR-010 実装フェーズ §4-5 参照（第 9 編から継続、変化なし）                                                     |
+| 3   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発(本セッション M4 で PR #208 のマージ前チェックにて再発を実測確認済み) | diagnostic PR 起動（第 9 編から継続。再発実測により trigger 充足に近づいている可能性、decision-maker 判断待ち） |
+| 4   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                                                        | モバイル改修は desktop 非 touch（第 9 編から継続、変化なし）                                                    |
+
+#### 却下候補(記録のみ)— 第 15 編から変化なし
+
+| #   | 項目                                                                                                                                                       | 検討経緯                                                                            | 着手しない理由                                           | 参照条件                                                |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| 1   | Codex review 未検証の残り 5 件 (timetree同期の所有権判定、fire-and-forget耐障害性、booking-links入力検証不足、AI提案API無制限実行、通知設定の型安全性なし) | Codex `/codex review` (2026-07-26) で指摘されたが、セッション内で検証しきれず未実施 | 実バグとして未検証、triage 基準（実バグ/実害確認）未充足 | decision-maker からの明示指示、または次回検証セッション |
+
+**AC-8(キャンセル実機検証)は decision-maker の明示判断によりペンディング(2026-07-27)のため、上記どちらのセクションにも記載しない**(条件待ち・却下候補いずれとも異なる「明示保留」ステータス。詳細は GOAL.md 参照)。
+
+### 再開可能性判定 (第 17 編)
+
+| 項目                    | 状態                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| OPEN PR                 | 0 件 ✅ (#207/#208/#209 とも merge 済)                                              |
+| active Issue            | 0 件 ✅                                                                             |
+| Git clean               | ✅                                                                                  |
+| 残留プロセス            | ✅ なし                                                                             |
+| Deploy CI               | ✅ 3 PR とも fresh 確認で success                                                   |
+| 構造的整合性            | ⏭️ スキップ(docs のみ)                                                              |
+| 同根再発                | ⏭️ 非該当(修正 PR 0 件)。e2e flaky は既知パターン(Issue #145)の再確認               |
+| 対症療法疑い            | ⏭️ 非該当(修正 PR 0 件)                                                             |
+| グローバル memory scope | ⏭️ スキップ(memory 変更なし)                                                        |
+| GOAL.md                 | ✅ 整合性確認・更新・コミット済み(PR #207/#208/#209、AC-8 はペンディングとして明記) |
+
+---
+
+## 最終結論 (第 17 編)
+
+🛑 **executor 領分の作業ゼロ、即時終了推奨**
+
+- OPEN PR ゼロ・active Issue ゼロ・Git clean・Deploy 全 success
+- 即着手タスク = 0 / 条件待ち = 4 件(AC-8 はペンディングへ移行したため条件待ちから除外)
+- Issue Net 変化 = 0(Close 0 / 起票 0)
+- 同根再発・対症療法判定はいずれも非該当(本セッションに修正 PR なし)
+- e2e flaky(Issue #145 パターン)の再発を実測確認したが、trigger の充足可否は decision-maker 判断に委ねる形で条件待ちに残した
+- 次セッションは条件待ち 4 件への decision-maker からの明示指示があれば再開可能。それ以外の新規引き継ぎ事項なし

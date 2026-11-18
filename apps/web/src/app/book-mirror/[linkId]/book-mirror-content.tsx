@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { publicGet, publicPost } from '../../../lib/public-api';
+import { useDateArrowNav } from '../../../lib/use-date-arrow-nav';
 import type {
   PublicBookingMirrorLinkInfo,
   BookingMirrorSlot,
@@ -156,6 +157,47 @@ export function BookMirrorContent() {
     setStep('select');
   }, []);
 
+  const handleSelectDate = useCallback((date: string) => {
+    setSelectedDate(date);
+    setSelectedSlot(null);
+  }, []);
+
+  // ロゴクリック: この予約ページの最初の画面（日時選択）に戻す。入力内容もリセットする
+  const handleLogoClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      // 新規タブで開く操作（修飾キー・中クリック）は通常のリンク動作に任せる
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      setStep('select');
+      setSelectedSlot(null);
+      setConfirmation(null);
+      setGuestName('');
+      setGuestEmail('');
+      setGuestMessage('');
+      setError('');
+      setSelectedDate(availableDates[0] ?? null);
+      refreshSlots();
+      window.scrollTo({ top: 0 });
+    },
+    [availableDates, refreshSlots],
+  );
+
+  // ← / → キーで日付カードを横移動（日時選択画面のみ）
+  useDateArrowNav({
+    enabled: step === 'select',
+    dates: availableDates,
+    selectedDate,
+    onSelect: handleSelectDate,
+  });
+
+  // 選択された日付カードが横スクロール領域の外なら見える位置へ寄せる
+  useEffect(() => {
+    if (!selectedDate) return;
+    document
+      .querySelector(`[data-testid="date-card-${selectedDate}"]`)
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [selectedDate]);
+
   const handleSubmit = useCallback(async () => {
     if (!selectedSlot || !guestName.trim()) return;
     setSubmitting(true);
@@ -232,7 +274,7 @@ export function BookMirrorContent() {
       >
         {/* Left: Info panel */}
         <aside className="book-info-panel" style={s.infoPanel}>
-          <a href="/" style={s.logo}>
+          <a href={`/book-mirror/${linkId}`} onClick={handleLogoClick} style={s.logo}>
             Calendar<span style={s.logoAccent}>Hub</span>
           </a>
 
@@ -307,10 +349,8 @@ export function BookMirrorContent() {
                         <button
                           key={date}
                           data-testid={`date-card-${date}`}
-                          onClick={() => {
-                            setSelectedDate(date);
-                            setSelectedSlot(null);
-                          }}
+                          onClick={() => handleSelectDate(date)}
+                          aria-pressed={selectedDate === date}
                           className="date-card book-date-card"
                           style={{
                             ...s.dateCard,

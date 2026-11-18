@@ -147,7 +147,7 @@ test.describe('予約ページのナビゲーション', () => {
     await expect(page.locator('.date-card').first()).toHaveAttribute('aria-pressed', 'true');
   });
 
-  test('Cmd+クリックは通常のリンク動作(新規タブ)で、元のページはリセットされない', async ({
+  test('Cmd/Ctrl+クリックは通常のリンク動作(新規タブ)で、元のページはリセットされない', async ({
     page,
     context,
   }) => {
@@ -158,7 +158,9 @@ test.describe('予約ページのナビゲーション', () => {
     await page.fill('input[type="text"]', '山田 太郎');
 
     const popupPromise = context.waitForEvent('page');
-    await logo(page).click({ modifiers: ['Meta'] });
+    // 新規タブを開く修飾キーは OS ごとに異なる (macOS: Cmd, Linux/Windows: Ctrl)
+    const newTabModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await logo(page).click({ modifiers: [newTabModifier] });
     const popup = await popupPromise;
     await popup.close();
 

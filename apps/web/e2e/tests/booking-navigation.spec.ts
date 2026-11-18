@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { clearAllCollections, seedStandardLinkAndOwner } from '../fixtures/seed';
 
 test.describe('予約ページのナビゲーション', () => {
@@ -6,15 +6,24 @@ test.describe('予約ページのナビゲーション', () => {
     await clearAllCollections();
   });
 
-  async function openBookingPage(page: import('@playwright/test').Page, linkId: string) {
+  async function openBookingPage(page: Page, linkId: string) {
     await page.goto(`/book/${linkId}`);
     await page.waitForLoadState('networkidle', { timeout: 60_000 });
     await expect(page.getByText('読み込み中...')).toBeHidden({ timeout: 30_000 });
     await expect(page.locator('.date-card').first()).toBeVisible({ timeout: 30_000 });
   }
 
-  const selectedCard = (page: import('@playwright/test').Page) =>
-    page.locator('.date-card[aria-pressed="true"]');
+  const selectedCard = (page: Page) => page.locator('.date-card[aria-pressed="true"]');
+  const logo = (page: Page) => page.getByTestId('booking-logo');
+
+  /** ロゴ復帰後の /slots 再取得完了を待つ（再描画中の要素 detach によるフレークを避ける） */
+  async function clickLogoAndWaitRefresh(page: Page) {
+    const refreshed = page.waitForResponse(
+      (res) => res.url().includes('/slots') && res.request().method() === 'GET',
+    );
+    await logo(page).click();
+    await refreshed;
+  }
 
   test('矢印キー → / ← で日付カードの選択が横に移動する', async ({ page }) => {
     const { linkId } = await seedStandardLinkAndOwner('arrow-nav');
@@ -47,7 +56,7 @@ test.describe('予約ページのナビゲーション', () => {
     await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
     await expect(cards.nth(1)).toBeFocused();
 
-    // Enter で元のカードに選択が戻らない
+    // Enter で元のカードに選択が戻らない（フォーカスが追従していない場合の実害）
     await page.keyboard.press('Enter');
     await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
   });
@@ -62,24 +71,40 @@ test.describe('予約ページのナビゲーション', () => {
     await page.keyboard.press('ArrowLeft');
     await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'true');
 
-    for (let i = 0; i < last + 3; i++) {
+    // 1 回ごとに反映を待つ（連打時の取りこぼしによるフレークを避ける）
+    for (let i = 1; i <= last; i++) {
       await page.keyboard.press('ArrowRight');
+      await expect(cards.nth(i)).toHaveAttribute('aria-pressed', 'true');
     }
+    await page.keyboard.press('ArrowRight');
     await expect(cards.nth(last)).toHaveAttribute('aria-pressed', 'true');
     await expect(selectedCard(page)).toHaveCount(1);
   });
 
-  test('入力欄にフォーカス中は矢印キーで日付が動かない', async ({ page }) => {
-    const { linkId } = await seedStandardLinkAndOwner('arrow-input');
+  test('修飾キー併用・IME変換中は矢印キーで日付が動かない', async ({ page }) => {
+    const { linkId } = await seedStandardLinkAndOwner('arrow-modifier');
     await openBookingPage(page, linkId);
 
-    await page.locator('.slot-btn').first().click();
-    const nameInput = page.locator('input[type="text"]');
-    await expect(nameInput).toBeVisible();
-    await nameInput.fill('abc');
-    await page.keyboard.press('ArrowLeft');
-    // フォーム画面のまま・入力が保持されている
-    await expect(nameInput).toHaveValue('abc');
+    const cards = page.locator('.date-card');
+    await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'true');
+
+    // Alt+← はブラウザの「戻る」、Cmd/Ctrl+矢印・Shift+矢印も別の意味を持つため奪わない
+    for (const combo of ['Shift+ArrowRight', 'Alt+ArrowRight', 'Control+ArrowRight']) {
+      await page.keyboard.press(combo);
+    }
+    await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'true');
+
+    // IME 変換中(isComposing)のキーも無視する
+    await page.evaluate(() => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowRight', isComposing: true, bubbles: true }),
+      );
+    });
+    await expect(cards.nth(0)).toHaveAttribute('aria-pressed', 'true');
+
+    // 対照: 修飾キー無しなら動く（テストが空振りでないことの確認）
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('ロゴをクリックすると最初の画面(日時選択)に戻る', async ({ page }) => {
@@ -92,7 +117,7 @@ test.describe('予約ページのナビゲーション', () => {
     await page.fill('input[type="text"]', '山田 太郎');
     await expect(page.locator('.submit-btn')).toBeVisible();
 
-    await page.locator('aside a', { hasText: 'Calendar' }).click();
+    await clickLogoAndWaitRefresh(page);
 
     // 同じ予約ページに留まり、日時選択画面に戻る
     await expect(page).toHaveURL(new RegExp(`/book/${linkId}$`));
@@ -104,5 +129,41 @@ test.describe('予約ページのナビゲーション', () => {
     // 入力内容はリセットされている
     await page.locator('.slot-btn').first().click();
     await expect(page.locator('input[type="text"]')).toHaveValue('');
+  });
+
+  test('予約確定後の画面からロゴで日時選択に戻れる', async ({ page }) => {
+    const { linkId } = await seedStandardLinkAndOwner('logo-after-confirm');
+    await openBookingPage(page, linkId);
+
+    await page.locator('.slot-btn').first().click();
+    await page.fill('input[type="text"]', '山田 太郎');
+    await page.getByTestId('submit-btn').click();
+    await expect(page.getByText('予約が確定しました')).toBeVisible({ timeout: 15_000 });
+
+    await clickLogoAndWaitRefresh(page);
+
+    await expect(page.getByText('予約が確定しました')).toBeHidden();
+    await expect(page.getByText('日付を選択')).toBeVisible();
+    await expect(page.locator('.date-card').first()).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('Cmd+クリックは通常のリンク動作(新規タブ)で、元のページはリセットされない', async ({
+    page,
+    context,
+  }) => {
+    const { linkId } = await seedStandardLinkAndOwner('logo-modifier');
+    await openBookingPage(page, linkId);
+
+    await page.locator('.slot-btn').first().click();
+    await page.fill('input[type="text"]', '山田 太郎');
+
+    const popupPromise = context.waitForEvent('page');
+    await logo(page).click({ modifiers: ['Meta'] });
+    const popup = await popupPromise;
+    await popup.close();
+
+    // 元のタブはフォーム画面のまま、入力も保持されている
+    await expect(page.locator('.submit-btn')).toBeVisible();
+    await expect(page.locator('input[type="text"]')).toHaveValue('山田 太郎');
   });
 });

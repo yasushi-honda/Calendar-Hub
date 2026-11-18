@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { publicGet, publicPost } from '../../../lib/public-api';
 import { reconcileSelectedDate } from '../../../lib/date-nav';
@@ -41,6 +41,7 @@ export function BookContent() {
   const [confirmation, setConfirmation] = useState<PublicBookingConfirmation | null>(null);
 
   const [mounted, setMounted] = useState(false);
+  const contentPanelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -170,6 +171,8 @@ export function BookContent() {
       // 新規タブで開く操作（修飾キー・中クリック）は通常のリンク動作に任せる
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
       e.preventDefault();
+      // 予約送信中にリセットすると、完了後に古い確認画面で上書きされるため何もしない
+      if (submitting) return;
       setStep('select');
       setSelectedSlot(null);
       setConfirmation(null);
@@ -180,8 +183,10 @@ export function BookContent() {
       setSelectedDate(availableDates[0] ?? null); // 再取得後の整合は下の reconcile effect が取る
       refreshSlots();
       window.scrollTo({ top: 0 });
+      // スクロールするのは右パネル(main)側。日付が変わらない場合も先頭に戻す
+      contentPanelRef.current?.scrollTo({ top: 0 });
     },
-    [availableDates, refreshSlots],
+    [availableDates, refreshSlots, submitting],
   );
 
   // 空き状況の更新(ポーリング・ロゴ復帰後の再取得)で選択中の日付が消えたら先頭へ寄せる
@@ -283,7 +288,12 @@ export function BookContent() {
       >
         {/* Left: Info panel */}
         <aside style={s.infoPanel}>
-          <a href={`/book/${linkId}`} onClick={handleLogoClick} style={s.logo}>
+          <a
+            href={`/book/${linkId}`}
+            onClick={handleLogoClick}
+            data-testid="booking-logo"
+            style={s.logo}
+          >
             Calendar<span style={s.logoAccent}>Hub</span>
           </a>
 
@@ -328,7 +338,7 @@ export function BookContent() {
         </aside>
 
         {/* Right: Content area */}
-        <main style={s.contentPanel}>
+        <main ref={contentPanelRef} style={s.contentPanel}>
           {error && <div style={s.errorBanner}>{error}</div>}
 
           {step === 'select' && (

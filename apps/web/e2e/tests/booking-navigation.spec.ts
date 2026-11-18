@@ -135,6 +135,9 @@ test.describe('予約ページのナビゲーション', () => {
     const { linkId } = await seedStandardLinkAndOwner('logo-after-confirm');
     await openBookingPage(page, linkId);
 
+    // 今日の枠は現在時刻から始まり予約時点で過去になりうる(Issue #226)ため、
+    // 実行時刻に依存しないよう、必ず明日以降の日付(2 枚目以降のカード)を選ぶ
+    await page.locator('.date-card').nth(1).click();
     await page.locator('.slot-btn').first().click();
     await page.fill('input[type="text"]', '山田 太郎');
     await page.getByTestId('submit-btn').click();

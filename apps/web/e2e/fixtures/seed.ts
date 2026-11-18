@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore, type Firestore, Timestamp } from 'firebase-admin/firestore';
 import type { BookingLinkStatus, DurationOption } from '@calendar-hub/shared';
+import { tomorrowAtJst } from './jst-time';
 
 /** API server の base URL (Playwright config の PORT と一致させる) */
 export const API_BASE = 'http://localhost:8088';
@@ -152,12 +153,9 @@ export async function seedStandardLinkAndOwner(idSuffix: string): Promise<Standa
 }
 
 /**
- * 翌日 14:00 JST (= UTC 05:00) の Date を返す。営業時間内 (8-23) で安定的に空いている枠。
+ * JST 基準の翌日 14:00 (= UTC 05:00) の Date を返す。営業時間内 (8-23) で安定的に空いている枠。
+ * 実行時刻に依存しない(詳細は jst-time.ts)。
  */
 export function nextDay14JST(): Date {
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setUTCDate(now.getUTCDate() + 1);
-  tomorrow.setUTCHours(5, 0, 0, 0); // 14:00 JST
-  return tomorrow;
+  return tomorrowAtJst(14);
 }

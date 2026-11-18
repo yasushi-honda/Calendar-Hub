@@ -4,6 +4,7 @@ import {
   clearAllCollections,
   getBookings,
   setBookingStatus,
+  nextDay14JST,
   seedStandardLinkAndOwner,
 } from '../fixtures/seed';
 
@@ -71,9 +72,7 @@ test.describe('AC-E2E-4 / AC-E2E-5: ポーリング + キャンセル後の枠�
     const { linkId, ownerUid } = await seedStandardLinkAndOwner('cancel-restore');
 
     // 翌日 14:00 JST に予約を作る
-    const slotStart = new Date();
-    slotStart.setUTCDate(slotStart.getUTCDate() + 1);
-    slotStart.setUTCHours(5, 0, 0, 0);
+    const slotStart = nextDay14JST();
 
     const bookRes = await request.post(`${API_BASE}/api/public/booking/${linkId}/book`, {
       data: { slotStart: slotStart.toISOString(), guestName: 'To be cancelled' },

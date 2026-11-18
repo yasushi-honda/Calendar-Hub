@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { publicGet, publicPost } from '../../../lib/public-api';
+import { reconcileSelectedDate } from '../../../lib/date-nav';
+import { useDateArrowNav } from '../../../lib/use-date-arrow-nav';
 import type {
   PublicBookingMirrorLinkInfo,
   BookingMirrorSlot,
@@ -38,6 +40,7 @@ export function BookMirrorContent() {
   const [confirmation, setConfirmation] = useState<PublicBookingConfirmation | null>(null);
 
   const [mounted, setMounted] = useState(false);
+  const contentPanelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -156,6 +159,60 @@ export function BookMirrorContent() {
     setStep('select');
   }, []);
 
+  const handleSelectDate = useCallback((date: string) => {
+    setSelectedDate(date);
+    setSelectedSlot(null);
+  }, []);
+
+  // ロゴクリック: この予約ページの最初の画面（日時選択）に戻す。入力内容もリセットする
+  const handleLogoClick = useCallback(
+    (e: React.MouseEvent<HTMLAnchorElement>) => {
+      // 新規タブで開く操作（修飾キー・中クリック）は通常のリンク動作に任せる
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      e.preventDefault();
+      // 予約送信中にリセットすると、完了後に古い確認画面で上書きされるため何もしない
+      if (submitting) return;
+      setStep('select');
+      setSelectedSlot(null);
+      setConfirmation(null);
+      setGuestName('');
+      setGuestEmail('');
+      setGuestMessage('');
+      setError('');
+      setSelectedDate(availableDates[0] ?? null); // 再取得後の整合は下の reconcile effect が取る
+      refreshSlots();
+      window.scrollTo({ top: 0 });
+      // スクロールするのは右パネル(main)側。日付が変わらない場合も先頭に戻す
+      contentPanelRef.current?.scrollTo({ top: 0 });
+    },
+    [availableDates, refreshSlots, submitting],
+  );
+
+  // 空き状況の更新(ポーリング・ロゴ復帰後の再取得)で選択中の日付が消えたら先頭へ寄せる
+  useEffect(() => {
+    if (loading || slotsLoading) return;
+    setSelectedDate((cur) => {
+      const next = reconcileSelectedDate(availableDates, cur);
+      return next === cur ? cur : next;
+    });
+  }, [availableDates, loading, slotsLoading]);
+
+  // ← / → キーで日付カードを横移動（日時選択画面のみ）
+  useDateArrowNav({
+    enabled: step === 'select',
+    dates: availableDates,
+    selectedDate,
+    onSelect: handleSelectDate,
+  });
+
+  // 選択された日付カードが横スクロール領域の外なら見える位置へ寄せる
+  useEffect(() => {
+    if (!selectedDate) return;
+    document
+      .querySelector(`[data-testid="date-card-${selectedDate}"]`)
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [selectedDate]);
+
   const handleSubmit = useCallback(async () => {
     if (!selectedSlot || !guestName.trim()) return;
     setSubmitting(true);
@@ -232,7 +289,12 @@ export function BookMirrorContent() {
       >
         {/* Left: Info panel */}
         <aside className="book-info-panel" style={s.infoPanel}>
-          <a href="/" style={s.logo}>
+          <a
+            href={`/book-mirror/${linkId}`}
+            onClick={handleLogoClick}
+            data-testid="booking-logo"
+            style={s.logo}
+          >
             Calendar<span style={s.logoAccent}>Hub</span>
           </a>
 
@@ -288,7 +350,7 @@ export function BookMirrorContent() {
         </aside>
 
         {/* Right: Content area */}
-        <main className="book-content-panel" style={s.contentPanel}>
+        <main ref={contentPanelRef} className="book-content-panel" style={s.contentPanel}>
           {error && <div style={s.errorBanner}>{error}</div>}
 
           {step === 'select' && (
@@ -307,10 +369,8 @@ export function BookMirrorContent() {
                         <button
                           key={date}
                           data-testid={`date-card-${date}`}
-                          onClick={() => {
-                            setSelectedDate(date);
-                            setSelectedSlot(null);
-                          }}
+                          onClick={() => handleSelectDate(date)}
+                          aria-pressed={selectedDate === date}
                           className="date-card book-date-card"
                           style={{
                             ...s.dateCard,

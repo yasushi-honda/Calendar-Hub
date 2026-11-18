@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAdjacentDate, isTypingTarget } from '../date-nav';
+import { getAdjacentDate, isTypingTarget, reconcileSelectedDate } from '../date-nav';
 
 const dates = ['2026-11-19', '2026-11-20', '2026-11-21'];
 
@@ -55,5 +55,24 @@ describe('isTypingTarget', () => {
     expect(isTypingTarget({ tagName: 'BUTTON' })).toBe(false);
     expect(isTypingTarget({ tagName: 'BODY' })).toBe(false);
     expect(isTypingTarget(null)).toBe(false);
+  });
+});
+
+describe('reconcileSelectedDate', () => {
+  it('should keep the selected date when it is still available', () => {
+    expect(reconcileSelectedDate(dates, '2026-11-20')).toBe('2026-11-20');
+  });
+
+  it('should fall back to the first date when the selected date disappeared', () => {
+    expect(reconcileSelectedDate(['2026-11-20', '2026-11-21'], '2026-11-19')).toBe('2026-11-20');
+  });
+
+  it('should select the first date when nothing is selected', () => {
+    expect(reconcileSelectedDate(dates, null)).toBe('2026-11-19');
+  });
+
+  it('should return null when no dates are available', () => {
+    expect(reconcileSelectedDate([], '2026-11-19')).toBeNull();
+    expect(reconcileSelectedDate([], null)).toBeNull();
   });
 });

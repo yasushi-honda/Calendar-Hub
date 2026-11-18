@@ -28,3 +28,15 @@ export function isTypingTarget(
     tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable === true
   );
 }
+
+/**
+ * 空き状況の再取得などで選択中の日付が消えたときに、選択を先頭の日付へ寄せる。
+ * 選択中の日付が引き続き存在するならそのまま返す。
+ */
+export function reconcileSelectedDate(
+  dates: readonly string[],
+  current: string | null,
+): string | null {
+  if (current !== null && dates.includes(current)) return current;
+  return dates[0] ?? null;
+}

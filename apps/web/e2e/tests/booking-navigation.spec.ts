@@ -37,6 +37,21 @@ test.describe('予約ページのナビゲーション', () => {
     await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
   });
 
+  test('日付カードにフォーカス中に矢印キーで移動すると、フォーカスも追従する', async ({ page }) => {
+    const { linkId } = await seedStandardLinkAndOwner('arrow-focus');
+    await openBookingPage(page, linkId);
+
+    const cards = page.locator('.date-card');
+    await cards.nth(0).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(cards.nth(1)).toBeFocused();
+
+    // Enter で元のカードに選択が戻らない
+    await page.keyboard.press('Enter');
+    await expect(cards.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('先頭で ← / 末尾で → を押しても範囲外に出ない', async ({ page }) => {
     const { linkId } = await seedStandardLinkAndOwner('arrow-bounds');
     await openBookingPage(page, linkId);

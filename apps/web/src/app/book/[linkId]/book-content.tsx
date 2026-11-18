@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { publicGet, publicPost } from '../../../lib/public-api';
+import { reconcileSelectedDate } from '../../../lib/date-nav';
 import { useDateArrowNav } from '../../../lib/use-date-arrow-nav';
 import type {
   PublicBookingLinkInfo,
@@ -176,12 +177,21 @@ export function BookContent() {
       setGuestEmail('');
       setGuestMessage('');
       setError('');
-      setSelectedDate(availableDates[0] ?? null);
+      setSelectedDate(availableDates[0] ?? null); // 再取得後の整合は下の reconcile effect が取る
       refreshSlots();
       window.scrollTo({ top: 0 });
     },
     [availableDates, refreshSlots],
   );
+
+  // 空き状況の更新(ポーリング・ロゴ復帰後の再取得)で選択中の日付が消えたら先頭へ寄せる
+  useEffect(() => {
+    if (loading || slotsLoading) return;
+    setSelectedDate((cur) => {
+      const next = reconcileSelectedDate(availableDates, cur);
+      return next === cur ? cur : next;
+    });
+  }, [availableDates, loading, slotsLoading]);
 
   // ← / → キーで日付カードを横移動（日時選択画面のみ）
   useDateArrowNav({

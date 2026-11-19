@@ -12,11 +12,7 @@ import {
   buildBookingConfirmationHtml,
 } from '../lib/email.js';
 import { logMailFailure } from '../lib/mail-fail.js';
-import {
-  calculateFreeSlots,
-  earliestBookableStart,
-  splitFreeIntoBookingSlots,
-} from '@calendar-hub/shared/free-time';
+import { calculateBookingSlots } from '@calendar-hub/shared/free-time';
 import { BOOKING_LEAD_MINUTES, BOOKING_SLOT_STEP_MINUTES } from '@calendar-hub/shared';
 import type {
   CalendarEvent,
@@ -162,15 +158,7 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     rangeEnd.setDate(rangeEnd.getDate() + link.rangeDays);
   }
 
-  // 当日の枠は「現在時刻 + リードタイム」を刻みに切り上げた時刻から始める(Issue #226)。
-  // 現在時刻そのものから始めると 08:41 のように揃わず、先頭の枠は予約時点で過去になる。
-  // (calculateFreeSlots は「現在時刻から」を保つ。空き時間パネルや AI 提案も使うため、ここでだけ揃える)
-  const earliestStart = earliestBookableStart(now, {
-    leadMinutes: BOOKING_LEAD_MINUTES,
-    stepMinutes: BOOKING_SLOT_STEP_MINUTES,
-    timezoneOffsetMinutes: JST_OFFSET,
-  });
-  if (rangeStart < earliestStart) rangeStart = earliestStart;
+  if (rangeStart < now) rangeStart = now;
 
   const [calendarEvents, bookingEvents] = await Promise.all([
     fetchOwnerEvents(
@@ -183,25 +171,22 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
 
-  const freeSlots = calculateFreeSlots(
-    [...calendarEvents, ...bookingEvents],
+  // 当日の最初の枠だけを刻みに揃え、リードタイム内の枠を除く(Issue #226)。
+  // 予定直後の枠や翌日以降の枠は変更しない。詳細と単体テストは calculateBookingSlots を参照。
+  const slots = calculateBookingSlots({
+    events: [...calendarEvents, ...bookingEvents],
+    now,
     rangeStart,
     rangeEnd,
-    {
-      dayStartHour: link.freeTimeOptions.dayStartHour,
-      dayEndHour: link.freeTimeOptions.dayEndHour,
-      minSlotMinutes: link.durationMinutes,
-      timezoneOffsetMinutes: JST_OFFSET,
-    },
-  );
-
-  // availableDaysはJSTの曜日で判定する必要がある
-  const filteredSlots = freeSlots.filter((slot) => {
-    const jstDay = new Date(slot.start.getTime() + JST_OFFSET * 60000).getUTCDay();
-    return link.availableDays.includes(jstDay);
+    dayStartHour: link.freeTimeOptions.dayStartHour,
+    dayEndHour: link.freeTimeOptions.dayEndHour,
+    durationMinutes: link.durationMinutes,
+    bufferMinutes: link.bufferMinutes,
+    availableDays: link.availableDays,
+    timezoneOffsetMinutes: JST_OFFSET,
+    leadMinutes: BOOKING_LEAD_MINUTES,
+    stepMinutes: BOOKING_SLOT_STEP_MINUTES,
   });
-
-  const slots = splitFreeIntoBookingSlots(filteredSlots, link.durationMinutes, link.bufferMinutes);
 
   return c.json({ slots, durationMinutes: link.durationMinutes, title: link.title });
 });

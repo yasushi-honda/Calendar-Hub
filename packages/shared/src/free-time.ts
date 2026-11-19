@@ -189,3 +189,86 @@ export function earliestBookableStart(now: Date, options: EarliestBookableStartO
   // 壁時計(オフセット込み)で刻みに揃えてから、元の時刻系に戻す
   return new Date(Math.ceil((earliest + offsetMs) / stepMs) * stepMs - offsetMs);
 }
+
+export interface BookingSlotsInput {
+  /** 空きの計算に使う、予定(外部カレンダー + 確定済みの予約) */
+  events: CalendarEvent[];
+  /** 現在時刻 */
+  now: Date;
+  /** 空きを探す範囲。当日を含むときは通常 now(過去にしない) */
+  rangeStart: Date;
+  rangeEnd: Date;
+  dayStartHour: number;
+  dayEndHour: number;
+  durationMinutes: number;
+  bufferMinutes: number;
+  /** 予約を受ける曜日(JST 基準、0=日〜6=土) */
+  availableDays: readonly number[];
+  timezoneOffsetMinutes: number;
+  /** 当日の最小リードタイム(分)。開始が「現在 + リード」より前の枠は出さない */
+  leadMinutes: number;
+  /** 当日の最初の枠を揃える刻み(分) */
+  stepMinutes: number;
+}
+
+/**
+ * 公開予約ページに出す枠を作る(Issue #226)。
+ *
+ * 空きの計算は rangeStart = 現在時刻 のまま行う(予定の終了や営業開始に由来する開始位置は動かさない)。
+ *  1. 空きの先頭が「rangeStart そのもの」から始まるとき(=今から空いている、予定や営業開始に由来しない先頭)
+ *     だけ、開始位置を「現在 + リードタイム」を刻みに切り上げた時刻へ揃える。
+ *     (そのまま使うと 08:41 のように揃わず、先頭の枠は予約時点で過去になる)
+ *  2. 営業日(JST の曜日)で絞る
+ *  3. 所要時間 + バッファで枠に分割する
+ *  4. 開始が「現在 + リードタイム」より前の枠を除く(日をまたいでも、除くのはこの条件に当たる枠だけ。
+ *     翌日以降の枠の並びは動かさない)
+ *
+ * 当日の最初の枠だけを揃え、予定直後の枠や翌日以降の枠は変更しない。
+ */
+export function calculateBookingSlots(input: BookingSlotsInput): BookingSlotResult[] {
+  const {
+    events,
+    now,
+    rangeStart,
+    rangeEnd,
+    dayStartHour,
+    dayEndHour,
+    durationMinutes,
+    bufferMinutes,
+    availableDays,
+    timezoneOffsetMinutes,
+    leadMinutes,
+    stepMinutes,
+  } = input;
+
+  const cutoffMs = now.getTime() + leadMinutes * 60_000;
+  const earliest = earliestBookableStart(now, { leadMinutes, stepMinutes, timezoneOffsetMinutes });
+
+  const free = calculateFreeSlots(events, rangeStart, rangeEnd, {
+    dayStartHour,
+    dayEndHour,
+    minSlotMinutes: durationMinutes,
+    timezoneOffsetMinutes,
+  });
+
+  const aligned: FreeSlot[] = [];
+  for (const slot of free) {
+    const startsFromRangeStart = slot.start.getTime() === rangeStart.getTime();
+    if (startsFromRangeStart && rangeStart.getTime() < earliest.getTime()) {
+      const remainingMinutes = (slot.end.getTime() - earliest.getTime()) / 60_000;
+      if (remainingMinutes < durationMinutes) continue; // 揃えると枠が取れない
+      aligned.push({ start: earliest, end: slot.end, durationMinutes: remainingMinutes });
+    } else {
+      aligned.push(slot);
+    }
+  }
+
+  const offsetMs = timezoneOffsetMinutes * 60_000;
+  const onAvailableDays = aligned.filter((slot) =>
+    availableDays.includes(new Date(slot.start.getTime() + offsetMs).getUTCDay()),
+  );
+
+  return splitFreeIntoBookingSlots(onAvailableDays, durationMinutes, bufferMinutes).filter(
+    (slot) => new Date(slot.start).getTime() >= cutoffMs,
+  );
+}

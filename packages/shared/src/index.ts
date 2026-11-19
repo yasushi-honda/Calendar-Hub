@@ -5,10 +5,12 @@ export {
   calculateFreeSlots,
   splitFreeIntoBookingSlots,
   earliestBookableStart,
+  calculateBookingSlots,
   type FreeSlot,
   type FreeTimeOptions,
   type BookingSlotResult,
   type EarliestBookableStartOptions,
+  type BookingSlotsInput,
 } from './free-time.js';
 export {
   DURATION_OPTIONS,

@@ -144,13 +144,27 @@ describe('calculateBookingSlots: 所要時間・曜日・範囲', () => {
     expect(ymdhm(slots[0].start)).toBe('2026-11-20 08:00');
   });
 
-  it('should return no slots when the range start is after the range end', () => {
+  it('should return no slots when the range start is after the range end (different UTC days)', () => {
     const now = jst('2026-11-19T08:41:17');
     const slots = run('2026-11-19T08:41:17', {
       rangeStart: now,
-      rangeEnd: new Date(now.getTime() - 3600000),
+      rangeEnd: new Date(now.getTime() - 86400000),
     });
     expect(slots).toEqual([]);
+  });
+
+  it('should return no slots when the range is reversed within the same UTC day', () => {
+    // JST 12:30 〜 11:30(同じ UTC 日)。calculateFreeSlots はこのとき日の頭から回して枠を返してしまうので入口で弾く
+    const slots = run('2026-11-19T12:30:00', {
+      rangeStart: jst('2026-11-19T12:30:00'),
+      rangeEnd: jst('2026-11-19T11:30:00'),
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it('should return no slots when the range is empty (start equals end)', () => {
+    const now = jst('2026-11-19T12:30:00');
+    expect(run('2026-11-19T12:30:00', { rangeStart: now, rangeEnd: now })).toEqual([]);
   });
 
   it('should not shift slots when the range starts on a future day (e.g. ?date= a later day)', () => {
@@ -172,5 +186,26 @@ describe('calculateBookingSlots: 所要時間・曜日・範囲', () => {
       stepMinutes: 30,
     });
     expect(firstN(slots, 2)).toEqual(['08:00', '09:00']);
+  });
+});
+
+describe('calculateBookingSlots: rangeStart が「今」に切り詰められていないとき(?date= 指定)', () => {
+  // 営業開始が 09:00 のリンク。JST 08:45 に開く。
+  // 'date=今日' は UTC の 0 時(= JST 09:00)になり、営業開始ちょうどと偶然一致する
+  const opening9 = { dayStartHour: 9 };
+
+  it('should give the same first slot with and without a date filter (opening-time start is not re-anchored)', () => {
+    const nowIso = '2026-11-19T08:45:00';
+    const without = run(nowIso, opening9); // rangeStart = now
+    const withDate = run(nowIso, { ...opening9, rangeStart: jst('2026-11-19T09:00:00') }); // rangeStart = date の UTC 0 時
+    // 09:00 は現在 08:45 の 15 分後でリード(30 分)未満。どちらも 10:00 が先頭で、09:30 にずれない
+    expect(hhmm(without[0].start)).toBe('10:00');
+    expect(hhmm(withDate[0].start)).toBe('10:00');
+  });
+
+  it('should still align when the range start was clipped to now (rangeStart equals now)', () => {
+    const slots = run('2026-11-19T08:45:00', { dayStartHour: 0 });
+    // 空きが「今」から始まっている(営業開始 0 時)。08:45 + 30 分 = 09:15 → 09:30
+    expect(hhmm(slots[0].start)).toBe('09:30');
   });
 });

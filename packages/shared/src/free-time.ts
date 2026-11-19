@@ -215,7 +215,7 @@ export interface BookingSlotsInput {
  * 公開予約ページに出す枠を作る(Issue #226)。
  *
  * 空きの計算は rangeStart = 現在時刻 のまま行う(予定の終了や営業開始に由来する開始位置は動かさない)。
- *  1. 空きの先頭が「rangeStart そのもの」から始まるとき(=今から空いている、予定や営業開始に由来しない先頭)
+ *  1. rangeStart が「今」に切り詰められていて、空きの先頭が「今」から始まるとき(予定や営業開始に由来しない先頭)
  *     だけ、開始位置を「現在 + リードタイム」を刻みに切り上げた時刻へ揃える。
  *     (そのまま使うと 08:41 のように揃わず、先頭の枠は予約時点で過去になる)
  *  2. 営業日(JST の曜日)で絞る
@@ -241,6 +241,9 @@ export function calculateBookingSlots(input: BookingSlotsInput): BookingSlotResu
     stepMinutes,
   } = input;
 
+  // 範囲が空・逆転しているときは枠を作らない(calculateFreeSlots は同じ UTC 日内の逆転で日の頭から回してしまう)
+  if (rangeEnd.getTime() <= rangeStart.getTime()) return [];
+
   const cutoffMs = now.getTime() + leadMinutes * 60_000;
   const earliest = earliestBookableStart(now, { leadMinutes, stepMinutes, timezoneOffsetMinutes });
 
@@ -251,10 +254,14 @@ export function calculateBookingSlots(input: BookingSlotsInput): BookingSlotResu
     timezoneOffsetMinutes,
   });
 
+  // rangeStart が「今」に切り詰められているとき(= 当日を含む範囲)だけ、今から始まる空きを揃える。
+  // ?date= 指定で rangeStart が日付の頭(UTC 0 時 = JST 9 時など)のときは、営業開始ちょうどと
+  // 偶然一致しても「今から始まる空き」ではないので揃え直さない(?date= の有無で結果を変えない)。
+  const rangeStartIsNow = rangeStart.getTime() === now.getTime();
   const aligned: FreeSlot[] = [];
   for (const slot of free) {
-    const startsFromRangeStart = slot.start.getTime() === rangeStart.getTime();
-    if (startsFromRangeStart && rangeStart.getTime() < earliest.getTime()) {
+    const startsFromNow = rangeStartIsNow && slot.start.getTime() === now.getTime();
+    if (startsFromNow) {
       const remainingMinutes = (slot.end.getTime() - earliest.getTime()) / 60_000;
       if (remainingMinutes < durationMinutes) continue; // 揃えると枠が取れない
       aligned.push({ start: earliest, end: slot.end, durationMinutes: remainingMinutes });

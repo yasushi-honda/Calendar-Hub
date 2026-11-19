@@ -162,3 +162,30 @@ export function splitFreeIntoBookingSlots(
 
   return result;
 }
+
+export interface EarliestBookableStartOptions {
+  /** 現在時刻から最低限空ける時間(分) */
+  leadMinutes: number;
+  /** 開始時刻を揃える刻み(分)。タイムゾーンのオフセットを加味した壁時計時刻で揃える */
+  stepMinutes: number;
+  /** タイムゾーンのUTCオフセット(分)。例: JST = 540。未指定は 0(UTC) */
+  timezoneOffsetMinutes?: number;
+}
+
+/**
+ * 公開予約ページで「当日の枠が始まりうる最も早い時刻」を返す。
+ *
+ * 現在時刻 + リードタイム を、次の刻みの境界へ切り上げる(境界ちょうどはそのまま)。
+ * 例: 刻み 30 分・リード 30 分のとき、08:41 → 09:30、08:30:00 → 09:00。
+ *
+ * calculateFreeSlots の rangeStart に渡すと、当日の枠が揃った時刻から始まる。
+ * (calculateFreeSlots 自体は「現在時刻から」を保つ。空き時間パネルや AI 提案が使うため)
+ */
+export function earliestBookableStart(now: Date, options: EarliestBookableStartOptions): Date {
+  const { leadMinutes, stepMinutes, timezoneOffsetMinutes = 0 } = options;
+  const stepMs = stepMinutes * 60_000;
+  const offsetMs = timezoneOffsetMinutes * 60_000;
+  const earliest = now.getTime() + leadMinutes * 60_000;
+  // 壁時計(オフセット込み)で刻みに揃えてから、元の時刻系に戻す
+  return new Date(Math.ceil((earliest + offsetMs) / stepMs) * stepMs - offsetMs);
+}

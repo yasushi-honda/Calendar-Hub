@@ -12,7 +12,12 @@ import {
   buildBookingConfirmationHtml,
 } from '../lib/email.js';
 import { logMailFailure } from '../lib/mail-fail.js';
-import { calculateFreeSlots, splitFreeIntoBookingSlots } from '@calendar-hub/shared/free-time';
+import {
+  calculateFreeSlots,
+  earliestBookableStart,
+  splitFreeIntoBookingSlots,
+} from '@calendar-hub/shared/free-time';
+import { BOOKING_LEAD_MINUTES, BOOKING_SLOT_STEP_MINUTES } from '@calendar-hub/shared';
 import type {
   CalendarEvent,
   BookingLink,
@@ -140,6 +145,8 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
   const link = res.link;
   const dateParam = c.req.query('date');
   const now = new Date();
+  // サーバーはUTCで動作するため、JST (UTC+9) オフセットを指定
+  const JST_OFFSET = 540;
   let rangeStart: Date;
   let rangeEnd: Date;
 
@@ -155,7 +162,15 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     rangeEnd.setDate(rangeEnd.getDate() + link.rangeDays);
   }
 
-  if (rangeStart < now) rangeStart = now;
+  // 当日の枠は「現在時刻 + リードタイム」を刻みに切り上げた時刻から始める(Issue #226)。
+  // 現在時刻そのものから始めると 08:41 のように揃わず、先頭の枠は予約時点で過去になる。
+  // (calculateFreeSlots は「現在時刻から」を保つ。空き時間パネルや AI 提案も使うため、ここでだけ揃える)
+  const earliestStart = earliestBookableStart(now, {
+    leadMinutes: BOOKING_LEAD_MINUTES,
+    stepMinutes: BOOKING_SLOT_STEP_MINUTES,
+    timezoneOffsetMinutes: JST_OFFSET,
+  });
+  if (rangeStart < earliestStart) rangeStart = earliestStart;
 
   const [calendarEvents, bookingEvents] = await Promise.all([
     fetchOwnerEvents(
@@ -167,9 +182,6 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     ),
     getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
-
-  // サーバーはUTCで動作するため、JST (UTC+9) オフセットを指定
-  const JST_OFFSET = 540;
 
   const freeSlots = calculateFreeSlots(
     [...calendarEvents, ...bookingEvents],

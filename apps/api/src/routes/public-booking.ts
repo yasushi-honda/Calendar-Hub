@@ -12,7 +12,8 @@ import {
   buildBookingConfirmationHtml,
 } from '../lib/email.js';
 import { logMailFailure } from '../lib/mail-fail.js';
-import { calculateFreeSlots, splitFreeIntoBookingSlots } from '@calendar-hub/shared/free-time';
+import { calculateBookingSlots } from '@calendar-hub/shared/free-time';
+import { BOOKING_LEAD_MINUTES, BOOKING_SLOT_STEP_MINUTES } from '@calendar-hub/shared';
 import type {
   CalendarEvent,
   BookingLink,
@@ -140,6 +141,8 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
   const link = res.link;
   const dateParam = c.req.query('date');
   const now = new Date();
+  // サーバーはUTCで動作するため、JST (UTC+9) オフセットを指定
+  const JST_OFFSET = 540;
   let rangeStart: Date;
   let rangeEnd: Date;
 
@@ -168,28 +171,22 @@ publicBookingRoutes.get('/:linkId/slots', async (c) => {
     getConfirmedBookingEventsForOwner(link.ownerUid, rangeStart, rangeEnd),
   ]);
 
-  // サーバーはUTCで動作するため、JST (UTC+9) オフセットを指定
-  const JST_OFFSET = 540;
-
-  const freeSlots = calculateFreeSlots(
-    [...calendarEvents, ...bookingEvents],
+  // 当日の最初の枠だけを刻みに揃え、リードタイム内の枠を除く(Issue #226)。
+  // 予定直後の枠や翌日以降の枠は変更しない。詳細と単体テストは calculateBookingSlots を参照。
+  const slots = calculateBookingSlots({
+    events: [...calendarEvents, ...bookingEvents],
+    now,
     rangeStart,
     rangeEnd,
-    {
-      dayStartHour: link.freeTimeOptions.dayStartHour,
-      dayEndHour: link.freeTimeOptions.dayEndHour,
-      minSlotMinutes: link.durationMinutes,
-      timezoneOffsetMinutes: JST_OFFSET,
-    },
-  );
-
-  // availableDaysはJSTの曜日で判定する必要がある
-  const filteredSlots = freeSlots.filter((slot) => {
-    const jstDay = new Date(slot.start.getTime() + JST_OFFSET * 60000).getUTCDay();
-    return link.availableDays.includes(jstDay);
+    dayStartHour: link.freeTimeOptions.dayStartHour,
+    dayEndHour: link.freeTimeOptions.dayEndHour,
+    durationMinutes: link.durationMinutes,
+    bufferMinutes: link.bufferMinutes,
+    availableDays: link.availableDays,
+    timezoneOffsetMinutes: JST_OFFSET,
+    leadMinutes: BOOKING_LEAD_MINUTES,
+    stepMinutes: BOOKING_SLOT_STEP_MINUTES,
   });
-
-  const slots = splitFreeIntoBookingSlots(filteredSlots, link.durationMinutes, link.bufferMinutes);
 
   return c.json({ slots, durationMinutes: link.durationMinutes, title: link.title });
 });

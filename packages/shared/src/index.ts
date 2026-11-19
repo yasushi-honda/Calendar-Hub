@@ -4,12 +4,18 @@ export { encrypt, decrypt, type EncryptedData } from './crypto.js';
 export {
   calculateFreeSlots,
   splitFreeIntoBookingSlots,
+  earliestBookableStart,
+  calculateBookingSlots,
   type FreeSlot,
   type FreeTimeOptions,
   type BookingSlotResult,
+  type EarliestBookableStartOptions,
+  type BookingSlotsInput,
 } from './free-time.js';
 export {
   DURATION_OPTIONS,
+  BOOKING_SLOT_STEP_MINUTES,
+  BOOKING_LEAD_MINUTES,
   BOOKING_LINK_STATUSES,
   type BookingLinkStatus,
   type BookingStatus,

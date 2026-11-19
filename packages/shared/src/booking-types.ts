@@ -7,6 +7,18 @@ export type BookingStatus = 'confirmed' | 'cancelled_by_owner' | 'cancelled_by_g
 export const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120] as const;
 export type DurationOption = (typeof DURATION_OPTIONS)[number];
 
+/**
+ * 公開予約ページの枠の開始時刻の刻み(分)。
+ * 当日の枠が現在時刻から始まって 08:41 のように揃わない問題(Issue #226)への対応。
+ */
+export const BOOKING_SLOT_STEP_MINUTES = 30;
+
+/**
+ * 当日の枠の最小リードタイム(分)。今からこの時間より先の枠だけを表示する。
+ * ゲストが枠を選んで入力している間に、その枠が過去になって 400 になるのを避ける余裕。
+ */
+export const BOOKING_LEAD_MINUTES = 30;
+
 export const BOOKING_LINK_STATUSES: readonly BookingLinkStatus[] = ['active', 'paused'];
 
 export interface BookingLinkFreeTimeOptions {

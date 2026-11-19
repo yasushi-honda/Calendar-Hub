@@ -1,136 +1,6 @@
-# Calendar Hub ハンドオフ (2026-07-27, 第 17 編まで)
+# Calendar Hub ハンドオフ (2026-11-19, 第 18 編まで)
 
-> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。第 10〜13 編は `archive/2026-07-18_to_19-vol10-to-vol13.md` に分離 (2026-07-26 第 15 編で実施、60KB 超過のため)。第 14 編は `archive/2026-07-25_to_26-vol14.md` に分離 (2026-07-27 第 17 編で実施、60KB 超過のため)。LATEST.md は第 15 編以降のみ保持する。
-
-## 2026-07-26 セッション総括 (第 15 編): C1 拡張着手 → PR1 完了 + Codex 全コードベース監査 → Issue 5 件起票 + P1 1 件修正
-
-catchup で条件待ち第 13 編 #1「C1 拡張 (booking-mirror に Google Calendar 自動登録追加)」の trigger「decision-maker から『C1 着手』明示指示」が本セッションで充足。plan mode でフル計画を策定 → Plan エージェントによる敵対的レビューで Cloud Run CPU throttling・キャンセル後始末欠如・silent failure 検出欠如等 20 件超のリスクを発見し、計画を大幅改訂。PR1 (OAuth 非依存の先行修正) と PR2 (C1 本体、OAuth 前提) に分割し、PR1 を完了。続けて decision-maker の選択で Codex (`/codex review`, 全コードベース監査) を実行し、10 件の指摘のうち 5 件をコード直接確認で検証、Issue として起票。うち P1 の 1 件 (#194) をその場で修正・マージした。
-
-### PR 一覧
-
-| PR   | 内容                                                             | 規模              | 結果                                                                                  |
-| ---- | ---------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------- |
-| #193 | fix(booking-mirror): mirror の空き枠から自前の確定予約を差し引く | 9 files, +497/-70 | ✅ merge (`/code-review high` 6 件対応後、e2e/quality/GitGuardian/CodeRabbit 全 PASS) |
-| #199 | fix(free-time): 終日予定を空き時間計算で busy 扱いにする         | 2 files, +30/-5   | ✅ merge (Issue #194 を Closes、e2e/quality/GitGuardian/CodeRabbit 全 PASS)           |
-
-### 主要成果
-
-#### M1: C1 拡張の設計調査 → Plan エージェントの敵対的レビューで計画を全面改訂
-
-booking-mirror の spec (`docs/specs/2026-06-26-booking-mirror-v2-grpc-design.md` §9.1) と現状実装を調査した上で plan mode に入り、フル計画を作成。Plan エージェントに批判的レビューを依頼した結果、以下の構造的リスクが発覚:
-
-- `infra/deploy-api.sh` に `--no-cpu-throttling` がなく `--min-instances=0` → **レスポンス返却後の非同期処理は完走保証がない**。当初「block event 作成は非同期でよい」と判断していたが、この事実により撤回し同期実行に変更
-- mirror の `GET /slots` が Google の生データをそのまま返し、自前の確定予約を差し引いていなかった (別の、OAuth 非依存で先に直せる不整合)
-- `PATCH /bookings/:bookingId/cancel` は mirror にも効くが block event の削除には触れない → C1 導入後に「空いているのに永久に埋まって見える」逆方向の障害が新規発生する
-- `createEvent` の戻り値 id は `google_` プレフィックス付きだが `deleteEvent` は素の id を要求 → 後始末実装時に踏む潜在バグ
-- OAuth consent screen が Testing のままだと refresh token が 7 日で失効する (公式ドキュメント確認)
-
-これを受け、C1 は **PR1 (mirror slots のローカル差し引き、OAuth 非依存)** と **PR2 (block event 本体、OAuth 前提)** に分割。PR2 は Phase 0 (OAuth 再連携可否・Testing mode 確認・Busy 動作の実測検証) が decision-maker 側で未完了のため、計画のみ確定 (`~/.claude/plans/iterative-riding-hummingbird.md`) し、`docs/handoff/GOAL.md` にセッション横断ゴールとして登録した。
-
-#### M2: PR1 実装 → `/code-review high` の指摘 6 件を全て対応
-
-`getConfirmedBookingEventsForOwner` を `booking-events.ts` に抽出し非ミラー版・ミラー版で共通化、`BookingMirrorLink` の Firestore mapper (2 箇所に手書き重複) を `buildBookingMirrorLinkFromFirestoreData` に一本化。`/code-review high main...HEAD` 実行後、以下 6 件を検証・対応:
-
-1. **[correctness/High]** `slotStart >= timeMin` 条件により進行中の予約 (開始済み・未終了) が除外され、このPRの目的そのものを部分的に再発させる欠陥 → 24h lookback + `end > timeMin` の app-level filter で修正 (`toOverlappingBookingEvents` として切り出し回帰テスト追加)
-2. **[robustness/Medium]** 新規 Firestore 呼び出しにエラーハンドリングがなく直前の `fetchAvailableSlots` と不揃い → 502 で統一
-3. **[efficiency/Low-Medium]** 2 つの独立呼び出しが逐次 await → `Promise.allSettled` で並列化
-4. **[altitude/Low]** `excludeOverlappingSlots` が `BookingMirrorLink` 専用ファイルに誤配置 → `booking-mirror-slots.ts` に分離
-5. **[simplification/Low]** mapper を spread パターン化 (description の null→undefined 変換は既存挙動を壊さないよう明示維持)
-6. **[test-coverage/Low-Medium]** 正確性バグの回帰テスト追加
-
-#### M3: Codex `/codex review` (全コードベース監査, MCP版, effort=high) → 5 件を検証し Issue 起票
-
-セカンドオピニオンの要否を相談された際、PR1 は既にレビュー済みのため限界効用は低いが「PR2 実装後に `/codex review`」を提案 → decision-maker はその場で `/codex review` (MCP版) を選択し実行。10 件の指摘のうち以下 5 件をコードを直接読んで検証 (残り 5 件は未検証のまま記録のみ、Issue 化せず):
-
-| Issue                                                            | 内容                                                                            | 重大度                            |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------- |
-| [#194](https://github.com/yasushi-honda/Calendar-Hub/issues/194) | 終日予定が空き時間計算から除外され二重予約になる                                | P1 (本セッションで修正・クローズ) |
-| [#195](https://github.com/yasushi-honda/Calendar-Hub/issues/195) | 通常予約API(POST /:linkId/book)が予約直前に外部カレンダーとの重複を再検証しない | P1                                |
-| [#196](https://github.com/yasushi-honda/Calendar-Hub/issues/196) | sync.ts の lastSyncedAt 判定が非原子的で二重処理されうる                        | P1                                |
-| [#197](https://github.com/yasushi-honda/Calendar-Hub/issues/197) | 予約重複チェックが下限なしで全件スキャンする                                    | P2                                |
-| [#198](https://github.com/yasushi-honda/Calendar-Hub/issues/198) | 空き時間表示が当日の過去時間帯の枠を含む                                        | P2                                |
-
-#### M4: Issue #194 を TDD で修正・マージ
-
-`calculateFreeSlots` の `.filter((e) => !e.isAllDay)` を削除。既存の日次クリッピングロジックがそのまま単日・複数日の終日予定を正しくブロックすることを確認し、境界値テスト 3 件 (単日ブロック・複数日ブロック・通常予定との混在) を追加。影響範囲 (booking-links / AI提案 ai.ts の全呼び出し元) を grep で確認済み。
-
-### Issue Net 変化
-
-- Close 数: 1 件 (#194)
-- 起票数: 5 件 (#194, #195, #196, #197, #198)
-- Net: -4 件
-
-**Net が負であることの理由**: 起票した 5 件は全て Codex review (全コードベース監査) で発見され、うち検証対象とした 5 件はコードを直接読んで実バグ・実害を確認済み (triage 基準「実バグ/実害」を満たす)。恒常的な Issue 積み増しではなく、1 回の監査で複数の独立した実バグが同時に発覚したことによる一時的な増加であり、うち最重要度の 1 件はその場で解消済み。
-
-### 構造的整合性チェック
-
-`packages/shared/src/free-time.ts` (共有ロジック) と `packages/shared/src/booking-mirror-types.ts` (共有型) を変更したため、本来 `/impact-analysis` の実行対象。**⚠️未確認 (正式実行なし)** — ただし全呼び出し元 (`calculateFreeSlots`: `public-booking.ts`, `ai.ts`。`BookingMirrorLink` mapper: `booking-mirror-links.ts`, `public-booking-mirror.ts`) は grep で手動確認済み、型チェック・全テストも PASS。
-
-### 同根再発スキャン (§4.6)
-
-過去 7 日の handoff archive に "二重予約"/"calculateFreeSlots"/"free-time" を含むファイルは 2026-06-25/26 (原設計期) のもののみで、直近 7 日以内の同根再発候補は 0 件。PR #193 と PR #199 は同一セッション内だが異なるコードパス (Firestore クエリの下限欠如 vs `isAllDay` フィルタ) であり、機構的に同根ではない。ただし **テーマ的な傾向**として、今回の Codex 全コードベース監査で「予約可否判定ロジック」領域に独立した欠陥が計 5 件見つかっており (#194〜#198)、この領域が構造的に脆弱である可能性は留意点として記録する (新規対応の提案はしない、decision-maker 判断待ち)。
-
-### 対症療法判定 (§4.7)
-
-判定基準 1-3 は非該当 (retry/fallback ではなく根本原因への直接修正、過去 30 日以内の同一ファイルへの他 PR なし)。基準 4 (単体テストのみでの検証) は形式的に該当するが、両修正とも外部依存・ライブラリバージョンが原因ではない自社コードの original defect (Codex review で発見された潜在バグ) であり、「外部要因による回帰」という前提が成立しないため WebSearch によるエスカレーションは実施しなかった (retry/fallback ではなく直接のロジック修正である点で、起源インシデントの「floating dependency tag」パターンとは性質が異なると判断)。
-
-### 次のアクション (第 15 編)
-
-#### 即着手タスク
-
-| #   | タスク                                 | ROI                                                                                                             | 想定工数           | 完了条件                                                                                                                                                                                        | 関連ファイル / コマンド                                        |
-| --- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 1   | Issue #198 (過去枠表示) 修正           | 今回の #194 と同一ファイル・同一パターンで低コスト。UX 劣化の解消                                               | 30分               | `packages/shared/src/free-time.ts` の日次ループ初日 cursor を `max(dayStart, rangeStart)` に変更、回帰テスト追加、`pnpm test && pnpm lint && pnpm turbo type-check && pnpm turbo build` 全 PASS | `packages/shared/src/free-time.ts:76`                          |
-| 2   | Issue #197 (重複判定全件スキャン) 修正 | PR #193 で実施した lookback bound パターンの横展開、スコープ確定済み                                            | 45分               | `public-booking.ts` の overlap query に時間下限追加。mirror 側の同等パスも要横断確認                                                                                                            | `apps/api/src/routes/public-booking.ts:241-245`                |
-| 3   | Issue #195 (予約直前再検証欠如) 修正   | 二重予約リスクに直結する P1、mirror 側の既存パターンを移植するだけで実現可能                                    | 1-2時間            | POST `/:linkId/book` に `fetchOwnerEvents` 再検証を追加                                                                                                                                         | `apps/api/src/routes/public-booking.ts` (POST `/:linkId/book`) |
-| 4   | Issue #196 (sync.ts 排他制御なし) 修正 | 二重同期・競合更新の実害防止。ただしロック機構の設計判断が先に必要 (2-4ファイル設計 → インライン軽量プラン推奨) | 2-3時間 (設計込み) | syncConfig document 単位で lease/実行中フラグをトランザクション取得してから処理開始する設計に変更                                                                                               | `apps/api/src/routes/sync.ts:65-126`                           |
-
-#### 条件待ち (明示 trigger 付き)
-
-| #   | 項目                                                                    | trigger（充足条件）                                                                                               | 充足時のタスク                                                             | 充足確認方法                                          |
-| --- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------- |
-| 1   | [GOAL.md] PR2 (C1 本体: block event 自動作成) 実装                      | Phase 0 完了 (OAuth 連携可否・Testing mode 確認・Busy 動作実測検証、いずれも decision-maker のブラウザ操作を伴う) | `docs/handoff/GOAL.md` の「進行中の tasks」PR2-a〜f を順次実行             | `docs/handoff/GOAL.md` の完了の定義チェックリスト参照 |
-| 2   | gRPC-web API 仕様変更時の運用 fallback                                  | Google 側で `internal` namespace 変更 / API Key 失効                                                              | `parseSlotResponse` の structured log alert 化 (第 9 編から継続、変化なし) | Cloud Monitoring アラート発火時                       |
-| 3   | ADR-010 Future Work 残り 2 件（Error Budget アラート / PII 直書き検知） | decision-maker 起点指示（本番 GCP 変更を伴うため個別認可必須）                                                    | ADR-010 実装フェーズ §4-5 参照（第 9 編から継続、変化なし）                | decision-maker の明示指示                             |
-| 4   | Issue #145 の 3 連続 PASS 厳密化                                        | 万一 main 上で flaky 再発                                                                                         | diagnostic PR 起動（第 9 編から継続、変化なし）                            | CI 失敗の観測                                         |
-| 5   | book-mirror デスクトップ (≥ 768px) UI レビュー                          | decision-maker 起点指示                                                                                           | モバイル改修は desktop 非 touch（第 9 編から継続、変化なし）               | decision-maker の明示指示                             |
-
-#### 却下候補（記録のみ）
-
-| #   | 項目                                                                                                                                                                                         | 検討経緯                                                                            | 着手しない理由                                           | 参照条件                                                |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
-| 1   | Codex review 未検証の残り 5 件 (timetree同期の所有権判定 `timetree-google-sync.ts:189/221`、fire-and-forget耐障害性、booking-links入力検証不足、AI提案API無制限実行、通知設定の型安全性なし) | Codex `/codex review` (2026-07-26) で指摘されたが、セッション内で検証しきれず未実施 | 実バグとして未検証、triage 基準（実バグ/実害確認）未充足 | decision-maker からの明示指示、または次回検証セッション |
-
-第 9-10 編の却下候補は変化なし。
-
-### 再開可能性判定 (第 15 編)
-
-| 項目                    | 状態                                                              |
-| ----------------------- | ----------------------------------------------------------------- |
-| OPEN PR                 | 0 件 ✅ (#193, #199 とも merge 済)                                |
-| active Issue            | 4 件 (#195, #196, #197, #198。いずれも即着手候補として上表に記載) |
-| Git clean               | ✅                                                                |
-| 残留プロセス            | ✅ なし                                                           |
-| Deploy CI               | ✅ 進行中 (#199 マージに伴う自動デプロイ、正常フロー)             |
-| 構造的整合性            | ⚠️未確認（`/impact-analysis` 未実行、手動 grep で代替確認済み）   |
-| 同根再発                | ✅ 候補 0 件（過去7日以内）、テーマ的傾向のみ記録                 |
-| 対症療法疑い            | ✅ 基準4形式該当も外部要因なしと判断、エスカレーション不要と判定  |
-| グローバル memory scope | ⏭️ スキップ（本セッション memory 変更なし）                       |
-| GOAL.md                 | ✅ 新規作成（C1 拡張、plan mode 承認済み計画を登録）              |
-
----
-
-## 最終結論 (第 15 編)
-
-⚠️ **セッション終了前に要対応なし、次アクションは即着手タスク 4 件が候補として残る状態でセッション終了**
-
-- OPEN PR ゼロ・Git clean・残留プロセスなし
-- active Issue 4 件 (#195〜#198) はいずれも即着手タスクとして具体化済み、番号単位の認可で次セッション着手可能
-- C1 (PR2) は GOAL.md 経由でセッション横断ゴールとして引き継ぎ、trigger (Phase 0) 未充足のため条件待ちのまま
-- 同根再発候補 0 件・対症療法疑いなし（判断根拠を明記済み）
-- 次セッションは「Issue #195-198 のどれから着手するか」の番号単位認可、または Phase 0 (OAuth) の進捗確認から開始するのが妥当
-
----
+> 第 3〜5 編は `archive/2026-06-25_to_26-vol3-to-vol5.md` に分離 (2026-06-26 第 7 編で実施)。第 6 編は `archive/2026-06-26-vol6.md` に分離 (2026-06-27 第 8 編で実施)。第 7〜9 編は `archive/2026-06-26_to_27-vol7-to-vol9.md` に分離 (2026-07-19 第 12 編で実施、60KB 超過のため)。第 10〜13 編は `archive/2026-07-18_to_19-vol10-to-vol13.md` に分離 (2026-07-26 第 15 編で実施、60KB 超過のため)。第 14 編は `archive/2026-07-25_to_26-vol14.md` に分離 (2026-07-27 第 17 編で実施、60KB 超過のため)。第 15 編は `archive/2026-07-26-vol15.md` に分離 (2026-11-19 第 18 編で実施、60KB 超過のため)。LATEST.md は第 16 編以降のみ保持する。
 
 ## 2026-07-26 セッション総括 (第 16 編): Issue #195〜#198 修正完了の遡及記録(未記録セッションの handoff 追補) + `/catchup` `/handoff` のみの点検セッション
 
@@ -340,3 +210,145 @@ decision-maker から「キャンセル機能はペンディングです」と�
 - 同根再発・対症療法判定はいずれも非該当(本セッションに修正 PR なし)
 - e2e flaky(Issue #145 パターン)の再発を実測確認したが、trigger の充足可否は decision-maker 判断に委ねる形で条件待ちに残した
 - 次セッションは条件待ち 4 件への decision-maker からの明示指示があれば再開可能。それ以外の新規引き継ぎ事項なし
+
+---
+
+## 2026-11-18〜19 セッション総括 (第 18 編): 予約ページのロゴ復帰・矢印キー移動 + 依存更新(next/nanoid/hono)+ 営業時間中の枠の揃い(Issue #226)(PR #223〜#229)
+
+decision-maker からの 2 件の依頼(予約ページのロゴで日時選択に戻る / 日付カードを矢印キーで移動)を実装し、続けて Dependabot アラート 85 件の対応を「段階的に機能へ悪影響がないことを確認しながら」進めた。その検証中に e2e の時刻依存と、営業時間中に今日の先頭の枠が予約時点で過去になり 400 になる実バグ(#226)を発見し、仕様を decision-maker が決定して修正した。全 PR を本番へ反映し、各回で API `/health`・web `/login`・未認証 401・Cloud Run の ERROR ログ 0 件を確認済み。
+
+### PR 一覧
+
+| PR   | 内容                                                                                      | 規模              | 結果                                      |
+| ---- | ----------------------------------------------------------------------------------------- | ----------------- | ----------------------------------------- |
+| #223 | feat(booking): ロゴで日時選択に戻る + 日付カードを矢印キーで移動(`/book`・`/book-mirror`) | 6 files, +460/-14 | ✅ merge (CI quality/e2e PASS)            |
+| #224 | chore(web): next 15.5.22 → 15.5.28(runtime の critical 解消)                              | 2 files, +50/-50  | ✅ merge                                  |
+| #225 | chore(deps): nanoid 5.1.7 → 5.1.16                                                        | 3 files, +10/-17  | ✅ merge                                  |
+| #227 | test(e2e): 予約テストを実行時刻に依存しない形に修正(`tomorrowAtJst()` 新設)               | 6 files, +93/-10  | ✅ merge(日中の CI で初めて PASS を確認)  |
+| #228 | chore(deps): hono 4.12.27 → 4.13.19、`@hono/node-server` 2.0.10 → 2.1.9                   | 2 files, +16/-16  | ✅ merge                                  |
+| #229 | fix(booking): 営業時間中の今日の枠を 30 分刻みに揃える(Closes #226)                       | 7 files, +543/-20 | ✅ merge(codex review 2 回 + sonnet 3 本) |
+
+Dependabot PR のうち #215・#220 は #225・#224 に包含されたため理由付きでクローズ、#221 は #228 後に Dependabot が自動クローズ。
+
+### 主要成果
+
+#### M1: ロゴ復帰と矢印キー移動(#223)
+
+ロゴは `/` へ遷移していたのを、その予約ページの最初の画面(日時選択)へ戻す形に変更(入力・選択枠をリセットし空き枠を再取得、修飾キー付きクリックは通常のリンク動作、予約送信中は無効)。矢印キーは日付カードを横移動(端で停止、入力中・IME 中・修飾キー併用は無効、フォーカスも追従)。`/book` と `/book-mirror` は UI が同一のため両方に適用。`/book-mirror` は e2e 対象外(予約リンクの作成が Google 側の取得に依存)で、実ブラウザの目視確認は未実施。CI は Linux で Cmd+クリックが新規タブにならず落ち、修飾キーを OS 別に切り替えて解消した。
+
+#### M2: 依存更新と、本番依存の再評価(#224/#225/#228)
+
+Dependabot の `scope`(development/runtime)分類は信用できなかった(hono は `apps/api` の `dependencies` なのに development と分類)。以後は `pnpm audit --prod` を基準にする(91 件、critical 1 / high 34)。ただし到達性は低いと評価: node-forge は firebase-admin の秘密鍵パース 1 か所のみで ID トークン検証の経路外、`@google/genai` の MCP/express 系は未使用、sharp は standalone 出力に同梱されず最適化対象の画像もない。Firestore のセキュリティルールは未デプロイで、未認証アクセスは 403(全拒否)を実測。各更新は「リリースノート → 差分 → 静的検証 → e2e → CI → 本番疎通」の段階で確認した。
+
+#### M3: hono 更新中の e2e 3 件失敗を、更新前の版でも再現して切り分け
+
+hono 4.13.19 で `booking-success`・`booking-polling`(キャンセル後の枠復活)・`booking-navigation`(確定後にロゴで戻る)が落ちたが、**更新前の 4.12.27 でも同じ 3 件が落ちる**ことを `git stash` で退避して実測し、hono は無関係と確定。原因は実行時刻(JST 営業時間中)への依存だった。`booking-navigation` の 1 件は私が #223 で追加したテストの不備(今日の枠を使っていた)。
+
+#### M4: 営業時間中の枠の実バグ(#226 → #229)
+
+営業時間中、今日の枠が現在時刻から始まり(08:41, 09:41…)、先頭の枠は予約時点で過去になって `POST /book` が 400(`Cannot book a slot in the past`)になっていた。#198 の修正(初日の cursor を `max(dayStart, rangeStart)`)の副作用で、実際の関数で再現して確認。仕様は decision-maker が決定: 今日の最初の枠だけ揃える / 30 分刻み / リードタイム 30 分(08:41 に開くと 09:30 から)。
+
+実装は設計を 1 度見直した: 当初 `rangeStart` を切り上げ時刻へ動かしたが、codex review が「予定直後の枠が隠れる」「23:40 に翌日 0 時始まりのリンクの枠がずれる」を指摘し、反例を再現して妥当と確認。空きは `rangeStart = 現在時刻` のまま計算し、「今から始まる空き」の先頭だけを揃え、最後に「現在 + 30 分」より前の枠を除く純関数 `calculateBookingSlots` に切り出した(ルートはそれを呼ぶだけ)。`calculateFreeSlots` は変更していない(空き時間パネルと AI 提案が「現在時刻から」を使い、#198 のテストで固定されているため)。codex review の 2 回目(最終確認)でも `?date=` との食い違い・逆転範囲・煙テストの検出力の 3 件が出て、すべて検証のうえ修正。揃えとリード除外をそれぞれ壊す変異で単体テストが落ちること、今日の枠を落とす変異で煙テストが落ちることを確認した。
+
+#### M5: e2e の時刻依存を解消(#227)
+
+`nextDay14JST()` が UTC の日付に 1 日足す実装で、JST の午前中に「今日」になっていた(第 17 編 M4 で PR #208 のマージ前に再発した構造的フレークと同一の根)。JST 基準の `tomorrowAtJst()` に置き換え、時刻を固定した単体テスト 7 件を追加。vitest の除外を `apps/web/e2e/**` から `apps/web/e2e/tests/**` に絞り、fixtures の単体テストを実行可能にした。
+
+#### M6: 運用上の記録
+
+破壊的 git 操作(`git checkout -- <file>`)を `git status` と 1 コマンドに束ねて実行し、フックの警告が出た。対象は私が誤って入れた import 1 行のみで、他に失われたものがないことを実測で確認(以後は単独実行)。`gcloud` の引数を変数に束ねて展開し、zsh が 1 引数として渡して失敗したため `000` を返した(本番の不具合ではなく、引数を直接書いて取り直した)。
+
+### Issue Net 変化
+
+- Close 数: 1 件 (#226)
+- 起票数: 1 件 (#226)
+- Net: 0。検証中に見つけた実バグ(triage 基準の「実バグ」+ decision-maker の明示指示)を、同セッション内で起票・仕様決定・修正・本番反映・close まで完了しており、進捗ゼロではない。他に起票した Issue はない(`?date=` の件は未実測のため起票せず記録のみ)。
+
+### 構造的整合性チェック
+
+shared の公開 API を追加(`calculateBookingSlots`・`earliestBookableStart`・`BOOKING_SLOT_STEP_MINUTES`・`BOOKING_LEAD_MINUTES`)し、`/slots` ルートの組み立てを委譲した。`/impact-analysis` は未実行。代わりに、`calculateFreeSlots` の他の呼び出し元(`FreeSlotsPanel`・`ai.ts`)が変更されていないことを grep で確認済み(関数自体を変更していない)。→ ⚠️ 正式なスキル実行は未実施。
+
+### 同根再発スキャン (§4.6)
+
+**ヒット(判定保留の根拠)**。UTC と JST の日付・時刻の境界に由来する問題が、記録上で 3 回目:
+
+- 2026-06(vol6): 日付を UTC で切る `slot.start.split('T')[0]` を `jstDateKey` へ(JST grouping bug)
+- 2026-07(第 17 編 M4): `nextDay14JST()` の UTC 基準でフレーク(PR #208 のマージ前に再発)
+- 2026-07 の #198/#202(当日の過去枠)→ 2026-11 の #226/#229(その副作用)、および #227(`nextDay14JST()` の JST 化)
+
+**仮説(同根の真の原因)**:
+
+1. 時刻・タイムゾーン処理が一元化されておらず、各所が個別実装(`JST_OFFSET = 540` が `/slots` と `/book` で別宣言、`setHours`(サーバーのローカル TZ 依存)と UTC getter の混在、e2e ヘルパーも別実装)
+2. 実時刻・実サーバーに依存する e2e は時刻を固定できず、境界の時間帯(JST 0〜8:59、営業時間中)の CI 実行でしか顕在化しない。単体は時刻固定できても、ルート全体は固定できない
+3. サーバーのタイムゾーン前提が暗黙(Cloud Run は UTC、開発機は JST)。`rangeStart.setHours(0, 0, 0, 0)` は環境で意味が変わる(ローカルでは JST 0 時、本番では UTC 0 時 = JST 9 時)
+4. 「当日の扱い」(リード・刻み)が #198 の時点で仕様として未定義だった
+
+**もう 1 件出るとしたら(未検証・コード読解のみ)**:
+
+- `/slots?date=未来日` は `new Date('YYYY-MM-DD')` が UTC 0 時(JST 9:00)になるため、営業開始 8 時のリンクで 8:00〜9:00 JST の枠が落ちる(web の画面は `?date=` を使っていない)
+- `apps/api/src/routes/ai.ts:64` と `apps/web/src/components/FreeSlotsPanel.tsx:17` は `calculateFreeSlots` を `timezoneOffsetMinutes` 未指定で呼んでおり、AI 提案の営業時間(08〜22 時)が Cloud Run では UTC 解釈になっている可能性がある(実際に不具合かは未確認)
+
+### 対症療法判定 (§4.7)
+
+基準 3(同症状の修正 PR が過去 30 日以内に 1 件以上)に該当(#227 は #229 と対の PR)。WebSearch を 1 回実施: `Date` のローカル/UTC の扱い、`YYYY-MM-DD` の UTC 解釈、JST 0〜8:59 が UTC の前日になる境界は、**仕様どおりの既知の落とし穴**で、外部の退行や依存の変化ではない。#229 は症状の遮断ではなく、再現・変異テストで原因を特定し、設計から見直している。→ 対症療法ではない。ただし「同根のクラス」自体は残っており、上記のとおり再発候補が記録されている。
+
+### グローバル memory scope (§4.5)
+
+本セッションの memory 変更なし → ⏭️ スキップ。
+
+### 次のアクション (第 18 編)
+
+#### 即着手タスク
+
+なし(本 handoff PR のマージ承認は、セッション内の AskUserQuestion で扱う)。
+
+#### 条件待ち (明示 trigger 付き)
+
+| #   | 項目                                                                           | trigger(充足条件)                                            | 充足時のタスク                                                                                          |
+| --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| 1   | 実ブラウザでの目視確認(`/book`・`/book-mirror`)                                | decision-maker が確認を実施した旨を連絡 / 確認手順の依頼     | ロゴ復帰・矢印キー・今日の枠の揃い(営業時間中に 09:30 のような 30 分刻みで出るか)を画面で確認           |
+| 2   | Dependabot PR 5 件(#222 vite / #217 vitest / #213・#212・#211 GitHub Actions)  | decision-maker の番号単位の指示                              | 1 件ずつ影響を調べて段階的検証。Actions のメジャー更新(#213・#211)は e2e ワークフローで動作確認してから |
+| 3   | 本番依存の残りの脆弱性(`@google/genai`・`firebase-admin`・`secret-manager` 系) | decision-maker の修正指示                                    | 到達性は低いと評価済み。直接依存の更新で解消する方針(overrides の追加は互換性リスク)                    |
+| 4   | gRPC-web API 仕様変更時の運用 fallback                                         | Google 側で `internal` namespace 変更 / API Key 失効         | `parseSlotResponse` の structured log alert 化(第 9 編から継続、変化なし)                               |
+| 5   | ADR-010 Future Work 残り 2 件(Error Budget アラート / PII 直書き検知)          | decision-maker 起点指示(本番 GCP 変更を伴うため個別認可必須) | ADR-010 実装フェーズ §4-5 参照(第 9 編から継続、変化なし)                                               |
+| 6   | book-mirror デスクトップ (≥ 768px) UI レビュー                                 | decision-maker 起点指示                                      | モバイル改修は desktop 非 touch(第 9 編から継続、変化なし)                                              |
+
+第 17 編の条件待ち「Issue #145 の 3 連続 PASS 厳密化」は、Issue #145 が CLOSED で、根本原因(`nextDay14JST()` の UTC 基準)も #227 で解消したため、本編から除外した。
+
+#### 却下候補(記録のみ)
+
+| #   | 項目                                                                                                                                                            | 検討経緯                                                  | 着手しない理由                                     | 参照条件                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------- | ----------------------------- |
+| 1   | 時刻・タイムゾーン処理の一元化(リファクタ)                                                                                                                      | 同根再発スキャンの仮説 1・3 への根本対応案                | 新規価値創出に当たり、起点は decision-maker の領分 | decision-maker からの明示指示 |
+| 2   | `ai.ts:64` / `FreeSlotsPanel.tsx:17` の TZ 未指定呼び出しが不具合かの調査                                                                                       | 同根の次の再発候補                                        | 未検証で、triage 基準(実害の確認)未充足            | decision-maker からの明示指示 |
+| 3   | `/slots?date=未来日` で JST 8:00〜9:00 の枠が落ちる件                                                                                                           | sonnet レビューのコード読解で判明、web は `?date=` 未使用 | 未実測、実害の確認なし                             | decision-maker からの明示指示 |
+| 4   | Codex review 未検証の残り 5 件(timetree 同期の所有権判定、fire-and-forget 耐障害性、booking-links 入力検証不足、AI 提案 API 無制限実行、通知設定の型安全性なし) | 第 17 編から継続(2026-07-26 の `/codex review` 指摘)      | 実バグとして未検証、triage 基準未充足              | decision-maker からの明示指示 |
+
+AC-8(キャンセル実機検証)は decision-maker の明示判断によるペンディング(2026-07-27)のまま。GOAL.md(booking-mirror C1)は本セッションの作業と別系統で、ミッション・進行中の tasks・中断点とも変更なし。
+
+### 再開可能性判定 (第 18 編)
+
+| 項目                    | 状態                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| OPEN PR                 | Dependabot 5 件(#222/#217/#213/#212/#211、decision-maker 判断待ち) + 本 handoff PR |
+| active Issue            | 0 件 ✅                                                                            |
+| Git clean               | ✅(本 handoff PR 以外の未コミットなし)                                             |
+| 残留プロセス            | ✅ なし(検証用サーバーは停止済み、ポート 3010/3917/3918/8088 の待ち受け 0)         |
+| Deploy CI               | ✅ 全 PR で success、本番の疎通・認可・ERROR ログ 0 件を確認                       |
+| 構造的整合性            | ⚠️ `/impact-analysis` 未実行(呼び出し元の grep で代替)                             |
+| 同根再発                | ⚠️ ヒット(UTC/JST 境界、3 回目)。仮説 4 件・次の再発候補 2 件を上記に記録          |
+| 対症療法疑い            | ✅ 該当なし(WebSearch で外部要因なしを確認、#229 は設計から見直し)                 |
+| グローバル memory scope | ⏭️ スキップ(memory 変更なし)                                                       |
+| GOAL.md                 | ✅ 変更なし(別系統のミッション。AC-8 ペンディング継続)                             |
+
+---
+
+## 最終結論 (第 18 編)
+
+⚠️ **セッション終了前に要対応 — 1 件**(本 handoff PR のマージ承認)
+
+- 本セッションの作業(PR #223〜#229)はすべて本番へ反映済みで、本番の疎通・認可・ERROR ログも確認済み。active Issue ゼロ・残留プロセスなし
+- 即着手 = 0 / 条件待ち = 6 件(いずれも decision-maker の指示・確認待ち)
+- Issue Net = 0(Close 1 / 起票 1。実バグの発見から本番反映までを同セッションで完了)
+- 同根再発スキャンがヒット(UTC/JST 境界の 3 回目)。再発クラスの根本対応は decision-maker の判断事項で、記録済み。終了を妨げる未完了作業ではないが、「問題なし」とは言い切れない状態
+- 実ブラウザでの目視確認(特に `/book-mirror`)は未実施
